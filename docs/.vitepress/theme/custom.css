@@ -1,6 +1,8 @@
 /* Map VitePress's theme variables onto the energese tokens.
  *
- * The tokens come from web/energese.css — ONE copy in this repository, shared
+ * The tokens live beside this file. They were in web/energese.css while this
+ * repository also shipped a web demo; that tree is not carried over here, so
+ * the docs theme owns them outright rather than reaching across directories.
  * by the docs site and the WASM demo, so /GSSK/ and /GSSK/demo/ cannot drift
  * from each other. That file is itself a duplicate of the canonical copy in the
  * energese-project.github.io repository; its header explains why, and carries
@@ -9,7 +11,7 @@
  * VitePress stamps `.dark` on <html>, which energese.css already scopes for, so
  * the toggle in the navbar drives the tokens with nothing further needed here.
  */
-@import '../../../web/energese.css';
+@import './energese-tokens.css';
 
 :root {
   --vp-c-bg: var(--e-ground);

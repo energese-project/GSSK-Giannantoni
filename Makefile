@@ -67,7 +67,7 @@ UBUNTU_VERSION   := 24.04
 CWORKDIR         := /work
 CRUN              = $(CONTAINER_BIN) run --rm --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR)
 
-.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-forcing-wasm test-carrier-api test-edge-flows test-schema check-version test-python demo demo-python plot-demo directories swift-build swift-test swift-clean dist \
+.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-forcing-wasm test-carrier-api test-edge-flows test-schema check-version test-python demo demo-python plot-demo directories dist \
         shared asan test-asan coverage-build coverage-report coverage-check \
         fuzz-build fuzz-run test-valgrind bench bench-check bench-gen \
         container-start container-image container-image-wasm container-image-linux \
@@ -582,7 +582,7 @@ test-schema: directories $(TARGET_DUMP_SER)
 	@./$(TARGET_DUMP_SER) $(SER_DIR) $(MODELS) $(wildcard tests/schema_fixtures/*.json)
 	@python3 scripts/validate_models.py
 
-clean: swift-clean
+clean:
 	rm -rf $(BIN_DIR) $(LIB_DIR) $(DIST_DIR) tests/results coverage/
 
 # ──────────────────────────────────────────────────────────────
@@ -758,24 +758,6 @@ wasm: dist
 	-s EXPORTED_FUNCTIONS='$(WASM_EXPORTS)' \
 	-s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","stringToUTF8","UTF8ToString","lengthBytesUTF8","allocate","ALLOC_NORMAL","HEAPU8","HEAPF64","HEAPU32"]' \
 	-o $(DIST_DIR)/gssk.js
-
-# ──────────────────────────────────────────────────────────────
-# Swift Package (Requires Swift toolchain)
-# ──────────────────────────────────────────────────────────────
-
-# Build the Swift package (CGSSK + GSSK wrapper)
-swift-build:
-	@command -v swift >/dev/null 2>&1 || { echo "swift not found — install Xcode or swift.org toolchain"; exit 1; }
-	swift build
-
-# Run the Swift test suite
-swift-test:
-	@command -v swift >/dev/null 2>&1 || { echo "swift not found — install Xcode or swift.org toolchain"; exit 1; }
-	swift test
-
-# Remove Swift build artefacts (.build/ directory)
-swift-clean:
-	@command -v swift >/dev/null 2>&1 && swift package clean || rm -rf .build
 
 # ──────────────────────────────────────────────────────────────
 # Containerised Linux builds
