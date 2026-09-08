@@ -1,0 +1,777 @@
+# GSSK Build System
+CC      ?= gcc
+CFLAGS  = -Wall -Wextra -Werror -std=c99 -Iinclude -fPIC
+LDFLAGS = -lm
+
+# Architecture flags.
+#
+# -march=native was previously unconditional. It bakes the build machine's CPU
+# into the binary, which is wrong for anything distributed, and it is actively
+# fragile: clang rejects some auto-detected feature combinations outright, so a
+# CI job landing on an AVX10.1-capable runner fails with
+#   error: invalid feature combination: +avx10.1-256 ... [-Winvalid-feature-combination]
+# under -Werror, while the identical source builds fine on an older runner.
+# That made green-ness depend on which machine picked the job up.
+#
+# Default is now portable. Opt in with NATIVE=1 for local benchmarking, where
+# tuning to the host is the point and reproducibility across machines is not.
+ifeq ($(NATIVE), 1)
+	ARCH_FLAGS = -march=native
+else
+	ARCH_FLAGS =
+endif
+
+# Optimization levels (Use 'make DEBUG=1' for debugging)
+ifeq ($(DEBUG), 1)
+	CFLAGS += -g -O0 -DDEBUG
+else
+	CFLAGS += -O3 $(ARCH_FLAGS)
+endif
+
+# Directories
+SRC_DIR = src
+INC_DIR = include
+BIN_DIR = bin
+LIB_DIR = lib
+DIST_DIR = dist
+TEST_DIR = tests
+
+# Files
+SOURCES = $(SRC_DIR)/gssk.c $(SRC_DIR)/advanced.c $(SRC_DIR)/cJSON.c
+OBJECTS = $(LIB_DIR)/gssk.o $(LIB_DIR)/advanced.o $(LIB_DIR)/cJSON.o
+TARGET_LIB = $(LIB_DIR)/libgssk.a
+TARGET_CLI = $(BIN_DIR)/gssk
+TARGET_COMPARE = $(BIN_DIR)/csv_compare
+
+# ──────────────────────────────────────────────────────────────
+# Containerised Linux toolchains (Apple `container` CLI)
+#
+# Two things macOS cannot verify locally:
+#   emcc — no emsdk, and CI only builds WASM in the deploy job, which does
+#          not run on pull requests.
+#   gcc  — /usr/bin/gcc here is Apple clang; real GCC emits warnings clang
+#          does not, and CFLAGS carries -Werror.
+#
+# Both emsdk and ubuntu images are amd64-only or resolve wrong on Apple
+# silicon, so --platform is explicit: without it `container run` fails with
+# "platform linux/arm64" even when the image built fine.
+# ──────────────────────────────────────────────────────────────
+CONTAINER_BIN    := container
+CONTAINER_PLATFORM := linux/amd64
+IMAGE_WASM       := gssk-wasm
+IMAGE_LINUX      := gssk-linux
+IMAGE_DEMO       := gssk-demo
+EMSDK_VERSION    := 3.1.64
+UBUNTU_VERSION   := 24.04
+CWORKDIR         := /work
+CRUN              = $(CONTAINER_BIN) run --rm --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR)
+
+.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-forcing-wasm test-carrier-api test-edge-flows test-schema check-version test-python demo demo-python plot-demo directories swift-build swift-test swift-clean dist \
+        shared asan test-asan coverage-build coverage-report coverage-check \
+        fuzz-build fuzz-run test-valgrind bench bench-check bench-gen \
+        container-start container-image container-image-wasm container-image-linux \
+        container-image-demo demo-native \
+        wasm-container test-linux test-linux-clang shell-wasm shell-linux ci-local
+
+all: directories $(TARGET_LIB) $(TARGET_CLI) $(TARGET_COMPARE)
+
+directories:
+	@mkdir -p $(BIN_DIR) $(LIB_DIR) $(DIST_DIR) tests/results tests/expected
+
+# Static Library
+$(TARGET_LIB): $(OBJECTS)
+	ar rcs $@ $^
+
+$(LIB_DIR)/%.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# CLI Tool
+$(TARGET_CLI): $(SRC_DIR)/main.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+# Test Utility
+$(TARGET_COMPARE): $(TEST_DIR)/csv_compare.c
+	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
+
+# Tests
+MODELS = $(wildcard examples/*.json)
+RESULTS = $(patsubst examples/%.json,tests/results/%.csv,$(MODELS))
+
+# An `X_annotated.json` is documentation, not a second model: it is `X.json`
+# with `_`-prefixed commentary the kernel ignores. Its golden CSV therefore has
+# to be byte-identical to the plain one, and `make test` checks the two
+# trajectories against each other so an edit to one file cannot silently make
+# the annotated twin describe a model that is no longer running.
+ANNOTATED = $(wildcard examples/*_annotated.json)
+
+test: all check-version test-schema
+	@echo "Running Regression Tests..."
+	@mkdir -p tests/results
+	@for model in $(MODELS); do \
+		name=$$(basename $$model .json); \
+		echo -n "Testing $$name... "; \
+		./bin/gssk $$model tests/results/$$name.csv > /dev/null 2>&1; \
+		if [ -f tests/expected/$$name.csv ]; then \
+			./bin/csv_compare tests/expected/$$name.csv tests/results/$$name.csv; \
+			if [ $$? -eq 0 ]; then echo "PASSED"; \
+			else echo "FAILED"; exit 1; fi; \
+		else \
+			echo "SKIPPED (No expected output found. Run 'make test-update' to generate)"; \
+		fi; \
+	done
+	@echo "Checking annotated twins against their plain models..."
+	@for ann in $(ANNOTATED); do \
+		name=$$(basename $$ann .json); \
+		plain=$${name%_annotated}; \
+		echo -n "Twin $$name == $$plain... "; \
+		./bin/csv_compare tests/results/$$plain.csv tests/results/$$name.csv; \
+		if [ $$? -eq 0 ]; then echo "PASSED"; \
+		else echo "FAILED (an annotated variant has drifted from the model it documents)"; exit 1; fi; \
+	done
+
+test-python: shared
+	@echo "Running Python binding tests..."
+	@python3 python/test_gssk.py -v
+
+demo-python: shared
+	@echo "=== Python binding demo ==="
+	@python3 python/demo.py
+
+# Quick demo — run two models, print CSV output, and generate PNG plot.
+#
+# This runs in a container (see Containerfile.demo) because the plotting step
+# needs matplotlib, and a bare macOS python3 does not have it — the target used
+# to fail with "ERROR: matplotlib is required for plot-demo". The image carries
+# a uv-managed interpreter and a pinned matplotlib, so `make demo` works with
+# nothing installed on the host but the `container` CLI.
+#
+# `make clean` first because the bind mount is shared with the host: without it
+# the Linux build inside would link against macOS objects left in lib/.
+demo: container-image-demo
+	@$(MAKE) clean
+	$(CRUN) $(IMAGE_DEMO) make demo-native
+	@echo ""
+	@echo "──────────────────────────────────────────────"
+	@echo "Tree now holds Linux artefacts; run 'make clean && make all' to restore native."
+
+# The demo proper. Run directly if you have matplotlib on the host; otherwise
+# `make demo` runs exactly this inside the container.
+demo-native: all
+	@echo "=== Decay model (exponential decay, RK4) ==="
+	@$(TARGET_CLI) examples/decay_model.json /tmp/gssk_demo_decay.csv
+	@head -6 /tmp/gssk_demo_decay.csv
+	@echo ""
+	@echo "=== Household model (4-carrier ecological-economy) ==="
+	@$(TARGET_CLI) examples/household_model.json /tmp/gssk_demo_household.csv
+	@head -3 /tmp/gssk_demo_household.csv
+	@echo "... ($$(( $$(wc -l < /tmp/gssk_demo_household.csv) - 1 )) data rows, $$(head -1 /tmp/gssk_demo_household.csv | tr ',' '\n' | wc -l | tr -d ' ') columns)"
+	@echo ""
+	@python3 python/plot_demo.py
+
+# Standalone plot target — regenerates CSVs then plots
+plot-demo: all
+	@$(TARGET_CLI) examples/decay_model.json /tmp/gssk_demo_decay.csv > /dev/null 2>&1
+	@$(TARGET_CLI) examples/household_model.json /tmp/gssk_demo_household.csv > /dev/null 2>&1
+	@python3 python/plot_demo.py
+
+test-update: all
+	@echo "Updating Expected Test Outputs..."
+	@mkdir -p tests/expected
+	@for model in $(MODELS); do \
+		name=$$(basename $$model .json); \
+		echo "Generating expected output for $$name"; \
+		./bin/gssk $$model tests/expected/$$name.csv; \
+	done
+
+# Advanced API test suite (calibration, ensemble, Phase 7 node types)
+TARGET_TEST_ADV = $(BIN_DIR)/test_advanced
+
+$(TARGET_TEST_ADV): $(TEST_DIR)/test_advanced.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-advanced: all $(TARGET_TEST_ADV)
+	@echo "Running advanced API tests..."
+	@./$(TARGET_TEST_ADV)
+
+# Phase C.0 — price_node reference resolution, round-trip, constant fallback
+TARGET_TEST_PRICE = $(BIN_DIR)/test_price_node
+
+$(TARGET_TEST_PRICE): $(TEST_DIR)/test_price_node.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-price-node: all $(TARGET_TEST_PRICE)
+	@echo "Running price_node tests..."
+	@./$(TARGET_TEST_PRICE)
+
+# Phase C.1 — ratio (division) logic: hand-calculated quotient, epsilon floor,
+# RK4 vs IDC agreement.
+TARGET_TEST_RATIO = $(BIN_DIR)/test_ratio
+
+$(TARGET_TEST_RATIO): $(TEST_DIR)/test_ratio.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-ratio: all $(TARGET_TEST_RATIO)
+	@echo "Running ratio logic tests..."
+	@./$(TARGET_TEST_RATIO)
+
+# Phase C.2 — delivered work signal: tracking, and non-perturbation of the
+# trade it observes.
+TARGET_TEST_DW = $(BIN_DIR)/test_delivered_work
+
+$(TARGET_TEST_DW): $(TEST_DIR)/test_delivered_work.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-delivered-work: all $(TARGET_TEST_DW)
+	@echo "Running delivered-work tests..."
+	@./$(TARGET_TEST_DW)
+
+# Phase C.3 — price dynamics: relaxation toward M/W, the named ratio numerator,
+# and the solver paths that only disagree when the Jacobian column is wrong.
+TARGET_TEST_PRICEDYN = $(BIN_DIR)/test_price_dynamics
+
+$(TARGET_TEST_PRICEDYN): $(TEST_DIR)/test_price_dynamics.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-price-dynamics: all $(TARGET_TEST_PRICEDYN)
+	@echo "Running price dynamics tests..."
+	@./$(TARGET_TEST_PRICEDYN)
+
+# Node type validation — an unrecognised node `type` must be an error, not a
+# silent fallback to `storage` (ADR 0004). Covers both call sites: GSSK_Init,
+# which has full archetype dispatch, and GSSK_AddNode, which has none.
+TARGET_TEST_NODETYPE = $(BIN_DIR)/test_node_type_validation
+
+# Limit / threshold logic constants (GIP-0001 G6). The formula was always
+# implemented; where C comes from was never written down. These pin the four
+# facts the schema now states, including the invisible one: a control-supplied
+# C that decays past GSSK_LIMIT_C_EPSILON closes the pathway without an error.
+TARGET_TEST_LIMIT = $(BIN_DIR)/test_limit_logic
+
+$(TARGET_TEST_LIMIT): $(TEST_DIR)/test_limit_logic.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+.PHONY: test-limit-logic
+test-limit-logic: all $(TARGET_TEST_LIMIT)
+	@echo "Running limit/threshold logic tests..."
+	@./$(TARGET_TEST_LIMIT)
+
+$(TARGET_TEST_NODETYPE): $(TEST_DIR)/test_node_type_validation.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-node-types: all $(TARGET_TEST_NODETYPE)
+	@echo "Running node type validation tests..."
+	@./$(TARGET_TEST_NODETYPE)
+
+# Phase C.4 — inflation emerges from net-energy decline. Asserts the CLAIM
+# (boom/bust, rising feedback fraction, falling net-per-gross, rising price at
+# a constant money supply) rather than a trajectory; `make test` already does
+# the golden CSV comparison.
+TARGET_TEST_NETENERGY = $(BIN_DIR)/test_net_energy
+
+$(TARGET_TEST_NETENERGY): $(TEST_DIR)/test_net_energy.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-net-energy: all $(TARGET_TEST_NETENERGY)
+	@echo "Running net-energy feedback tests..."
+	@./$(TARGET_TEST_NETENERGY)
+
+# Phase D.1 — money as a closed conserved GNP loop (Odum Fig. 3). Asserts that
+# money's per-carrier conservation error holds within solver_tolerance while
+# energy's does not over the same run, and carries the negative control showing
+# C.4's open money path scored a perfect 0.0 over no storage at all.
+TARGET_TEST_GNPLOOP = $(BIN_DIR)/test_gnp_loop
+
+$(TARGET_TEST_GNPLOOP): $(TEST_DIR)/test_gnp_loop.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-gnp-loop: all $(TARGET_TEST_GNPLOOP)
+	@echo "Running GNP-loop conservation tests..."
+	@./$(TARGET_TEST_GNPLOOP)
+
+# Forcing functions — one waveform vocabulary, two attachment points. The
+# convergence test is the one that catches forcing sampled once per STEP
+# instead of once per STAGE; every other test here passes either way.
+TARGET_TEST_FORCING = $(BIN_DIR)/test_forcing
+
+# Reversible (barb-less) pathway, GIP-0001 G3 / ADR 0007. Conservation and
+# origin/target symmetry are the sharp assertions: any sign or index error in
+# build_flow_matrix's four entries breaks them, and neither is visible in a
+# golden CSV of node quantities that was regenerated from the same bug.
+TARGET_TEST_REVERSIBLE = $(BIN_DIR)/test_reversible
+
+$(TARGET_TEST_REVERSIBLE): $(TEST_DIR)/test_reversible.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+.PHONY: test-reversible
+test-reversible: all $(TARGET_TEST_REVERSIBLE)
+	@echo "Running reversible pathway tests..."
+	@./$(TARGET_TEST_REVERSIBLE)
+
+# n-ary interaction and the subtracting action, GIP-0001 G1 / ADR 0008. The
+# sharp assertions are the closed forms and the bit-identity of the n-ary form
+# against a collapsed binary one: a build that multiplied only the first
+# control still decays, and a golden CSV regenerated from that build agrees
+# with itself.
+TARGET_TEST_NARY = $(BIN_DIR)/test_interaction_nary
+
+$(TARGET_TEST_NARY): $(TEST_DIR)/test_interaction_nary.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+.PHONY: test-interaction-nary
+test-interaction-nary: all $(TARGET_TEST_NARY)
+	@echo "Running n-ary interaction / subtract tests..."
+	@./$(TARGET_TEST_NARY)
+
+$(TARGET_TEST_FORCING): $(TEST_DIR)/test_forcing.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-forcing: all $(TARGET_TEST_FORCING)
+	@echo "Running forcing function tests..."
+	@./$(TARGET_TEST_FORCING)
+
+# WASM forcing parity — requirement 3: sin/exp must stay in the ONE pinned
+# artifact and must not silently differ from native. The native binary writes
+# its evaluator's answers to JSON; the JS side reads them back and compares
+# through the built dist/gssk.js. Needs `make wasm` (or `make wasm-container`)
+# to have produced dist/.
+#
+# NODE resolution, and why it is not just `node`. Under the emsdk CI action,
+# PATH contains the emsdk root, and that directory holds a SUBDIRECTORY named
+# `node`. A bare `node` resolves to the directory and the shell reports
+# "Permission denied" — which reads like a sandbox problem and is not one.
+# emsdk exports EMSDK_NODE pointing at the real binary, so prefer it. Override
+# with `make test-forcing-wasm NODE=/path/to/node` if neither applies.
+NODE ?= $(if $(EMSDK_NODE),$(EMSDK_NODE),node)
+
+TARGET_DUMP_FORCING = $(BIN_DIR)/dump_forcing_native
+
+$(TARGET_DUMP_FORCING): $(TEST_DIR)/dump_forcing_native.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-forcing-wasm: all $(TARGET_DUMP_FORCING)
+	@mkdir -p tests/results
+	@./$(TARGET_DUMP_FORCING) tests/results/forcing_native.json
+	@test -f $(DIST_DIR)/gssk.js || { echo "dist/gssk.js missing — run 'make wasm' or 'make wasm-container' first"; exit 1; }
+	@command -v $(NODE) >/dev/null 2>&1 || { \
+		echo "node not found or not executable: $(NODE)"; \
+		echo "  set EMSDK_NODE, or run: make test-forcing-wasm NODE=/path/to/node"; \
+		exit 1; }
+	@$(NODE) tests/wasm/forcing_parity.cjs
+
+# Stage times — the solver must hand each derivative evaluation the right time.
+# Pinned BEFORE anything consumes t, so the rest of the suite can hold "nothing
+# changed at all" as its criterion. Builds the sources directly with the probe
+# macro rather than linking $(TARGET_LIB): the recorder must not exist in the
+# shipped library, and this task adds no public API.
+TARGET_TEST_STAGET = $(BIN_DIR)/test_stage_times
+STAGET_SRC = $(SRC_DIR)/gssk.c $(SRC_DIR)/advanced.c $(SRC_DIR)/cJSON.c
+
+$(TARGET_TEST_STAGET): $(TEST_DIR)/test_stage_times.c $(STAGET_SRC) directories
+	$(CC) $(CFLAGS) -DGSSK_STAGE_TIME_PROBE $< $(STAGET_SRC) -o $@ $(LDFLAGS)
+
+test-stage-times: $(TARGET_TEST_STAGET)
+	@echo "Running stage time tests..."
+	@./$(TARGET_TEST_STAGET)
+
+# Unknown key rejection — a key the parser does not recognise must be an error,
+# not silence. Same hazard class as the node-type fallback: a model authored
+# against a kernel with a feature this one lacks otherwise runs to completion
+# and reports success while producing a different trajectory from the one its
+# JSON describes.
+TARGET_TEST_UNKNOWNKEY = $(BIN_DIR)/test_unknown_keys
+
+$(TARGET_TEST_UNKNOWNKEY): $(TEST_DIR)/test_unknown_keys.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-unknown-keys: all $(TARGET_TEST_UNKNOWNKEY)
+	@echo "Running unknown key tests..."
+	@./$(TARGET_TEST_UNKNOWNKEY)
+
+# Deactivation must survive serialise -> reload. GSSK_DeactivateEdge cleared
+# `active` AND set k to 0, so the round-trip reproduced the trajectory (k = 0
+# kills the flow either way) while losing the flag — and the flag is what the
+# ~20 sites that COUNT active elements read: motif detection, the isolated-duet
+# test, the closed-system conservation check. GSSK_DeactivateNode was lost
+# outright, having no k to hide behind.
+TARGET_TEST_DEACT = $(BIN_DIR)/test_deactivation_round_trip
+
+# GSSK_NodeType (GIP-0001 G7). The enum and GSSK_GetNodeTypeString read the
+# same field, so they cannot disagree by accident — what these catch is the
+# set changing under one and not the other, an ordinal being renumbered (a
+# silent break for every WASM consumer), and a composite leaking its own name
+# where a primitive belongs.
+TARGET_TEST_NODEENUM = $(BIN_DIR)/test_node_type_enum
+
+$(TARGET_TEST_NODEENUM): $(TEST_DIR)/test_node_type_enum.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+.PHONY: test-node-type-enum
+test-node-type-enum: all $(TARGET_TEST_NODEENUM)
+	@echo "Running node type enum tests..."
+	@./$(TARGET_TEST_NODEENUM)
+
+$(TARGET_TEST_DEACT): $(TEST_DIR)/test_deactivation_round_trip.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-deactivation: all $(TARGET_TEST_DEACT)
+	@echo "Running deactivation round-trip tests..."
+	@./$(TARGET_TEST_DEACT)
+
+# Carrier accessors — the flat getters that keep GSSK_Carrier's struct layout
+# from crossing the WASM boundary. Also asserts the flat path and
+# GSSK_GetCarrier cannot drift apart.
+TARGET_TEST_CARRIER = $(BIN_DIR)/test_carrier_api
+
+$(TARGET_TEST_CARRIER): $(TEST_DIR)/test_carrier_api.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-carrier-api: all $(TARGET_TEST_CARRIER)
+	@echo "Running carrier accessor tests..."
+	@./$(TARGET_TEST_CARRIER)
+
+# Per-edge flow accessors (GIP-0001 G4). Flow used to be step-local, so a
+# consumer could read every node quantity and not one rate. Asserts the cache
+# is written at the post-step state, on both step paths, with and without
+# quality accounting, and that it agrees with the quality pass it now shares a
+# flow expression with.
+TARGET_TEST_FLOWS = $(BIN_DIR)/test_edge_flows
+
+$(TARGET_TEST_FLOWS): $(TEST_DIR)/test_edge_flows.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+test-edge-flows: all $(TARGET_TEST_FLOWS)
+	@echo "Running per-edge flow accessor tests..."
+	@./$(TARGET_TEST_FLOWS)
+
+# Schema conformance — examples/ must match gssk.schema.json.
+#
+# The kernel does not validate against the schema at load time (ADR 0004), so
+# this is what stops the schema and the parser drifting apart. It skips when
+# jsonschema is absent rather than failing, so a bare checkout still builds;
+# CI installs the dependency so the gate is real there.
+# Serialised output is checked too: the schema also has to describe what
+# GSSK_SerializeModel/Snapshot emit, which is the format the archival story
+# in Phase G rests on. dump_serialized writes those into tests/results.
+SER_DIR = tests/results/serialized
+TARGET_DUMP_SER = $(BIN_DIR)/dump_serialized
+
+$(TARGET_DUMP_SER): $(TEST_DIR)/dump_serialized.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+# The npm package version and GSK_VERSION_STRING drifted five majors apart
+# before anything noticed, because nothing compared them. Stdlib-only, so it
+# runs in any checkout without pip.
+check-version:
+	@python3 scripts/check_version_sync.py
+
+test-schema: directories $(TARGET_DUMP_SER)
+	@rm -rf $(SER_DIR) && mkdir -p $(SER_DIR)
+	@./$(TARGET_DUMP_SER) $(SER_DIR) $(MODELS) $(wildcard tests/schema_fixtures/*.json)
+	@python3 scripts/validate_models.py
+
+clean: swift-clean
+	rm -rf $(BIN_DIR) $(LIB_DIR) $(DIST_DIR) tests/results coverage/
+
+# ──────────────────────────────────────────────────────────────
+# Shared library (required by Python ctypes binding)
+# ──────────────────────────────────────────────────────────────
+TARGET_SO = $(LIB_DIR)/libgssk.so
+
+shared: directories $(TARGET_SO)
+
+$(TARGET_SO): $(SOURCES)
+	$(CC) $(CFLAGS) -shared -o $@ $^ $(LDFLAGS)
+
+# ──────────────────────────────────────────────────────────────
+# AddressSanitizer + UndefinedBehaviorSanitizer build
+# Requires clang (CC=clang make asan)
+# ──────────────────────────────────────────────────────────────
+ASAN_FLAGS = -Wall -Wextra -std=c99 -Iinclude -fPIC -g -O1 \
+             -fsanitize=address,undefined -fno-omit-frame-pointer
+
+TARGET_ASAN_CLI = $(BIN_DIR)/gssk_asan
+
+asan: directories
+	$(CC) $(ASAN_FLAGS) $(SOURCES) $(SRC_DIR)/main.c -o $(TARGET_ASAN_CLI) $(LDFLAGS)
+
+test-asan: asan $(TARGET_COMPARE)
+	@echo "Running regression tests under ASan/UBSan..."
+	@mkdir -p tests/results
+	@for model in $(MODELS); do \
+		name=$$(basename $$model .json); \
+		echo -n "ASan $$name... "; \
+		if [ ! -f tests/expected/$$name.csv ]; then echo "SKIPPED"; continue; fi; \
+		ASAN_OPTIONS=detect_leaks=1 \
+		./$(TARGET_ASAN_CLI) $$model tests/results/$$name.csv > /dev/null 2>&1; \
+		./bin/csv_compare tests/expected/$$name.csv tests/results/$$name.csv; \
+		if [ $$? -eq 0 ]; then echo "PASSED"; else echo "FAILED"; exit 1; fi; \
+	done
+
+# ──────────────────────────────────────────────────────────────
+# gcov / lcov coverage
+# ──────────────────────────────────────────────────────────────
+COVERAGE_FLAGS = -Wall -Wextra -std=c99 -Iinclude -fPIC -g -O0 \
+                 --coverage -fprofile-arcs -ftest-coverage
+
+TARGET_COV_CLI  = $(BIN_DIR)/gssk_cov
+TARGET_COV_ADV  = $(BIN_DIR)/test_advanced_cov
+COVERAGE_MIN_LINE = 35
+
+coverage-build: directories
+	@mkdir -p coverage
+	gcc $(COVERAGE_FLAGS) $(SOURCES) $(SRC_DIR)/main.c -o $(TARGET_COV_CLI) -lm
+	gcc $(COVERAGE_FLAGS) $(SOURCES) $(TEST_DIR)/test_advanced.c -o $(TARGET_COV_ADV) -lm
+
+coverage-report: coverage-build
+	@mkdir -p coverage/html
+	@echo "Running tests to collect coverage data..."
+	@mkdir -p tests/results
+	@for model in $(MODELS); do \
+		name=$$(basename $$model .json); \
+		./$(TARGET_COV_CLI) $$model tests/results/$$name.csv > /dev/null 2>&1 || true; \
+	done
+	@echo "Running advanced API tests for coverage..."
+	./$(TARGET_COV_ADV) > /dev/null 2>&1 || true
+	lcov --capture --directory . --output-file coverage/lcov.info \
+	     --ignore-errors mismatch,unused
+	lcov --remove coverage/lcov.info '*/cJSON.c' '*/tests/*' \
+	     --output-file coverage/lcov.info \
+	     --ignore-errors mismatch,unused
+	genhtml coverage/lcov.info --output-directory coverage/html --quiet
+
+coverage-check: coverage-report
+	@line_pct=$$(lcov --summary coverage/lcov.info 2>&1 | grep 'lines' | grep -oP '[0-9]+\.[0-9]+(?=%)' | head -1); \
+	echo "Line coverage: $${line_pct}% (gate: $(COVERAGE_MIN_LINE)%)"; \
+	if [ -n "$$line_pct" ] && [ $$(echo "$$line_pct < $(COVERAGE_MIN_LINE)" | bc -l) -eq 1 ]; then \
+		echo "FAIL: line coverage below $(COVERAGE_MIN_LINE)%"; exit 1; \
+	else echo "OK"; fi
+
+# ──────────────────────────────────────────────────────────────
+# Valgrind memory-error check (Linux only)
+# ──────────────────────────────────────────────────────────────
+VALGRIND = valgrind --error-exitcode=1 --leak-check=full \
+           --show-leak-kinds=all --track-origins=yes -q
+
+test-valgrind: all
+	@echo "Running regression tests under Valgrind..."
+	@mkdir -p tests/results
+	@for model in $(MODELS); do \
+		name=$$(basename $$model .json); \
+		echo -n "Valgrind $$name... "; \
+		if [ ! -f tests/expected/$$name.csv ]; then echo "SKIPPED"; continue; fi; \
+		$(VALGRIND) ./bin/gssk $$model tests/results/$$name.csv > /dev/null 2>&1; \
+		if [ $$? -eq 0 ]; then echo "PASSED"; else echo "FAILED (leaks/errors)"; exit 1; fi; \
+	done
+
+# ──────────────────────────────────────────────────────────────
+# LibFuzzer target (requires clang with -fsanitize=fuzzer)
+# ──────────────────────────────────────────────────────────────
+FUZZ_FLAGS  = -Wall -std=c99 -Iinclude -g -O1 \
+              -fsanitize=fuzzer,address,undefined
+TARGET_FUZZ = $(BIN_DIR)/fuzz_gssk
+FUZZ_TIMEOUT ?= 30
+FUZZ_CORPUS  = tests/fuzz_corpus
+
+fuzz-build: directories
+	clang $(FUZZ_FLAGS) $(SOURCES) $(TEST_DIR)/fuzz_gssk.c -lm -o $(TARGET_FUZZ)
+
+fuzz-run: fuzz-build
+	@mkdir -p $(FUZZ_CORPUS)
+	./$(TARGET_FUZZ) $(FUZZ_CORPUS) -max_total_time=$(FUZZ_TIMEOUT) \
+	    -print_final_stats=1 -jobs=1 2>&1 | tail -20
+
+# ──────────────────────────────────────────────────────────────
+# Benchmark suite
+# ──────────────────────────────────────────────────────────────
+BENCH_BASELINE_MS ?= 500    # wall-clock budget for supply_chain_30 (ms)
+
+bench-gen:
+	@echo "Generating benchmark models..."
+	@python3 bench/gen_bench_models.py
+
+bench: all bench-gen
+	@chmod +x bench/run_bench.sh
+	@./bench/run_bench.sh
+
+bench-check: all bench-gen
+	@chmod +x bench/run_bench.sh
+	@./bench/run_bench.sh --regression $(BENCH_BASELINE_MS)
+
+# Sync dist/ without requiring emscripten (schema + TypeScript declarations)
+dist: directories
+	cp $(SRC_DIR)/gssk.d.ts $(DIST_DIR)/gssk.d.ts
+	cp gssk.schema.json $(DIST_DIR)/gssk.schema.json
+
+# WASM Build (Requires emscripten)
+WASM_EXPORTS = ["_GSSK_Init","_GSSK_Step","_GSSK_Reset","_GSSK_GetState","_GSSK_GetStateSize","_GSSK_GetFlows","_GSSK_GetFlowCount",\
+"_GSSK_GetTStart","_GSSK_GetTEnd","_GSSK_GetDt","_GSSK_GetCurrentTime","_GSSK_GetStepCount",\
+"_GSSK_GetNodeID","_GSSK_FindNodeIdx","_GSSK_GetEdgeID","_GSSK_FindEdgeIdx",\
+"_GSSK_GetEdgeCount","_GSSK_GetEdgeK","_GSSK_SetEdgeK",\
+"_GSSK_GetTransformationRatio","_GSSK_GetQualityFlow","_GSSK_GetEdgeQualityFlow",\
+"_GSSK_GetSolverConfidence","_GSSK_AddNode","_GSSK_AddEdge","_GSSK_DeactivateEdge",\
+"_GSSK_DeactivateNode","_GSSK_ReclassifyNetwork",\
+"_GSSK_SerializeModel","_GSSK_SerializeSnapshot","_GSSK_FreeString",\
+"_GSSK_GetSchemaVersion","_GSSK_GetModelName","_GSSK_GetModelDescription",\
+"_GSSK_GetModelKernelVersion","_GSSK_GetModelHash","_GSSK_GetVersionString","_GSSK_GetVersionCode",\
+"_GSSK_GetEdgeErrorEstimate","_GSSK_GetStepErrorEstimate",\
+"_GSSK_GetEventCount","_GSSK_GetEventTime","_GSSK_GetEventEdgeID","_GSSK_GetEventDirection",\
+"_GSSK_EnsembleForecast","_GSSK_FreeEnsembleResult","_GSSK_Calibrate",\
+"_GSSK_GetEnsembleNodeCount","_GSSK_GetEnsembleStepCount",\
+"_GSSK_GetEnsembleMin","_GSSK_GetEnsembleMax","_GSSK_GetEnsembleMean",\
+"_GSSK_GetErrorDescription","_GSSK_Free","_malloc","_free",\
+"_GSSK_StepAdaptive","_GSSK_GetLastStepSize","_GSSK_GetNextStepSize",\
+"_GSSK_GetConservationError","_GSSK_SetDiagHooks",\
+"_GSSK_EnableForwardSensitivity","_GSSK_DisableForwardSensitivity","_GSSK_GetSensitivity",\
+"_GSSK_RunAdjoint","_GSSK_GetTransformitySensitivity",\
+"_GSSK_CalibrateGradient","_GSSK_CalibrateMonteCarlo",\
+"_GSSK_GetMutationCount","_GSSK_GetMutationRecord","_GSSK_SetMutationCause",\
+"_GSSK_ClearMutationLog","_GSSK_ExportMutationLog","_GSSK_Replay",\
+"_GSSK_GetNodeForcingKind","_GSSK_GetEdgeForcingKind",\
+"_GSSK_EvaluateNodeForcing","_GSSK_EvaluateEdgeForcing",\
+"_GSSK_GetCarrierCount","_GSSK_GetCarrier","_GSSK_GetNodeCarrier",\
+"_GSSK_GetCarrierID","_GSSK_GetCarrierUnit","_GSSK_GetCarrierConserved",\
+"_GSSK_FindCarrierIdx",\
+"_GSSK_GetEdgeCarrier","_GSSK_GetCarrierConservationError",\
+"_GSSK_GetNodeTypeString","_GSSK_GetNodeType",\
+"_GSSK_GetArchetypeCount","_GSSK_GetArchetypeName",\
+"_GSSK_GetCompositeCount","_GSSK_GetCompositeID",\
+"_GSSK_GetCompositeArchetype","_GSSK_GetNodeComposite","_GSSK_GetNodeRole",\
+"_GSSK_GetCompositeMemberCount","_GSSK_GetCompositeMemberIndex",\
+"_GSSK_SetSeed","_GSSK_GetSeed","_GSSK_NextRandom","_GSSK_NextRandomUniform"]
+
+wasm: dist
+	emcc $(SRC_DIR)/gssk.c $(SRC_DIR)/advanced.c $(SRC_DIR)/cJSON.c -Iinclude -O3 -s WASM=1 \
+	-s MODULARIZE=1 -s EXPORT_NAME='createGSSK' \
+	-s EXPORTED_FUNCTIONS='$(WASM_EXPORTS)' \
+	-s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","stringToUTF8","UTF8ToString","lengthBytesUTF8","allocate","ALLOC_NORMAL","HEAPU8","HEAPF64","HEAPU32"]' \
+	-o $(DIST_DIR)/gssk.js
+
+# ──────────────────────────────────────────────────────────────
+# Swift Package (Requires Swift toolchain)
+# ──────────────────────────────────────────────────────────────
+
+# Build the Swift package (CGSSK + GSSK wrapper)
+swift-build:
+	@command -v swift >/dev/null 2>&1 || { echo "swift not found — install Xcode or swift.org toolchain"; exit 1; }
+	swift build
+
+# Run the Swift test suite
+swift-test:
+	@command -v swift >/dev/null 2>&1 || { echo "swift not found — install Xcode or swift.org toolchain"; exit 1; }
+	swift test
+
+# Remove Swift build artefacts (.build/ directory)
+swift-clean:
+	@command -v swift >/dev/null 2>&1 && swift package clean || rm -rf .build
+
+# ──────────────────────────────────────────────────────────────
+# Containerised Linux builds
+#
+# `make wasm` and a real-GCC build cannot run on macOS directly. These
+# targets run them in Linux containers via the Apple `container` CLI.
+# Artefacts land in the bind-mounted working tree exactly as a native
+# build would.
+# ──────────────────────────────────────────────────────────────
+
+# Start the container system daemon (idempotent)
+container-start:
+	@$(CONTAINER_BIN) system start >/dev/null 2>&1 || true
+
+# Build the Emscripten image (matches deploy.yml's emsdk pin)
+container-image-wasm: container-start
+	$(CONTAINER_BIN) build -f Containerfile -t $(IMAGE_WASM) \
+		--platform $(CONTAINER_PLATFORM) \
+		--build-arg EMSDK_VERSION=$(EMSDK_VERSION) .
+
+# Build the native Linux image (matches CI's ubuntu-latest)
+container-image-linux: container-start
+	$(CONTAINER_BIN) build -f Containerfile.linux -t $(IMAGE_LINUX) \
+		--platform $(CONTAINER_PLATFORM) \
+		--build-arg UBUNTU_VERSION=$(UBUNTU_VERSION) .
+
+# Build the demo image (uv-managed Python + pinned matplotlib, plus the C
+# toolchain, so `make demo` needs nothing on the host)
+container-image-demo: container-start
+	$(CONTAINER_BIN) build -f Containerfile.demo -t $(IMAGE_DEMO) \
+		--platform $(CONTAINER_PLATFORM) \
+		--build-arg UBUNTU_VERSION=$(UBUNTU_VERSION) .
+
+# Build both build-toolchain images (the demo image is built on demand by
+# `make demo`, which is not part of the CI-parity set)
+container-image: container-image-wasm container-image-linux
+
+# Build the WASM artefacts into dist/. This is the check that CI does NOT
+# run on pull requests, so run it before pushing anything that touches
+# WASM_EXPORTS or any exported symbol.
+wasm-container: container-image-wasm
+	$(CRUN) $(IMAGE_WASM) make wasm
+
+# Full native build + both test suites under real GCC with -Werror.
+test-linux: container-image-linux
+	$(CRUN) $(IMAGE_LINUX) sh -c 'make clean && make CC=gcc all && make CC=gcc test && make CC=gcc test-advanced && make CC=gcc test-node-types && make CC=gcc test-unknown-keys && make CC=gcc test-deactivation && make CC=gcc test-stage-times && make CC=gcc test-forcing && make CC=gcc test-carrier-api && make CC=gcc test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy && make CC=gcc test-interaction-nary test-gnp-loop'
+
+# Same under Linux clang, the other half of CI's build-native matrix.
+test-linux-clang: container-image-linux
+	$(CRUN) $(IMAGE_LINUX) sh -c 'make clean && make CC=clang all && make CC=clang test && make CC=clang test-advanced'
+
+# Everything CI would catch that macOS cannot: both Linux compilers plus WASM.
+# Leaves the tree holding Linux objects — run `make clean && make all` after.
+ci-local: test-linux test-linux-clang wasm-container
+	@echo "──────────────────────────────────────────────"
+	@echo "Linux gcc + clang and WASM all built."
+	@echo "Tree now holds Linux artefacts; run 'make clean && make all' to restore native."
+
+# Interactive shells for debugging a container build
+shell-wasm: container-image-wasm
+	$(CONTAINER_BIN) run --rm -it --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR) $(IMAGE_WASM) bash
+
+shell-linux: container-image-linux
+	$(CONTAINER_BIN) run --rm -it --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR) $(IMAGE_LINUX) bash
+
+# ──────────────────────────────────────────────────────────────
+# Documents (LaTeX)
+#
+# Sources live in doco/. latexmk is pointed at doco/build/ via -outdir so
+# every transient file (.aux, .bbl, .fls, …) stays out of the source tree;
+# doco/.gitignore covers that directory. Requires a TeX distribution —
+# these targets are not part of `make all` and never gate a code change.
+# ──────────────────────────────────────────────────────────────
+DOCO_DIR   = doco
+DOCO_BUILD = $(DOCO_DIR)/build
+# -cd does not compose with a relative -outdir here (output lands beside the
+# source), so the recipes cd explicitly and keep -outdir relative to that.
+LATEXMK    = latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build
+
+# Report wherever the PDF actually landed. A stock latexmk honours -outdir and
+# writes to doco/build/; a wrapper that drops caller flags (this machine has a
+# container-backed latexmk shim that passes only the filename through) writes
+# beside the source instead. Both locations are gitignored.
+report_pdf = ls -1 $(DOCO_BUILD)/$(1).pdf $(DOCO_DIR)/$(1).pdf 2>/dev/null | head -1 | sed 's/^/→ /'
+
+.PHONY: doco whitepaper article conformance doco-clean
+
+# Build all documents
+doco: whitepaper article conformance
+
+whitepaper:
+	@command -v latexmk >/dev/null 2>&1 || { echo "latexmk not found — install a TeX distribution (e.g. MacTeX, TeX Live)"; exit 1; }
+	cd $(DOCO_DIR) && $(LATEXMK) whitepaper.tex
+	@$(call report_pdf,whitepaper)
+
+article:
+	@command -v latexmk >/dev/null 2>&1 || { echo "latexmk not found — install a TeX distribution (e.g. MacTeX, TeX Live)"; exit 1; }
+	cd $(DOCO_DIR) && $(LATEXMK) article.tex
+	@$(call report_pdf,article)
+
+# Companion to ADR 0009 — where IFRS/AASB recognition and Odum's method diverge.
+conformance:
+	@command -v latexmk >/dev/null 2>&1 || { echo "latexmk not found — install a TeX distribution (e.g. MacTeX, TeX Live)"; exit 1; }
+	cd $(DOCO_DIR) && $(LATEXMK) conformance.tex
+	@$(call report_pdf,conformance)
+
+# Remove LaTeX build output only; leaves sources untouched.
+doco-clean:
+	rm -rf $(DOCO_BUILD)
+	rm -f $(DOCO_DIR)/*.aux $(DOCO_DIR)/*.bbl $(DOCO_DIR)/*.blg \
+	      $(DOCO_DIR)/*.fdb_latexmk $(DOCO_DIR)/*.fls $(DOCO_DIR)/*.log \
+	      $(DOCO_DIR)/*.out $(DOCO_DIR)/*.toc $(DOCO_DIR)/*.pdf

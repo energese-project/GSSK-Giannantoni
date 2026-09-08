@@ -1,0 +1,651 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  # `branches` here filters on the PR's BASE, not its head. It listed only
+  # `main`, so a PR stacked on another feature branch ran none of the jobs
+  # below — no build matrix, no WASM, no quality gate. GitHub still showed the
+  # PR as checked, because third-party checks (Socket Security) run regardless,
+  # so it reported two green checks and looked tested. That is worse than
+  # failing: it is the "tested by nothing" state a bare push produces, wearing
+  # a passing badge. It let a broken `make test-forcing-wasm` reach main
+  # (PR #42, fixed in #43) — through exactly the gap the WASM-on-PR job was
+  # added to close.
+  #
+  # The three prefixes below are the ones AGENTS.md defines for branches.
+  # Listing all three rather than just `feat/**` is deliberate: the gap is in
+  # the trigger, not in any one prefix, and closing a third of it would leave
+  # the next stacked `fix/` or `docs/` PR silently unverified in the same way.
+  #
+  # This cannot cause a deploy or a release: both are additionally gated on
+  # `github.event_name == 'push'` and a main/tag ref, so a pull_request event
+  # can never satisfy them however it is targeted.
+  pull_request:
+    branches:
+      - main
+      - 'feat/**'
+      - 'fix/**'
+      - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  actions: read
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  # Build matrix: gcc + clang × Linux + macOS
+  # Parallel across compiler/OS combinations.
+  # ────────────────────────────────────────────────────────────
+  build-native:
+    name: Build & test (${{ matrix.cc }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, cc: gcc   }
+          - { os: ubuntu-latest, cc: clang }
+          - { os: macos-latest,  cc: clang }
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential clang
+
+      - name: Build
+        run: make all
+
+      - name: Run regression tests
+        run: make test
+
+      # Unit suites, not CSV regressions. The node-type gate is the check that
+      # stops a mistyped `type` silently becoming a storage node.
+      - name: Node type validation tests
+        run: make test-node-types
+
+      # GIP-0001 G6. F = kQ/(1+Q/C) was implemented and documented; where C
+      # comes from was not, so the schema is now the statement of record and
+      # these are what keep it true. Includes the invisible case: a
+      # control-supplied C that decays past GSSK_LIMIT_C_EPSILON closes the
+      # pathway to exactly 0.0, silently, in a model that loaded fine.
+      - name: Limit/threshold logic constant tests (GIP-0001 G6)
+        run: make test-limit-logic
+
+      # Forcing functions. The convergence check inside is the one that
+      # catches a waveform sampled once per STEP instead of once per STAGE —
+      # every other assertion in that suite passes either way.
+      - name: Forcing function tests
+        run: make test-forcing
+
+      # GIP-0001 G3 / ADR 0007. A new logic is a ten-site change, and the two
+      # sites that matter most are invisible in a golden CSV regenerated from
+      # the same bug: conservation across the pair, and origin/target symmetry.
+      # Both were mutation-tested — dropping build_flow_matrix's second entry
+      # pair, or reading only the origin in compute_derivatives, fails here.
+      - name: Reversible pathway tests (GIP-0001 G3)
+        run: make test-reversible
+
+      # GIP-0001 G1 / ADR 0008. The n-ary product and the subtracting action.
+      # Both were mutation-tested: dropping the extra controls from
+      # interaction_control_product, and removing the max(0, .) clamp from
+      # subtract_flow, each fail here. Neither is visible in a golden CSV
+      # regenerated from the same bug — a gate that multiplies only its first
+      # control still decays, just at the wrong rate.
+      - name: n-ary interaction and subtract tests (GIP-0001 G1)
+        run: make test-interaction-nary
+
+      # The Butcher c-nodes were written down in the DOPRI5 stage comments and
+      # thrown away for years because there was no `t` for them to offset.
+      # A forcing function sampled once per STEP instead of once per STAGE is
+      # first-order while the state is fourth- or fifth-order, and the run
+      # still completes and still looks smooth. This is what pins the times.
+      - name: Stage time tests
+        run: make test-stage-times
+
+      # A key the parser does not recognise must be an error, not silence.
+      # Also the check that catches the serialiser emitting a key the parser
+      # will not take back — it has already caught one ("active").
+      - name: Unknown key rejection tests
+        run: make test-unknown-keys
+
+      # Deactivation has to survive serialise -> reload. It did not: the edge
+      # case reloaded as ACTIVE WITH k = 0, which reproduces the trajectory and
+      # loses the topology, and the node case was lost outright. A trajectory
+      # regression cannot see either, which is why this is its own suite.
+      - name: Deactivation round-trip tests
+        run: make test-deactivation
+
+      # GIP-0001 G7. The enum and GSSK_GetNodeTypeString read the same field,
+      # so they cannot disagree by accident — what this catches is the
+      # primitive set changing under one and not the other, an ordinal being
+      # renumbered (silently breaking every WASM consumer, since the value
+      # crosses as a bare integer), and a composite leaking its own name where
+      # a primitive belongs.
+      - name: Node type enum tests (GIP-0001 G7)
+        run: make test-node-type-enum
+
+      # The flat carrier getters exist to keep GSSK_Carrier's struct layout off
+      # the WASM boundary. This suite also asserts they agree with
+      # GSSK_GetCarrier at every index, so the two paths cannot drift.
+      - name: Carrier accessor tests
+        run: make test-carrier-api
+
+      # GIP-0001 G4. Flow was step-local, so nothing outside the kernel could
+      # read a pathway rate. The cache that fixes it is written once per step
+      # on two separate step paths and shares its flow expression with the
+      # quality pass — three places a change can silently desynchronise, none
+      # of which a CSV regression over node quantities would notice.
+      - name: Per-edge flow accessor tests (GIP-0001 G4)
+        run: make test-edge-flows
+
+      # Phase C asserts things a CSV regression cannot see. The C.3 suite in
+      # particular runs the same relaxation under RK4 and under IDC against an
+      # analytic solution: a flow that reads a node other than its origin has
+      # to be differentiated with respect to THAT node, and getting the column
+      # wrong leaves plain RK4 correct while the IDC, implicit and sensitivity
+      # paths go quietly wrong. These ran only in the local `make test-linux`
+      # chain, so nothing checked them on a PR.
+      - name: Phase C unit suites (price, ratio, delivered work, price dynamics)
+        run: make test-price-node test-ratio test-delivered-work test-price-dynamics
+
+      # C.4 asserts the CLAIM rather than a trajectory: boom/bust, a feedback
+      # fraction that rises as the reserve depletes, net-per-gross falling and
+      # price rising across the depletion phase — all with the money supply
+      # pinned, which is what makes the inflation attributable to net energy
+      # rather than to money. The golden CSV in `make test` cannot check any of
+      # that; it only pins digits.
+      - name: Net-energy feedback tests (Phase C.4)
+        run: make test-net-energy
+
+      # D.1 asserts an asymmetry, which no single golden CSV can express:
+      # money's conservation error stays inside solver_tolerance over a closed
+      # circuit while energy's does not over the same run. It also carries the
+      # negative control — C.4's open money path scores a perfect 0.0 because
+      # conservation sums storage nodes and that model has none — so a
+      # regression that deletes the loop fails loudly instead of passing.
+      - name: GNP-loop conservation tests (Phase D.1)
+        run: make test-gnp-loop
+
+  # ────────────────────────────────────────────────────────────
+  # Quality gate — all Linux-only checks as serial steps.
+  # One checkout, one apt-get, one runner.
+  # ────────────────────────────────────────────────────────────
+  quality:
+    name: Quality gate (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang valgrind lcov python3
+
+      # package.json sat at 1.0.0 while GSK_VERSION_STRING reached 5.0.0,
+      # because scripts/release.sh only ever bumped the header. Consumers pin
+      # the npm version and then read include/gssk.h out of node_modules, so
+      # the skew served a header from a kernel four majors dead. `make test`
+      # runs this too; the named step is here so the failure says what broke.
+      - name: Version sync — package.json vs include/gssk.h
+        run: make check-version
+
+      # The version check asserts the "files" list names the schema. This
+      # asserts npm actually puts it in the tarball, which is the property
+      # downstream consumers depend on.
+      - name: Package contents — gssk.schema.json must ship
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > /tmp/pack.json
+          python3 - <<'PY'
+          import json
+          files = {f["path"] for f in json.load(open("/tmp/pack.json"))[0]["files"]}
+          if "gssk.schema.json" not in files:
+              raise SystemExit(
+                  "::error::gssk.schema.json is not in the npm tarball; "
+                  f"packed: {sorted(files)}"
+              )
+          print("gssk.schema.json is in the npm tarball.")
+          PY
+
+      # The schema ships in dist/ and consumers pin it, so a drift between it
+      # and the parser is a defect that reaches users. make test-schema skips
+      # silently without jsonschema, so install it here to make the gate real.
+      - name: Schema conformance — install validator
+        run: python3 -m pip install --break-system-packages jsonschema
+
+      - name: Schema conformance — examples/ must match gssk.schema.json
+        run: make test-schema
+
+      - name: ASan + UBSan — build
+        env:
+          CC: clang
+        run: make asan
+
+      - name: ASan + UBSan — run tests
+        env:
+          CC: clang
+        run: make test-asan
+
+      - name: Coverage — build
+        run: make coverage-build
+
+      - name: Coverage — generate report
+        run: |
+          make coverage-report
+          echo "## Coverage summary" >> $GITHUB_STEP_SUMMARY
+          lcov --summary coverage/lcov.info >> $GITHUB_STEP_SUMMARY 2>&1 || true
+
+      - name: Coverage — enforce ≥ 85% line
+        run: make coverage-check
+
+      - name: Coverage — upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/html/
+
+      - name: Valgrind — build (debug)
+        run: make DEBUG=1 all
+
+      - name: Valgrind — run tests
+        run: make test-valgrind
+
+      - name: Fuzz — build target
+        env:
+          CC: clang
+        run: make fuzz-build
+
+      - name: Fuzz — short run (30 seconds)
+        env:
+          CC: clang
+        run: make fuzz-run FUZZ_TIMEOUT=30
+
+      - name: Perf — build (optimised)
+        run: make all
+
+      - name: Perf — benchmark regression check
+        run: make bench-check
+
+  # ────────────────────────────────────────────────────────────
+  # WASM build — runs on pull requests too.
+  #
+  # The deploy job below also builds WASM, but it is gated on push to
+  # main/tags, so before this job existed a change to WASM_EXPORTS was
+  # unverified until after merge — at which point a push to main also
+  # republishes the rolling `latest` release that consumers pin. An
+  # undefined exported symbol would surface there rather than on the PR.
+  # ────────────────────────────────────────────────────────────
+  wasm:
+    name: WASM build (emscripten)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
+
+      - name: Build WASM
+        run: make wasm
+
+      # emcc errors on an undefined exported symbol, so a successful build is
+      # already meaningful. This asserts the stronger property that every
+      # symbol named in WASM_EXPORTS actually reached the artifact.
+      - name: Verify every declared export reached the artifact
+        run: |
+          missing=0
+          for sym in $(grep -o '"_GSSK_[A-Za-z0-9_]*"' Makefile | tr -d '"' | sort -u); do
+            if ! grep -q "$sym" dist/gssk.js; then
+              echo "::error::declared in WASM_EXPORTS but absent from dist/gssk.js: $sym"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+          echo "All declared exports present in dist/gssk.js."
+
+      # Requirement 3 of the forcing proposal: sin/exp must stay in the ONE
+      # pinned artifact and must not silently differ from native. The native
+      # binary writes its evaluator's answers; the JS side reads them back
+      # and compares through the built dist/gssk.js. An exported symbol that
+      # is present but wrong would pass the check above and fail this one.
+      #
+      # Compared to 4 ULP, not bit-for-bit. Measured three ways: WASM agrees
+      # with Linux GCC exactly, and macOS libm's sin() is the outlier by 1 ULP
+      # at 2 of 8 sample points. sin/exp are not required by IEEE-754 to be
+      # correctly rounded. Tracked as deterministic-transcendentals-cross-platform.
+      - name: Forcing evaluator parity (WASM vs native)
+        run: make test-forcing-wasm
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-build
+          path: |
+            dist/gssk.js
+            dist/gssk.wasm
+
+  # ────────────────────────────────────────────────────────────
+  # Docs + demo — runs on pull requests too.
+  #
+  # The deploy job below builds the VitePress site and assembles the demo, but
+  # it is gated on push-to-main, so before this job existed a broken docs theme
+  # or a demo asset that never got copied was unverified until after merge —
+  # at which point the same push publishes it. This is the same gap the WASM
+  # job was added to close, in a different corner.
+  #
+  # It deliberately does NOT build WASM: the point is the docs theme and the
+  # demo's static references, and gssk.js/gssk.wasm are covered by the wasm job.
+  # ────────────────────────────────────────────────────────────
+  docs:
+    name: Docs theme & demo assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The theme imports web/energese.css across directories. If that path
+      # breaks, or the token file is deleted, this is what says so — the build
+      # fails rather than silently emitting an unresolved @import.
+      - name: Build documentation
+        run: |
+          npm install
+          npm run docs:build
+
+      - name: Tokens must be inlined, not left as an unresolved @import
+        run: |
+          set -euo pipefail
+          if grep -rq "@import" docs/.vitepress/dist/assets/*.css; then
+            echo "::error::an @import survived the build; the token file did not inline"
+            exit 1
+          fi
+          if ! grep -rq -- "--e-accent" docs/.vitepress/dist/assets/*.css; then
+            echo "::error::energese tokens are absent from the built docs CSS"
+            exit 1
+          fi
+          echo "Design tokens are inlined in the built docs CSS."
+
+      # Every relative asset web/index.html asks for must either sit in web/ or
+      # be one of the two build outputs the deploy job drops in beside it. This
+      # catches a forgotten `cp` at PR time; the deploy job asserts the same
+      # property again against the assembled artifact.
+      - name: Demo's local asset references must resolve
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+          BUILT = {'gssk.js', 'gssk.wasm'}   # dropped in beside the demo at deploy time
+          html = open('web/index.html').read()
+          refs = [r for r in re.findall(r'(?:href|src)="([^"#?:]+)"', html)
+                  if not r.startswith(('http', '//', 'data:'))
+                  and not r.endswith('/')]   # `../` is a link to the docs, not an asset
+          missing = [r for r in refs
+                     if os.path.basename(r) not in BUILT
+                     and not os.path.exists(os.path.join('web', r))]
+          if missing:
+              print(f'::error::web/index.html references files that are not in web/ '
+                    f'and are not build outputs: {missing}')
+              sys.exit(1)
+          print(f'All {len(refs)} local demo asset references resolve.')
+          PY
+
+  # ────────────────────────────────────────────────────────────
+  # Swift package (macOS) — separate job, different OS.
+  # ────────────────────────────────────────────────────────────
+  swift:
+    name: Swift (6.0, macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Swift package
+        run: make swift-build
+
+      - name: Run Swift tests
+        run: make swift-test
+
+  # ────────────────────────────────────────────────────────────
+  # Pages deploy — main only.
+  #
+  # This job is gated on the `github-pages` environment, whose branch policy
+  # permits `main` and nothing else. That gate applies to the WHOLE job, so
+  # anything that must also run for a tag cannot live here — a tag push is
+  # rejected before the first step executes. Release publishing therefore
+  # lives in the separate `release` job below.
+  # ────────────────────────────────────────────────────────────
+  deploy:
+    needs: [ build-native, quality, swift, wasm, docs ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
+
+      - name: Build native
+        run: make all
+
+      - name: Build WASM
+        run: make wasm
+
+      - name: Build documentation
+        run: |
+          npm install
+          npm run docs:build
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p public/demo
+          cp -r docs/.vitepress/dist/* public/
+          cp web/index.html public/demo/
+          cp web/favicon.png public/demo/
+          # The demo links this with a relative href and has no build step, so
+          # it has to travel with index.html. Without it every colour on the
+          # page falls back to an unset custom property and the demo renders
+          # unstyled — a failure that only appears in the deployed artifact.
+          cp web/energese.css public/demo/
+          cp dist/gssk.js public/demo/
+          cp dist/gssk.wasm public/demo/
+          touch public/.nojekyll
+          sed -i 's|../dist/gssk.js|gssk.js|' public/demo/index.html
+
+      # The demo is assembled by copying files, not by a bundler, so nothing
+      # checks that what index.html asks for actually arrived. A missing
+      # stylesheet or wasm blob is invisible until someone loads the deployed
+      # page. This asserts every local asset the demo references is in the
+      # artifact.
+      - name: Verify the demo's local assets reached the artifact
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+          html = open('public/demo/index.html').read()
+          refs = [r for r in re.findall(r'(?:href|src)="([^"#?:]+)"', html)
+                  if not r.startswith(('http', '//', 'data:'))
+                  and not r.endswith('/')]   # `../` is a link to the docs, not an asset
+          missing = [r for r in refs
+                     if not os.path.exists(os.path.join('public/demo', r))]
+          if missing:
+              print(f'::error::demo assets referenced but not in the artifact: {missing}')
+              sys.exit(1)
+          print(f'All {len(refs)} local demo asset references resolve.')
+          PY
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'public'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+  # ────────────────────────────────────────────────────────────
+  # Release — main (rolling `latest`) and version tags (immutable).
+  #
+  # Deliberately NOT gated on the `github-pages` environment. That gate is
+  # what made the versioned-release path unreachable: its branch policy
+  # allows only `main`, so a tag push failed the deploy job in about a
+  # second, before any step ran. No number of pushed tags could ever have
+  # produced a release while the release steps lived inside that job.
+  # ────────────────────────────────────────────────────────────
+  release:
+    needs: [ build-native, quality, swift, wasm ]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
+
+      - name: Build native
+        run: make all
+
+      - name: Build WASM
+        run: make wasm
+
+      - name: Deploy to distribution branch
+        run: |
+          mkdir -p tmp_dist
+          cp -r dist tmp_dist/
+          cp -r include tmp_dist/
+          cp README.md tmp_dist/
+          cp package.json tmp_dist/
+          cd tmp_dist
+          git init -b dist
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add .
+          git commit -m "chore: distribution build [skip ci]"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git dist --force
+          if [[ ${{ github.ref }} == refs/tags/* ]]; then
+            # Tag the dist tree under its own namespace. This previously reused
+            # the bare version tag and force-pushed it, which moved vX.Y.Z off
+            # the source commit and onto this orphan dist commit — a tree with
+            # no Package.swift or src/, breaking SPM resolution, and a mutable
+            # version tag, which is precisely what pinning is meant to avoid.
+            # No --force: re-running a released tag should fail loudly rather
+            # than silently republish under an existing version.
+            git tag dist-${{ github.ref_name }}
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git dist-${{ github.ref_name }}
+          fi
+
+      # Digests let a consumer verify a download without fetching it twice,
+      # and let anyone check whether a rolling `latest` actually changed.
+      - name: Compute artifact digests
+        id: digests
+        run: |
+          {
+            echo 'table<<DIGEST_TABLE_EOF'
+            echo '| Artifact | SHA-256 |'
+            echo '| --- | --- |'
+            for f in dist/gssk.js dist/gssk.wasm dist/gssk.d.ts dist/gssk.schema.json \
+                     include/gssk.h lib/libgssk.a bin/gssk; do
+              [ -f "$f" ] || { echo "missing artifact: $f" >&2; exit 1; }
+              printf '| `%s` | `%s` |\n' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"
+            done
+            echo 'DIGEST_TABLE_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create versioned release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "GSSK ${{ github.ref_name }}"
+          body: |
+            Immutable build of GSSK `${{ github.ref_name }}`.
+
+            Pin this tag rather than `latest` when results must be reproducible
+            against a fixed kernel. The artifacts below are byte-for-byte the
+            ones this tag was built from; verify with `sha256sum`.
+
+            ${{ steps.digests.outputs.table }}
+
+            Commit: `${{ github.sha }}`
+          files: |
+            bin/gssk
+            lib/libgssk.a
+            include/gssk.h
+            dist/gssk.js
+            dist/gssk.wasm
+            dist/gssk.d.ts
+            dist/gssk.schema.json
+          draft: false
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update rolling latest pre-release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (rolling)"
+          body: |
+            Automated pre-release from the tip of `main`. **This tag is
+            re-published in place and its artifacts change without notice.**
+            If your results must be reproducible against a fixed kernel, pin a
+            versioned release (`vX.Y.Z`) instead.
+
+            ${{ steps.digests.outputs.table }}
+
+            Commit: `${{ github.sha }}`
+          files: |
+            bin/gssk
+            lib/libgssk.a
+            include/gssk.h
+            dist/gssk.js
+            dist/gssk.wasm
+            dist/gssk.d.ts
+            dist/gssk.schema.json
+          draft: false
+          prerelease: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

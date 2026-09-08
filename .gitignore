@@ -1,0 +1,50 @@
+# GSSK Build Artifacts
+bin/
+lib/
+dist/
+tests/results/
+
+# Temporary deployment folder
+/public/
+
+# Object files and libraries
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# Emscripten generated files
+bin/*.js.mem
+bin/*.wasm
+
+# IDE and system files
+.DS_Store
+.vscode/
+.idea/
+.cache/
+
+# Node.js
+node_modules/
+docs/.vitepress/dist/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Ensure dist/ artifacts are tracked
+!dist/
+
+# AI assistant memory
+.claude/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Python demo temp files
+/tmp/gssk_demo_*.csv
+
+# Reference papers are cited, not redistributed: several are Elsevier or
+# Academic Press and this repository is public.
+docs/*.pdf

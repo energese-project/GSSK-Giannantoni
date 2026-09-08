@@ -1,0 +1,412 @@
+
+### 1. Seed below maximum ordinality -> expect GENERATIVE
+============================================================
+ GIANNANTONI GENERATIVE FRAMEWORK
+============================================================
+  system            Odum Self-Organizing Ecosystem Graph
+  components        4
+  relationships     4
+  horizon t_val     1.5
+  derivative order  2
+  generative mode   on
+
+  ordinality        0.750  (below maximum)
+
+  component            kind          phi degree   calculi
+  source_1             source             1       agree
+  interaction_1        interaction        2       TDC drifts
+  store_1              storage            1       agree
+  consumer_1           storage            1       agree
+    'agree' means phi is affine, so the incipient and
+    traditional derivatives coincide identically. 'TDC drifts'
+    means phi carries curvature and the Bell expansion picks up
+    terms the incipient derivative does not.
+
+  duet at 'interaction_1', order 1/2, t = 1.5
+    branch +   +8.108923 +0.000000i
+    branch -   -8.108923 +0.000000i
+    sum        +0.000e+00 +9.931e-16i  (branches cancel)
+
+============================================================
+ MODE 1 -- FUNCTIONAL: TRAJECTORIES OVER FIXED TOPOLOGY
+============================================================
+  wrote tests/results/gia_generative.csv  (5 steps to t = 1.5)
+  columns per component: _Q (network), _Em (empower), _Tr
+  (transformity), then _idc, _tdc, _drift; plus psi_network,
+  conservation and emergy_excess for the run as a whole
+
+  source_1  (source, held, not integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000                2 |              4              4              0
+        0.3000                2 |        7.28848        7.28848              0
+        0.6000                2 |        13.2805        13.2805              0
+        0.9000                2 |        24.1986        24.1986              0
+        1.2000                2 |        44.0927        44.0927              0
+        1.5000                2 |        80.3421        80.3421              0
+
+  interaction_1  (interaction, integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000                0 |              0            1.5            1.5
+        0.3000         0.162113 |       0.216641        1.82139        1.60475
+        0.6000         0.166542 |        1.06107        3.02602        1.96495
+        0.9000         0.166663 |        3.34581        6.09957        2.75375
+        1.2000         0.166667 |        9.54076        13.9578        4.41702
+        1.5000         0.166667 |        27.3676        35.4765        8.10892
+
+  store_1  (storage, integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000               10 |            0.1            0.1              0
+        0.3000          9.01931 |       0.103045       0.103045              0
+        0.6000           8.3162 |       0.106184       0.106184              0
+        0.9000          7.71488 |       0.109417       0.109417              0
+        1.2000          7.19742 |        0.11275        0.11275              0
+        1.5000          6.75205 |       0.116183       0.116183              0
+
+  consumer_1  (storage, integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000                0 |              0              0              0
+        0.3000          1.41858 |              0              0              0
+        0.6000          2.71726 |              0              0              0
+        0.9000          3.91846 |              0              0              0
+        1.2000          5.03591 |              0              0              0
+        1.5000          6.08128 |              0              0              0
+
+  Q is the simulation: Q(t) = exp(A t) Q(0), where A is the flow
+  matrix assembled from the pathway laws, so it depends on the
+  whole graph. The phi columns are the single-component analytic
+  form and ignore every edge -- they are where the drift theorem
+  is checked against a closed form, not a trajectory of the system.
+
+  network summary at horizon t = 1.5
+  component                solved             Q(0)         Q(t_end)
+  --------------------     ------ ---------------- ----------------
+  source_1                   held                2                2
+  interaction_1               yes                0         0.166667
+  store_1                     yes               10          6.75205
+  consumer_1                  yes                0          6.08128
+
+  flow matrix         state-dependent (multiplicative junction)
+  psi_network         0.953654
+
+  emergy at t = 1.5   (empower, and transformity Em/Q)
+  component                            Em                 Tr
+  -------------------- ------------------ ------------------
+  source_1                              0                  0
+  interaction_1                         0                  0
+  store_1                               0                  0
+  consumer_1                            0                  0
+
+  emergy created       0
+    Every bifurcation here is a partition, so emergy is
+    conserved. Mark an edge output_mode "replicate" to
+    make it a co-production and this becomes non-zero.
+  system              open -- a pathway leaves a held
+                      component, which delivers quantity
+                      without being depleted (Odum SecII)
+  net boundary inflow 3  (expected, not an error)
+
+============================================================
+ MOP HARMONY RELATIONSHIPS
+============================================================
+  components N          4
+  ordinal roots         3  (N-1)
+  reference couple a12  0.070737 +0.997495i
+
+  reduction residual    0.000e+00   PASS
+    all 4 x 4 = 16 entries reconstruct from the single
+    reference couple, so the matrix holds 1 free quantity.
+
+  row balance residual  4.003e-16   PASS
+    every row sums to zero: the 3 ordinal roots cancel,
+    which is the global stability of the relationships.
+============================================================
+
+============================================================
+ MODE 2 -- GENERATIVE: MOP ORDINAL STEP
+============================================================
+  MOP ordinal step: 'source_1' was not on a closed pathway.
+  Spawned 'emergent_gain_1'; closed the loop via 'interaction_1' -> 'emergent_gain_1' -> 'source_1'.
+
+  input   examples/giannantoni/input.json
+  seed    tests/results/gia_generative.seed.json
+  output  tests/results/gia_generative.json
+
+  compare  code --diff tests/results/gia_generative.seed.json tests/results/gia_generative.json
+           (diff the seed, not the input file: cJSON reformats on
+            output, so an input-vs-output text diff shows
+            serialisation noise on top of the real change)
+
+============================================================
+ EXECUTION MODE, BY STRUCTURAL DIFF
+============================================================
+  nodes  4 -> 5   (+1)
+  edges  4 -> 6   (+2)
+
+  Input_Graph !== Output_Graph
+  MODE: generative / Maximum Ordinality Principle.
+
+    + component      emergent_gain_1  (gain)
+    + relationship   interaction_1 -> emergent_gain_1  (ordinal_ascent)
+    + relationship   emergent_gain_1 -> source_1  (emergent_feedback_loop)
+
+  The graph itself changed. Components and relationships
+  appear in the output that were not in the seed and are
+  not reducible to it -- emergent quality, in Giannantoni's
+  sense, rather than a rearrangement of what was given.
+============================================================
+
+### 2. Seed already at maximum ordinality -> expect FUNCTIONAL
+============================================================
+ GIANNANTONI GENERATIVE FRAMEWORK
+============================================================
+  system            Nutrient-Recycling Ecosystem (already at Maximum Ordinality)
+  components        5
+  relationships     6
+  horizon t_val     1.5
+  derivative order  2
+  generative mode   on
+
+  ordinality        1.000  (at maximum)
+
+  component            kind          phi degree   calculi
+  source_1             source             1       agree
+  interaction_1        interaction        2       TDC drifts
+  store_1              storage            1       agree
+  consumer_1           storage            1       agree
+  recycler_1           gain               1       agree
+    'agree' means phi is affine, so the incipient and
+    traditional derivatives coincide identically. 'TDC drifts'
+    means phi carries curvature and the Bell expansion picks up
+    terms the incipient derivative does not.
+
+  duet at 'interaction_1', order 1/2, t = 1.5
+    branch +   +8.108923 +0.000000i
+    branch -   -8.108923 +0.000000i
+    sum        +0.000e+00 +9.931e-16i  (branches cancel)
+
+============================================================
+ MODE 1 -- FUNCTIONAL: TRAJECTORIES OVER FIXED TOPOLOGY
+============================================================
+  wrote tests/results/gia_functional.csv  (5 steps to t = 1.5)
+  columns per component: _Q (network), _Em (empower), _Tr
+  (transformity), then _idc, _tdc, _drift; plus psi_network,
+  conservation and emergy_excess for the run as a whole
+
+  source_1  (source, held, not integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000                2 |              4              4              0
+        0.3000                2 |        7.28848        7.28848              0
+        0.6000                2 |        13.2805        13.2805              0
+        0.9000                2 |        24.1986        24.1986              0
+        1.2000                2 |        44.0927        44.0927              0
+        1.5000                2 |        80.3421        80.3421              0
+
+  interaction_1  (interaction, integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000                0 |              0            1.5            1.5
+        0.3000         0.162113 |       0.216641        1.82139        1.60475
+        0.6000         0.166542 |        1.06107        3.02602        1.96495
+        0.9000         0.166663 |        3.34581        6.09957        2.75375
+        1.2000         0.166667 |        9.54076        13.9578        4.41702
+        1.5000         0.166667 |        27.3676        35.4765        8.10892
+
+  store_1  (storage, integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000               10 |            0.1            0.1              0
+        0.3000          9.01931 |       0.103045       0.103045              0
+        0.6000           8.3162 |       0.106184       0.106184              0
+        0.9000          7.71488 |       0.109417       0.109417              0
+        1.2000          7.19742 |        0.11275        0.11275              0
+        1.5000          6.75205 |       0.116183       0.116183              0
+
+  consumer_1  (storage, integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000                0 |              0              0              0
+        0.3000          1.33542 |              0              0              0
+        0.6000          2.40721 |              0              0              0
+        0.9000          3.26608 |              0              0              0
+        1.2000          3.94903 |              0              0              0
+        1.5000          4.48693 |              0              0              0
+
+  recycler_1  (gain, integrated)
+          time      Q (network) |        phi idc        phi tdc      phi drift
+  ------------ ---------------- | -------------- -------------- --------------
+        0.0000                0 |              1              1              0
+        0.3000        0.0810752 |        1.34986        1.34986              0
+        0.6000         0.294587 |        1.82212        1.82212              0
+        0.9000         0.603727 |         2.4596         2.4596              0
+        1.2000         0.979204 |        3.32012        3.32012              0
+        1.5000          1.39775 |        4.48169        4.48169              0
+
+  Q is the simulation: Q(t) = exp(A t) Q(0), where A is the flow
+  matrix assembled from the pathway laws, so it depends on the
+  whole graph. The phi columns are the single-component analytic
+  form and ignore every edge -- they are where the drift theorem
+  is checked against a closed form, not a trajectory of the system.
+
+  network summary at horizon t = 1.5
+  component                solved             Q(0)         Q(t_end)
+  --------------------     ------ ---------------- ----------------
+  source_1                   held                2                2
+  interaction_1               yes                0         0.166667
+  store_1                     yes               10          6.75205
+  consumer_1                  yes                0          4.48693
+  recycler_1                  yes                0          1.39775
+
+  flow matrix         state-dependent (multiplicative junction)
+  psi_network         0.873937
+
+  emergy at t = 1.5   (empower, and transformity Em/Q)
+  component                            Em                 Tr
+  -------------------- ------------------ ------------------
+  source_1                              0                  0
+  interaction_1                         0                  0
+  store_1                               0                  0
+  consumer_1                            0                  0
+  recycler_1                            0                  0
+
+  emergy created       0
+    Every bifurcation here is a partition, so emergy is
+    conserved. Mark an edge output_mode "replicate" to
+    make it a co-production and this becomes non-zero.
+  system              open -- a pathway leaves a held
+                      component, which delivers quantity
+                      without being depleted (Odum SecII)
+  net boundary inflow 2.8034  (expected, not an error)
+
+============================================================
+ MOP HARMONY RELATIONSHIPS
+============================================================
+  components N          5
+  ordinal roots         4  (N-1)
+  reference couple a12  0.070737 +0.997495i
+
+  reduction residual    0.000e+00   PASS
+    all 5 x 5 = 25 entries reconstruct from the single
+    reference couple, so the matrix holds 1 free quantity.
+
+  row balance residual  2.001e-16   PASS
+    every row sums to zero: the 4 ordinal roots cancel,
+    which is the global stability of the relationships.
+============================================================
+
+============================================================
+ MODE 2 -- GENERATIVE: MOP ORDINAL STEP
+============================================================
+
+  input   examples/giannantoni/closed_loop.json
+  seed    tests/results/gia_functional.seed.json
+  output  tests/results/gia_functional.json
+
+  compare  code --diff tests/results/gia_functional.seed.json tests/results/gia_functional.json
+           (diff the seed, not the input file: cJSON reformats on
+            output, so an input-vs-output text diff shows
+            serialisation noise on top of the real change)
+
+============================================================
+ EXECUTION MODE, BY STRUCTURAL DIFF
+============================================================
+  nodes  5 -> 5   (+0)
+  edges  6 -> 6   (+0)
+
+  Input_Graph === Output_Graph
+  MODE: functional / conservative.
+
+    nothing added, nothing removed; cJSON_Compare is exact
+    over the whole tree, so this covers field values too.
+
+  The topology is unchanged. Evolution was confined to
+  numerical state along a fixed graph -- the system
+  transformed, but it did not originate anything.
+============================================================
+
+### 3. Feed run 1's own output back in -> expect FUNCTIONAL (fixed point)
+============================================================
+ GIANNANTONI GENERATIVE FRAMEWORK
+============================================================
+  system            Evolved Self-Organizing Graph (Post-MOP Ordinal Step)
+  components        5
+  relationships     6
+  horizon t_val     1.5
+  derivative order  2
+  generative mode   on
+
+  ordinality        1.000  (at maximum)
+
+  component            kind          phi degree   calculi
+  source_1             source             1       agree
+  interaction_1        interaction        2       TDC drifts
+  store_1              storage            1       agree
+  consumer_1           storage            1       agree
+  emergent_gain_1      gain               1       agree
+    'agree' means phi is affine, so the incipient and
+    traditional derivatives coincide identically. 'TDC drifts'
+    means phi carries curvature and the Bell expansion picks up
+    terms the incipient derivative does not.
+
+  duet at 'interaction_1', order 1/2, t = 1.5
+    branch +   +8.108923 +0.000000i
+    branch -   -8.108923 +0.000000i
+    sum        +0.000e+00 +9.931e-16i  (branches cancel)
+
+============================================================
+ MODE 1 -- FUNCTIONAL: TRAJECTORIES OVER FIXED TOPOLOGY
+============================================================
+  wrote tests/results/gia_fixpoint.csv  (10 steps to t = 1.5)
+  columns per component: _Q (network), _Em (empower), _Tr
+  (transformity), then _idc, _tdc, _drift; plus psi_network,
+  conservation and emergy_excess for the run as a whole
+
+============================================================
+ MOP HARMONY RELATIONSHIPS
+============================================================
+  components N          5
+  ordinal roots         4  (N-1)
+  reference couple a12  0.070737 +0.997495i
+
+  reduction residual    0.000e+00   PASS
+    all 5 x 5 = 25 entries reconstruct from the single
+    reference couple, so the matrix holds 1 free quantity.
+
+  row balance residual  2.001e-16   PASS
+    every row sums to zero: the 4 ordinal roots cancel,
+    which is the global stability of the relationships.
+============================================================
+
+============================================================
+ MODE 2 -- GENERATIVE: MOP ORDINAL STEP
+============================================================
+
+  input   tests/results/gia_generative.json
+  seed    tests/results/gia_fixpoint.seed.json
+  output  tests/results/gia_fixpoint.json
+
+  compare  code --diff tests/results/gia_fixpoint.seed.json tests/results/gia_fixpoint.json
+           (diff the seed, not the input file: cJSON reformats on
+            output, so an input-vs-output text diff shows
+            serialisation noise on top of the real change)
+
+============================================================
+ EXECUTION MODE, BY STRUCTURAL DIFF
+============================================================
+  nodes  5 -> 5   (+0)
+  edges  6 -> 6   (+0)
+
+  Input_Graph === Output_Graph
+  MODE: functional / conservative.
+
+    nothing added, nothing removed; cJSON_Compare is exact
+    over the whole tree, so this covers field values too.
+
+  The topology is unchanged. Evolution was confined to
+  numerical state along a fixed graph -- the system
+  transformed, but it did not originate anything.
+============================================================
