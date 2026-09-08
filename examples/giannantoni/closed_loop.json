@@ -1,0 +1,80 @@
+{
+  "system_name": "Nutrient-Recycling Ecosystem (already at Maximum Ordinality)",
+  "_comment": "Every component sits on a closed pathway, so the MOP ordinal step has nothing left to close and the run is functional. Contrast with input.json, whose solar source is fed by nothing and returns to nothing.",
+  "nodes": [
+    {
+      "id": "source_1",
+      "label": "Solar Energy Source",
+      "type": "source",
+      "initial_value": 2.0
+    },
+    {
+      "id": "interaction_1",
+      "label": "Photosynthesis Interaction",
+      "type": "interaction",
+      "generativity_factor": 1.5
+    },
+    {
+      "id": "store_1",
+      "label": "Biomass Store",
+      "type": "storage",
+      "capacity": 100.0,
+      "current_level": 10.0
+    },
+    {
+      "id": "consumer_1",
+      "label": "Herbivore Consumer",
+      "type": "storage",
+      "metabolic_rate": 0.2
+    },
+    {
+      "id": "recycler_1",
+      "label": "Detritus / Nutrient Recycler",
+      "type": "gain",
+      "ordinality_rank": 4.0
+    }
+  ],
+  "edges": [
+    {
+      "source": "source_1",
+      "target": "interaction_1",
+      "flow_type": "inflow",
+      "weight": 1.0
+    },
+    {
+      "source": "interaction_1",
+      "target": "store_1",
+      "flow_type": "generative_production",
+      "weight": 1.2
+    },
+    {
+      "source": "store_1",
+      "target": "consumer_1",
+      "flow_type": "outflow",
+      "weight": 0.5
+    },
+    {
+      "source": "consumer_1",
+      "target": "interaction_1",
+      "flow_type": "ordinal_feedback",
+      "weight": 0.3
+    },
+    {
+      "source": "consumer_1",
+      "target": "recycler_1",
+      "flow_type": "ordinal_ascent",
+      "weight": 0.4
+    },
+    {
+      "source": "recycler_1",
+      "target": "source_1",
+      "flow_type": "emergent_feedback_loop",
+      "weight": 0.25
+    }
+  ],
+  "simulation_params": {
+    "t_val": 1.5,
+    "derivative_order": 2,
+    "generative_mode": true
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "system_name": "Odum Self-Organizing Ecosystem Graph",
+  "nodes": [
+    {
+      "id": "source_1",
+      "label": "Solar Energy Source",
+      "type": "source",
+      "initial_value": 2.0
+    },
+    {
+      "id": "interaction_1",
+      "label": "Photosynthesis Interaction",
+      "type": "interaction",
+      "generativity_factor": 1.5
+    },
+    {
+      "id": "store_1",
+      "label": "Biomass Store",
+      "type": "storage",
+      "capacity": 100.0,
+      "current_level": 10.0
+    },
+    {
+      "id": "consumer_1",
+      "label": "Herbivore Consumer",
+      "type": "storage",
+      "metabolic_rate": 0.2
+    }
+  ],
+  "edges": [
+    {
+      "source": "source_1",
+      "target": "interaction_1",
+      "flow_type": "inflow",
+      "weight": 1.0
+    },
+    {
+      "source": "interaction_1",
+      "target": "store_1",
+      "flow_type": "generative_production",
+      "weight": 1.2
+    },
+    {
+      "source": "store_1",
+      "target": "consumer_1",
+      "flow_type": "outflow",
+      "weight": 0.5
+    },
+    {
+      "source": "consumer_1",
+      "target": "interaction_1",
+      "flow_type": "ordinal_feedback",
+      "weight": 0.3
+    }
+  ],
+  "simulation_params": {
+    "t_val": 1.5,
+    "derivative_order": 2,
+    "generative_mode": true
+  }
+}

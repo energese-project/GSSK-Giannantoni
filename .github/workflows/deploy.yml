@@ -177,6 +177,16 @@ jobs:
       - name: GNP-loop conservation tests (Phase D.1)
         run: make test-gnp-loop
 
+      # The generative engine is a second binary with no golden CSV behind it,
+      # so nothing else in this workflow would notice it breaking. The suite
+      # pins the claims rather than the digits: drift vanishes exactly when phi
+      # is affine and matches the hand-derived closed form when it is not, the
+      # half-order derivative returns two cancelling branches, the harmony
+      # matrix reconstructs from its single reference couple and balances by
+      # row, and the ordinal step raises ordinality to maximum and then stops.
+      - name: Giannantoni generative engine tests
+        run: make test-giannantoni
+
   # ────────────────────────────────────────────────────────────
   # Quality gate — all Linux-only checks as serial steps.
   # One checkout, one apt-get, one runner.

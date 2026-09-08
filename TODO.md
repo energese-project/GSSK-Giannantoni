@@ -539,6 +539,144 @@ general-purpose ODE library. The wedge is:
 
 ---
 
+## Phase 10 — Giannantoni Generative Engine (MOP / IDC)
+
+> **Motivation:** Phase 1 brought Incipient Differential Calculus into the
+> kernel as a *solver*. Phase 10 is the other half of Giannantoni's programme:
+> the Maximum Ordinality Principle, where the graph is not fixed and the run
+> may produce structure that was not in the seed.
+>
+> It ships as a **separate binary**, `bin/giannantoni_sim`, not as an extension
+> of the kernel. The kernel carries state as a flat `double *` of scalar
+> storages; Relational Space coordinates are complex. `src/engine.c` therefore
+> does not include `gssk.h` — the two engines share the build and cJSON and
+> nothing else. See `docs/giannantoni_assessment.md` §6 Phase 3.
+
+### 10.1 Incipient calculus and derivative drift
+
+- [x] `phi(t)` carried as a polynomial so every `phi^(n)` is exact.
+- [x] Incipient amplitude `(phi')^n` (persistence of form) vs. traditional
+      amplitude `B_n(phi', ..., phi^(n))` (complete Bell / Faà di Bruno).
+- [x] `gia_drift()` reports `psi_n = B_n - (phi')^n`, and `gia_drift_free()`
+      decides from the coefficients alone when the two calculi coincide.
+- [x] Tests pin the drift against hand-derived closed forms rather than
+      against the implementation's own output.
+
+### 10.2 Binary / duet / n-et
+
+- [x] `(d~/d~t)^(p/q) e^phi` returns all `q` branches as one state.
+- [x] Half order on `phi = alpha t` reproduces the `+/- sqrt(alpha) e^(alpha t)`
+      duet; branches cancel.
+
+### 10.3 MOP harmony relationships
+
+- [x] N x N matrix generated from one reference couple by the `(N-1)` ordinal
+      roots of unity.
+- [x] Reduction invariant: every entry reconstructs from `alpha_12` alone.
+- [x] Balance invariant: every row sums to zero (N >= 3).
+- [ ] The non-commutative ordinal algebra (spinor products, quaternion
+      arithmetic). The matrix is currently over the complex numbers, which
+      carries both invariants but is not Giannantoni's full construction.
+- [ ] Derive `alpha_12` from topology rather than reading it off the first
+      relationship's weight and its target's generativity factor.
+
+### 10.4 Dual modes and structural validation
+
+- [x] Mode 1 writes `_idc`, `_tdc` and `_drift` per component to CSV.
+- [x] Mode 2 spawns a regulator to close an open pathway when the graph is
+      below maximum ordinality; verified to actually raise ordinality to 1 and
+      then to be a fixed point.
+- [x] Mode decided structurally by `cJSON_Compare(seed, output)`, not by the
+      input flag.
+- [x] `make test-giannantoni`, wired into CI.
+- [x] `--print` renders the trajectories on the terminal, per component, with
+      a summary carrying each component's largest drift over the run.
+- [x] The structural diff names the components and relationships that were
+      added or removed, rather than only reporting counts.
+- [x] `make bench-giannantoni` — the incipient closed form against RK4 and
+      Euler on the same ODE. Measures cost-to-accuracy, error accumulation
+      over the horizon, and (part C) that psi survives dt -> 0 and is
+      therefore not an integration error. Deterministic parts agree exactly
+      between Apple clang and Linux GCC.
+- [ ] Benchmark against the GSSK kernel itself rather than an in-file RK4.
+      The current comparison is mathematics against mathematics with no JSON
+      or graph machinery in the timing loop, which is the honest way to test
+      the calculus claim; an end-to-end number against `bin/gssk` would be
+      dominated by infrastructure and measures a different question.
+- [ ] The benchmark shows the payoff *when* a system is in exponential form.
+      It cannot show how often that holds for real Odum graphs, which is the
+      actual Level 1 claim. ADR 0011 decision 3 is how it gets quantified.
+
+### 10.5 The two engines (ADR 0011)
+
+> They stay separate: `src/gssk.c` is the Odum conformance authority,
+> `src/engine.c` is the MOP research engine, and neither includes the other's
+> header. Merging is blocked on MOP gaining typed relations, which is a
+> research question, not integration work. See
+> `docs/odum_1972_conformance.md` 3.
+
+- [ ] **Network coupling in the MOP engine.** Today `src/engine.c` computes each
+      component's trajectory from its own `phi` alone — delete every edge from a
+      model and the CSV is byte-identical. Requirements R1-R6 in
+      `docs/mop_network_coupling_requirements.md`; the Option A / Option B fork
+      there must be decided before code. Not blocked on any research.
+- [ ] Projection `GSSK model -> MOP relational space`, one-way and
+      declared-lossy: every module it cannot represent emits a named finding
+      rather than a silent substitution.
+- [ ] MOP coverage report per model — the fraction of nodes and edges with a
+      MOP representation, and the modules that block the rest. This is the
+      measurement that turns the Level 1 claim into a number.
+- [x] Retired `GIA_NODE_REGULATOR`; the generative step emits `gain` (Odum 1972
+      SecIX capture amplifier), a primitive, so the output reloads. Composite
+      names (`producer`, `consumer`, `misc_box`, `system_frame`) are refused
+      with a message pointing at ADR 0010 rather than silently given storage
+      semantics.
+- [x] Node kinds `sink`, `constant`, `gain`, `loop_limited` implemented with
+      their laws. `switch` and `exchange` are **refused** with a named reason
+      (discontinuity needs event location; the diamond needs two carriers)
+      rather than accepted as labels.
+- [x] `switch` (Odum SecXI) — implemented. The flow matrix is augmented to
+      (n+1) so a fixed rate is carried exactly, and crossings are located by
+      Illinois so the run is solved piecewise. Verified: a store draining
+      through a threshold is held AT the threshold rather than driven through
+      it, and the total is conserved across the event.
+- [x] `exchange` (Odum SecXV) — implemented. It did NOT need a second carrier
+      per component: a currency stock is just another component, which is how
+      Odum draws it, so the counter-flow at F/P is a matrix entry. Verified by
+      recovering Eq (103), J_energy / J_currency = P, from the trajectory.
+- [x] `ratio`, `subtract`, `threshold` and `constant` edge logics, each tested
+      against a hand-derived closed form.
+- [x] Emergy and transformity accounting, as a second pass over the same
+      topology under Odum's algebra: `quality_input` on a source,
+      `output_mode: partition|replicate` on an edge, back-edges carrying
+      quantity but not re-injecting emergy (Odum's fourth rule).
+      `gia_emergy_excess()` is exactly zero for a pure split and equals one
+      whole inflow for a two-way co-production — the irreducible excess as a
+      number. `_Em` and `_Tr` columns per component in the CSV, and an emergy
+      block in the terminal summary.
+- [ ] The **max** co-product rule. Odum's algebra also says a process fed by
+      several inputs takes the MAX transformity rather than the sum in some
+      formulations; this implements the co-production side (whole to each
+      output) but not that input-side variant. See
+      `docs/giannantoni_assessment.md` 3.
+- [ ] Carriers as a first-class concept, so goods and money are checked for
+      separate conservation. `exchange` works today with named legs, a constant
+      price and no money-stock gating (cf. ADR 0001).
+- [ ] Forcing functions (ADR 0006).
+- [ ] Bridge: run one model through both engines and diff the trajectories, so
+      the drift critique is measured against a real integrator rather than only
+      against a closed form. Blocked on the projection — without the coverage
+      report this compares a full Odum model against a partial one and calls
+      the difference drift.
+- [ ] Revisit ADR 0011 only when MOP can express a discontinuity (switch), a
+      control-versus-power split (gain), more than one carrier (exchange), and
+      the n-et for n >= 3 is solved or carries a stated error bound.
+- [ ] More seed graphs under `examples/giannantoni/` — the vocabulary is
+      separate from `gssk.schema.json` by design, which is why the seeds live
+      one directory down and out of both regression globs.
+
+---
+
 ## Continuous Concerns
 
 - [ ] Every new logic primitive added requires: forward implementation,

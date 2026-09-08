@@ -45,6 +45,12 @@ __pycache__/
 # Python demo temp files
 /tmp/gssk_demo_*.csv
 
+# Giannantoni simulator output
+/output.json
+/simulation_output.csv
+/output.seed.json
+/out.txt
+
 # Reference papers are cited, not redistributed: several are Elsevier or
 # Academic Press and this repository is public.
 docs/*.pdf
