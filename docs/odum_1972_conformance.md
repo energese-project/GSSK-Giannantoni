@@ -285,7 +285,27 @@ topology and disagree about the algebra, which is the point.
    carrier cancelled a deficit in another. The residual is now the worst
    carrier rather than the sum, and a regression test pins that the old summed
    figure would have hidden it.
-3. **Forcing functions** (ADR 0006).
+3. **Edge-attached forcing** (ADR 0006's second attachment point). Node
+   attachment is implemented: a source or constant may declare a `forcing`
+   waveform, and `sine`, `ramp` and `exponential` are carried exactly.
+
+   The reason those three and not the other five is worth stating, because it
+   is the same reason the engine is exact at all. Each of them **generates
+   itself** — `d/dt [s;c] = [[0,w],[-w,0]][s;c]`, `d/dt r = 1`,
+   `d/dt e = lambda e` — so the driver can be carried as extra state and the
+   augmented system stays linear and *time-invariant*. `Q(t) = exp(A t) Q(0)`
+   therefore remains a closed form under forcing, checked against
+   hand-integrated solutions (`A(1 - cos wt)/w` and so on). A square wave,
+   sawtooth or jitter is not its own generator, so it is refused rather than
+   quietly turned into a step-and-hope.
+
+   **A driven model still has psi exactly zero, and that is a result rather
+   than an oversight.** Drift is about the coefficient depending on the
+   *state*, not on time: a driver absorbable into `A` leaves the two calculi in
+   agreement. The case that does drift without any multiplicative junction is
+   Odum's *other* attachment point — forcing an edge RATE, where the flow is
+   `k(t)·Q`, bilinear in driver and state and therefore not absorbable. That is
+   what remains, and it is the interesting half for the drift claim.
 4. **Composites and archetypes.** `producer`, `consumer`, `misc_box` and
    `system_frame` are refused with a message pointing at ADR 0010, rather than
    silently given storage semantics.

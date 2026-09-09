@@ -413,6 +413,102 @@ done:
 
 /* ---- the flow matrix, assembled from Odum's pathway laws ---- */
 
+/* ---- forcing carried as state ----
+ *
+ * Each forced component contributes extra rows to the augmented system, laid
+ * out as [ Q_0..Q_{n-1} | extras | 1 ]. The extras are the waveform's own
+ * generator, so A stays constant and the matrix exponential stays exact.
+ *
+ * A sine needs two (sin and cos, which generate each other); a ramp and an
+ * exponential need one each. */
+static int forcing_width(gia_forcing_kind k) {
+    switch (k) {
+        case GIA_FORCE_SINE:        return 2;
+        case GIA_FORCE_RAMP:        return 1;
+        case GIA_FORCE_EXPONENTIAL: return 1;
+        default:                    return 0;
+    }
+}
+
+/* Index of a node's first extra state, or -1 if it is not forced. */
+static int forcing_slot(const gia_model *m, int node) {
+    int i, at = m->n_nodes;
+    for (i = 0; i < m->n_nodes; i++) {
+        int w = forcing_width(m->nodes[i].forcing.kind);
+        if (i == node) return w ? at : -1;
+        at += w;
+    }
+    return -1;
+}
+
+static void forcing_decompose(const gia_node *nd, double *konst, double *coeff);
+
+/* Add `g` times the origin's value into `row` of the augmented matrix.
+ *
+ * Normally the origin's value is a state, so this is one entry in its column.
+ * A FORCED held component is different: its value is not the state Q_a, it is
+ * the waveform, so the term is split across the phantom column (the constant
+ * part) and the waveform's own extra state (the varying part). Reading column
+ * a for a forced source would silently use its declared value and ignore the
+ * driver entirely. */
+static void add_origin_term(const gia_model *m, gia_matrix *out, int dim,
+                            int row, int a, double g) {
+    const gia_node *nd = &m->nodes[a];
+    int slot;
+
+    if (nd->integrates || nd->forcing.kind == GIA_FORCE_NONE) {
+        out->a[(size_t)row*(size_t)dim+(size_t)a] += g;
+        return;
+    }
+    slot = forcing_slot(m, a);
+    {
+        double konst, coeff;
+        forcing_decompose(nd, &konst, &coeff);
+        out->a[(size_t)row*(size_t)dim+(size_t)(dim-1)] += g * konst;
+        if (slot >= 0) out->a[(size_t)row*(size_t)dim+(size_t)slot] += g * coeff;
+    }
+}
+
+static int forcing_extra_count(const gia_model *m) {
+    int i, n = 0;
+    for (i = 0; i < m->n_nodes; i++) n += forcing_width(m->nodes[i].forcing.kind);
+    return n;
+}
+
+double gia_forcing_value(const gia_forcing *f, double base, double t) {
+    if (!f) return base;
+    switch (f->kind) {
+        case GIA_FORCE_SINE:
+            return f->offset + f->amplitude * sin(f->rate * t + f->phase);
+        case GIA_FORCE_RAMP:
+            return f->offset + f->rate * t;
+        case GIA_FORCE_EXPONENTIAL:
+            return f->offset + f->amplitude * exp(f->rate * t);
+        default:
+            return base;
+    }
+}
+
+/* The driver's value written as (constant part, coefficient on its first extra
+ * state). A forced node's contribution to a pathway is then
+ * k*const on the phantom column plus k*coeff on the extra column. */
+static void forcing_decompose(const gia_node *nd, double *konst, double *coeff) {
+    const gia_forcing *f = &nd->forcing;
+    switch (f->kind) {
+        case GIA_FORCE_SINE:
+            /* sin(w t + p) = sin(p) cos(w t) + cos(p) sin(w t); the two extras
+             * are carried as s = sin(w t + p), c = cos(w t + p), so the value
+             * is just the s slot. */
+            *konst = f->offset; *coeff = f->amplitude; break;
+        case GIA_FORCE_RAMP:
+            *konst = f->offset; *coeff = f->rate; break;
+        case GIA_FORCE_EXPONENTIAL:
+            *konst = f->offset; *coeff = f->amplitude; break;
+        default:
+            *konst = nd->q0;    *coeff = 0.0; break;
+    }
+}
+
 /* True when a threshold pathway is open at the operating point. The clamp on
  * `subtract` is the same kind of boundary and is treated the same way. */
 static bool edge_is_open(const gia_edge *e, const double *q) {
@@ -431,8 +527,33 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
     int i, n, dim;
     if (!m || !out || m->n_nodes <= 0) return false;
     n   = m->n_nodes;
-    dim = n + 1;                      /* augmented: column n carries b */
+    dim = n + forcing_extra_count(m) + 1;   /* [ Q | extras | 1 ] */
     if (!gia_matrix_init(out, dim)) return false;
+
+    /* Each forced component's waveform generates itself, so its rows are
+     * constant and the whole augmented system stays time-invariant. */
+    for (i = 0; i < n; i++) {
+        const gia_forcing *f = &m->nodes[i].forcing;
+        int slot = forcing_slot(m, i);
+        if (slot < 0) continue;
+        switch (f->kind) {
+            case GIA_FORCE_SINE:
+                /* d/dt s = w c,  d/dt c = -w s */
+                out->a[(size_t)slot*(size_t)dim+(size_t)(slot+1)]     =  f->rate;
+                out->a[(size_t)(slot+1)*(size_t)dim+(size_t)slot]     = -f->rate;
+                break;
+            case GIA_FORCE_RAMP:
+                /* d/dt r = 1, taken from the phantom component */
+                out->a[(size_t)slot*(size_t)dim+(size_t)(dim-1)]      =  1.0;
+                break;
+            case GIA_FORCE_EXPONENTIAL:
+                /* d/dt e = lambda e */
+                out->a[(size_t)slot*(size_t)dim+(size_t)slot]         =  f->rate;
+                break;
+            default:
+                break;
+        }
+    }
 
     for (i = 0; i < m->n_edges; i++) {
         const gia_edge *e = &m->edges[i];
@@ -519,12 +640,12 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
                  * (ADR 0001). Price is constant and the legs are named. */
                 double k = e->weight;
                 double P = (fabs(e->price) > GIA_EPS) ? e->price : 1.0;
-                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)a] -= k;
-                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)a] += k;
+                if (drain_a) add_origin_term(m, out, dim, a, a, -k);
+                if (fill_b)  add_origin_term(m, out, dim, b, a,  k);
                 if (e->cur_from >= 0 && m->nodes[e->cur_from].integrates)
-                    out->a[(size_t)e->cur_from*(size_t)dim+(size_t)a] -= k / P;
+                    add_origin_term(m, out, dim, e->cur_from, a, -k / P);
                 if (e->cur_to >= 0 && m->nodes[e->cur_to].integrates)
-                    out->a[(size_t)e->cur_to*(size_t)dim+(size_t)a] += k / P;
+                    add_origin_term(m, out, dim, e->cur_to, a,  k / P);
                 continue;
             }
 
@@ -556,12 +677,12 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
                 continue;
         }
 
-        if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)a] -= g;
-        if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)a] += g;
+        if (drain_a) add_origin_term(m, out, dim, a, a, -g);
+        if (fill_b)  add_origin_term(m, out, dim, b, a,  g);
 
         if (e->logic == GIA_LOGIC_REVERSIBLE) {
-            if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)b] += g;
-            if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)b] -= g;
+            if (drain_a) add_origin_term(m, out, dim, a, b,  g);
+            if (fill_b)  add_origin_term(m, out, dim, b, b, -g);
         }
     }
     return true;
@@ -585,6 +706,18 @@ bool gia_flow_matrix_is_constant(const gia_model *m) {
     return true;
 }
 
+/* Note on forcing and gia_flow_matrix_is_constant: a node-attached waveform
+ * does NOT make the matrix non-constant. Its generator rows are constant, so
+ * the augmented system stays time-invariant and the incipient solution stays
+ * exact -- psi remains exactly zero.
+ *
+ * That is a result, not an oversight. Drift is about the coefficient depending
+ * on the STATE, not about it depending on time: a driver that is its own
+ * generator can be absorbed into A, and the two calculi agree. The case that
+ * does drift is Odum's other attachment point, forcing on an EDGE RATE, where
+ * the flow is k(t) Q -- bilinear in driver and state, so not absorbable. That
+ * attachment is not implemented here. */
+
 /* Does this model contain a pathway that switches on or off? Those are solved
  * piecewise: there is no smooth alpha across a crossing, so persistence of form
  * holds on each side and not through it. */
@@ -599,27 +732,58 @@ static bool has_switching(const gia_model *m) {
 /* One smooth advance: Q(t+h) = exp(A h) Q(t), with A frozen at `q`.
  * Uses the augmented (n+1) form so constant and open-threshold pathways, which
  * contribute a rate rather than a conductance, are carried exactly. */
-static bool advance(const gia_model *m, const double *q, double h, double *out) {
+static bool advance_from(const gia_model *m, const double *q, double t0,
+                         double h, double *out) {
     gia_matrix A, Ah, E;
-    int        i, j, n = m->n_nodes, dim = n + 1;
+    double    *x = NULL;
+    int        i, j, n = m->n_nodes, dim;
     bool       ok = false;
 
     memset(&A, 0, sizeof(A)); memset(&Ah, 0, sizeof(Ah)); memset(&E, 0, sizeof(E));
+    dim = n + forcing_extra_count(m) + 1;
 
     if (!gia_build_flow_matrix(m, q, &A)) goto done;
     if (!gia_matrix_init(&Ah, dim))       goto done;
     for (i = 0; i < dim * dim; i++) Ah.a[i] = A.a[i] * h;
     if (!gia_matrix_exp(&Ah, &E))         goto done;
 
+    /* Full augmented state at t0: components, then each waveform's own state,
+     * then the phantom 1. The waveform states are evaluated AT t0 rather than
+     * reset, so a run broken at an event resumes the driver where it left off
+     * instead of restarting it. */
+    x = (double *)calloc((size_t)dim, sizeof(double));
+    if (!x) goto done;
+    for (i = 0; i < n; i++) x[i] = q[i];
+    x[dim - 1] = 1.0;
     for (i = 0; i < n; i++) {
-        double acc = gia_matrix_at(&E, i, n);   /* phantom component, fixed at 1 */
-        for (j = 0; j < n; j++) acc += gia_matrix_at(&E, i, j) * q[j];
+        const gia_forcing *f = &m->nodes[i].forcing;
+        int slot = forcing_slot(m, i);
+        if (slot < 0) continue;
+        switch (f->kind) {
+            case GIA_FORCE_SINE:
+                x[slot]     = sin(f->rate * t0 + f->phase);
+                x[slot + 1] = cos(f->rate * t0 + f->phase);
+                break;
+            case GIA_FORCE_RAMP:        x[slot] = t0;                    break;
+            case GIA_FORCE_EXPONENTIAL: x[slot] = exp(f->rate * t0);     break;
+            default: break;
+        }
+    }
+
+    for (i = 0; i < n; i++) {
+        double acc = 0.0;
+        for (j = 0; j < dim; j++) acc += gia_matrix_at(&E, i, j) * x[j];
         out[i] = acc;
     }
     ok = true;
 done:
+    free(x);
     gia_matrix_free(&A); gia_matrix_free(&Ah); gia_matrix_free(&E);
     return ok;
+}
+
+static bool advance(const gia_model *m, const double *q, double h, double *out) {
+    return advance_from(m, q, 0.0, h, out);
 }
 
 /* Signed distance to a switching boundary: > 0 while the pathway is open. */
@@ -1111,6 +1275,41 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         phi_for_node(nd, jn);
         nd->quality_input = num_field(jn, "quality_input", 0.0);
         nd->carrier       = str_field(jn, "carrier", "");
+        {   /* ADR 0006: the waveform is attached to the element, not held in a
+             * model-root block keyed by id -- so a reader of the nodes array
+             * can see that a component is driven, and deleting the component
+             * cannot orphan its forcing. */
+            const cJSON *fj = cJSON_GetObjectItemCaseSensitive(jn, "forcing");
+            memset(&nd->forcing, 0, sizeof(nd->forcing));
+            nd->forcing.kind = GIA_FORCE_NONE;
+            if (cJSON_IsObject(fj)) {
+                const char *kind = str_field(fj, "kind", "none");
+                if      (!strcmp(kind, "none"))  nd->forcing.kind = GIA_FORCE_NONE;
+                else if (!strcmp(kind, "sine"))  nd->forcing.kind = GIA_FORCE_SINE;
+                else if (!strcmp(kind, "ramp"))  nd->forcing.kind = GIA_FORCE_RAMP;
+                else if (!strcmp(kind, "exponential"))
+                                                 nd->forcing.kind = GIA_FORCE_EXPONENTIAL;
+                else {
+                    /* Refused rather than approximated. A square wave, a
+                     * sawtooth or jitter is not its own generator, so it cannot
+                     * be carried as state, and the closed form would quietly
+                     * become a step-and-hope. */
+                    fprintf(stderr,
+                            "engine: node %d ('%s'): forcing kind '%s' is not "
+                            "implemented here -- only waveforms that generate "
+                            "themselves (sine, ramp, exponential) can be "
+                            "carried as state and keep the solution exact\n",
+                            i, nd->id ? nd->id : "?", kind);
+                    gia_model_free(m);
+                    return false;
+                }
+                nd->forcing.amplitude = num_field(fj, "amplitude", 1.0);
+                nd->forcing.rate      = num_field(fj, "rate",
+                                        num_field(fj, "frequency", 1.0));
+                nd->forcing.phase     = num_field(fj, "phase", 0.0);
+                nd->forcing.offset    = num_field(fj, "offset", 0.0);
+            }
+        }
 
         /* Live quantity for the network solution, and whether it is solved for.
          * Odum holds a source at its value rather than integrating it (1972
@@ -1140,6 +1339,16 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                                    num_field(jn, "initial_value", 0.0));
                 nd->integrates = true;
                 break;
+        }
+        /* Checked here, after the switch above has set `integrates`. Reading
+         * it earlier gave a zeroed field, so the check silently never fired. */
+        if (nd->forcing.kind != GIA_FORCE_NONE && nd->integrates) {
+            fprintf(stderr,
+                    "engine: node %d ('%s'): forcing drives a HELD value "
+                    "(Odum's X or N), but this component integrates; attach it "
+                    "to a source or constant\n", i, nd->id ? nd->id : "?");
+            gia_model_free(m);
+            return false;
         }
         if (!nd->id) {
             fprintf(stderr, "engine: node %d has no \"id\"\n", i);
@@ -1311,10 +1520,17 @@ void gia_model_free(gia_model *m) {
  * 8b. Emergy and transformity — the second accounting
  * ================================================================== */
 
-double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q) {
+double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q,
+                     double t) {
     double qa, qc;
     if (!m || !e || e->from < 0 || e->to < 0 || !q) return 0.0;
     qa = q[e->from];
+    /* `q` holds the solved components; a held driven component's q never moves,
+     * so its instantaneous value has to come from the waveform. Without this
+     * the emergy pass would carry a forced source's declared value forever. */
+    if (!m->nodes[e->from].integrates &&
+        m->nodes[e->from].forcing.kind != GIA_FORCE_NONE)
+        qa = gia_forcing_value(&m->nodes[e->from].forcing, qa, t);
 
     switch (e->logic) {
         case GIA_LOGIC_LINEAR:      return e->weight * qa;
@@ -1386,7 +1602,7 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
 
     if (!gia_network_state(m, t, q, NULL)) goto done;
 
-    for (i = 0; i < m->n_edges; i++) flow[i] = gia_edge_flow(m, &m->edges[i], q);
+    for (i = 0; i < m->n_edges; i++) flow[i] = gia_edge_flow(m, &m->edges[i], q, t);
 
     for (i = 0; i < n; i++)
         if (colour[i] == 0) mark_back_edges(m, colour, is_back, i);
@@ -1482,7 +1698,7 @@ double gia_emergy_excess(const gia_model *m, double t) {
     if (!gia_emergy_at(m, t, em, NULL))        goto done;
     if (!gia_network_state(m, t, q, NULL))     goto done;
 
-    for (i = 0; i < m->n_edges; i++) flow[i] = gia_edge_flow(m, &m->edges[i], q);
+    for (i = 0; i < m->n_edges; i++) flow[i] = gia_edge_flow(m, &m->edges[i], q, t);
     for (i = 0; i < n; i++)
         if (colour[i] == 0) mark_back_edges(m, colour, is_back, i);
     for (i = 0; i < m->n_edges; i++) {
