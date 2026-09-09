@@ -256,6 +256,22 @@ topology and disagree about the algebra, which is the point.
    an `exchange` must couple two different ones with both currency legs on the
    counter-carrier. What remains is the rest of the kernel's diamond.
 
+   An exchange is **not** required to couple two different carriers. Barter is
+   a real process — grain for sheep, or one commodity traded between two
+   markets at a ratio — and Odum's §XV transactor is written for money only
+   because that is the case he was modelling. The structure it describes, two
+   counter-flowing quantities coupled by a ratio, does not depend on either
+   side being money. An earlier revision rejected a same-carrier counter-flow;
+   worse, it did so only when the model happened to contain a second carrier
+   somewhere else, so one edge's validity depended on unrelated parts of the
+   graph. Both are gone. The field names follow suit: `counter_origin`,
+   `counter_target` and `exchange_ratio` are the neutral spellings, with
+   `currency_origin`, `currency_target` and `price` accepted as aliases.
+
+   What is still rejected: a non-exchange pathway crossing carriers, counter-
+   flow legs holding different carriers from each other, and both legs landing
+   on the same component, which pays nothing to nobody.
+
    Leg discovery is deliberately **not** inferred. Given a goods flow a -> b and
    a money carrier, which money component is the payer and which the receiver
    is not recoverable from carrier identity alone — it needs the ownership the

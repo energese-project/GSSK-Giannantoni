@@ -1163,9 +1163,18 @@ bool gia_model_load(gia_model *m, cJSON *root) {
             ed->weight    = num_field(je, "weight", 1.0);
             ed->capacity  = num_field(je, "capacity", 0.0);
             ed->threshold = num_field(je, "threshold", 0.0);
-            ed->price     = num_field(je, "price", 1.0);
-            ed->cur_from  = find_node(m, str_field(je, "currency_origin", NULL));
-            ed->cur_to    = find_node(m, str_field(je, "currency_target", NULL));
+            /* Neutral names first, money-specific ones as accepted aliases.
+             * `currency_*` and `price` are what Odum's SecXV transactor calls
+             * them, and they read correctly for a money transaction -- but they
+             * are wrong for barter, and naming them that way is what led to
+             * barter being rejected outright. docs/emergy_synthesis.md 8 sets
+             * the same preference for neutral vocabulary. */
+            ed->price     = num_field(je, "exchange_ratio",
+                                      num_field(je, "price", 1.0));
+            ed->cur_from  = find_node(m, str_field(je, "counter_origin",
+                                      str_field(je, "currency_origin", NULL)));
+            ed->cur_to    = find_node(m, str_field(je, "counter_target",
+                                      str_field(je, "currency_target", NULL)));
             {   /* docs/emergy_synthesis.md 8: partition is the default, because
                  * a split is the ordinary case and co-production is the claim. */
                 const char *om = str_field(je, "output_mode", "partition");
@@ -1234,8 +1243,8 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         if (ed->logic != GIA_LOGIC_EXCHANGE) continue;
         if (ed->from < 0 || ed->to < 0) continue;
         if (ed->cur_from < 0 || ed->cur_to < 0) {
-            fprintf(stderr, "engine: edge %d: exchange needs currency_origin "
-                            "and currency_target\n", i);
+            fprintf(stderr, "engine: edge %d: exchange needs counter_origin "
+                            "and counter_target (or the currency_* aliases)\n", i);
             gia_model_free(m);
             return false;
         }
@@ -1243,16 +1252,33 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         cf      = gia_node_carrier(m, ed->cur_from);
         ct      = gia_node_carrier(m, ed->cur_to);
         if (cf != ct) {
-            fprintf(stderr, "engine: edge %d: the two currency legs hold "
+            fprintf(stderr, "engine: edge %d: the two counter-flow legs hold "
                             "different carriers ('%s' and '%s')\n", i,
                     gia_carrier_name(m, cf), gia_carrier_name(m, ct));
             gia_model_free(m);
             return false;
         }
-        if (cf == primary && gia_carrier_count(m) > 1) {
-            fprintf(stderr, "engine: edge %d: exchange pays for carrier '%s' "
-                            "with the same carrier; a transaction couples two\n",
-                    i, gia_carrier_name(m, primary));
+        /* An exchange is NOT required to couple two different carriers.
+         *
+         * Barter is a real process: grain for sheep, or the same commodity
+         * traded between two markets at a ratio. Odum's SecXV transactor is
+         * written for money, but the structure it describes -- two
+         * counter-flowing quantities coupled by a ratio -- does not depend on
+         * either of them being money.
+         *
+         * An earlier revision rejected a same-carrier counter-flow on the
+         * reasoning that "a transaction couples two". That was wrong twice
+         * over: it ruled out barter, and it was guarded on the model having
+         * more than one carrier, so the identical barter edge was legal alone
+         * and illegal once any unrelated second carrier existed elsewhere in
+         * the graph. One edge's validity must not depend on distant parts of
+         * the model. */
+        (void)primary;
+
+        if (ed->cur_from == ed->cur_to) {
+            fprintf(stderr, "engine: edge %d: both counter-flow legs are '%s', "
+                            "so the exchange pays itself and moves nothing\n",
+                    i, m->nodes[ed->cur_from].id);
             gia_model_free(m);
             return false;
         }
