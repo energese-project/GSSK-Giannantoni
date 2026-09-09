@@ -1215,6 +1215,118 @@ static void test_exchange_self_payment(void) {
     cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 25. Forcing (ADR 0006, node attachment)
+ *
+ * A driven source is Odum's X or N -- a force whose held value varies with
+ * time. The three waveforms here are chosen because each GENERATES ITSELF, so
+ * it can be carried as extra state and the augmented system stays linear and
+ * time-invariant. Q(t) = exp(A t) Q(0) therefore stays exact under forcing,
+ * and every case below is checked against a hand-integrated closed form.
+ * ------------------------------------------------------------------ */
+
+static cJSON *forced_model(const char *forcing) {
+    static char buf[1100];
+    snprintf(buf, sizeof(buf),
+        "{\"nodes\":["
+        "  {\"id\":\"sun\",\"type\":\"source\",\"value\":0.0,%s},"
+        "  {\"id\":\"leaf\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":[{\"source\":\"sun\",\"target\":\"leaf\","
+        "            \"logic\":\"linear\",\"weight\":1.0}],"
+        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}", forcing);
+    return cJSON_Parse(buf);
+}
+
+static void test_forcing(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[2], psi = -1.0, w = 2.0, A = 3.0, t = 1.7;
+
+    printf("\n[25] forcing: a driver carried as state stays exact\n");
+
+    /* dQ/dt = k * A sin(w t), k = 1, Q(0) = 0
+     *   =>  Q(t) = A (1 - cos(w t)) / w                                    */
+    root = forced_model("\"forcing\":{\"kind\":\"sine\",\"amplitude\":3.0,"
+                        "\"rate\":2.0}");
+    if (!root) { ok("parse", false); return; }
+    ok("a sine-driven source loads", gia_model_load(&m, root));
+    ok("the driver is sine", m.nodes[0].forcing.kind == GIA_FORCE_SINE);
+
+    ok("solves", gia_network_state(&m, t, q, &psi));
+    close_to("leaf(t) = A (1 - cos(w t)) / w",
+             q[1], A * (1.0 - cos(w * t)) / w, 1e-9);
+    close_to("the driver is held, so its own value never moves", q[0], 0.0, 1e-12);
+    close_to("sun's instantaneous value comes from the waveform",
+             gia_forcing_value(&m.nodes[0].forcing, 0.0, t), A * sin(w * t), 1e-12);
+
+    /* The result worth stating: a waveform that generates itself is absorbed
+     * into A, so the augmented system is still time-invariant and the two
+     * calculi still agree exactly. Drift is about the coefficient depending on
+     * the STATE, not on time. */
+    ok("a forced model still has a constant flow matrix",
+       gia_flow_matrix_is_constant(&m));
+    close_to("so psi is still exactly zero", psi, 0.0, 0.0);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* dQ/dt = k * (offset + rate t)  =>  Q(t) = offset t + rate t^2 / 2 */
+    root = forced_model("\"forcing\":{\"kind\":\"ramp\",\"rate\":0.5,"
+                        "\"offset\":2.0}");
+    if (root) {
+        ok("a ramp-driven source loads", gia_model_load(&m, root));
+        ok("solves", gia_network_state(&m, 2.0, q, NULL));
+        close_to("leaf(2) = offset*t + rate*t^2/2",
+                 q[1], 2.0 * 2.0 + 0.5 * 4.0 / 2.0, 1e-8);
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+
+    /* dQ/dt = k * A e^(r t)  =>  Q(t) = A (e^(r t) - 1) / r */
+    root = forced_model("\"forcing\":{\"kind\":\"exponential\","
+                        "\"amplitude\":1.5,\"rate\":0.8}");
+    if (root) {
+        ok("an exponentially driven source loads", gia_model_load(&m, root));
+        ok("solves", gia_network_state(&m, 1.0, q, NULL));
+        close_to("leaf(1) = A (e^r - 1) / r",
+                 q[1], 1.5 * (exp(0.8) - 1.0) / 0.8, 1e-8);
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+}
+
+static void test_forcing_refusals(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[26] a waveform that is not its own generator is refused\n");
+
+    /* A square wave cannot be carried as state, so the closed form would
+     * quietly become a step-and-hope. Refused rather than approximated. */
+    root = forced_model("\"forcing\":{\"kind\":\"square\",\"amplitude\":1.0}");
+    if (root) {
+        ok("square is refused", !gia_model_load(&m, root));
+        cJSON_Delete(root);
+    }
+    root = forced_model("\"forcing\":{\"kind\":\"jitter\",\"amplitude\":1.0}");
+    if (root) {
+        ok("jitter is refused", !gia_model_load(&m, root));
+        cJSON_Delete(root);
+    }
+
+    /* Forcing drives a HELD value; attaching it to something that integrates
+     * is a category error, not a second way to inject flow. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"tank\",\"type\":\"storage\",\"current_level\":1.0,"
+        "   \"forcing\":{\"kind\":\"sine\",\"amplitude\":1.0,\"rate\":1.0}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":[{\"source\":\"tank\",\"target\":\"b\",\"logic\":\"linear\","
+        "            \"weight\":1.0}]}");
+    if (root) {
+        ok("forcing on an integrating component is refused",
+           !gia_model_load(&m, root));
+        cJSON_Delete(root);
+    }
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -1242,6 +1354,8 @@ int main(void) {
     test_carrier_default();
     test_barter();
     test_exchange_self_payment();
+    test_forcing();
+    test_forcing_refusals();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

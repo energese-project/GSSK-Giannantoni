@@ -245,6 +245,46 @@ typedef enum {
 
 const char *gia_logic_name(gia_logic l);
 
+/* ---- forcing ----
+ *
+ * ADR 0006's vocabulary: one set of waveforms, attachable in two places. A
+ * forcing on a NODE drives that component's held value (Odum's X or N, a
+ * force); a forcing on an EDGE drives that pathway's rate (Odum's J, a flow).
+ * This engine implements the node attachment; see the note on
+ * gia_flow_matrix_is_constant for why the edge attachment is a different
+ * mathematical problem and is not here.
+ *
+ * These three waveforms are chosen because each is its OWN GENERATOR, so the
+ * forcing can be carried as extra state and the system stays linear and
+ * time-invariant:
+ *
+ *     sine         d/dt [s; c] = [[0, w], [-w, 0]] [s; c]
+ *     ramp         d/dt r = 1
+ *     exponential  d/dt e = lambda e
+ *
+ * That is what keeps Q(t) = exp(A t) Q(0) exact under forcing: the driver is
+ * absorbed into A rather than making A depend on t. A waveform that is not its
+ * own generator -- a square wave, jitter -- is refused rather than approximated
+ * silently. */
+typedef enum {
+    GIA_FORCE_NONE,        /* the declared value is used as-is (default) */
+    GIA_FORCE_SINE,        /* offset + amplitude * sin(w t + phase)      */
+    GIA_FORCE_RAMP,        /* offset + rate * t                          */
+    GIA_FORCE_EXPONENTIAL  /* offset + amplitude * exp(rate * t)         */
+} gia_forcing_kind;
+
+typedef struct {
+    gia_forcing_kind kind;
+    double amplitude;
+    double rate;       /* angular frequency for sine; growth rate otherwise */
+    double phase;
+    double offset;
+} gia_forcing;
+
+/* The driver's value at t, for reporting. The solver does not call this: it
+ * carries the waveform as state so the solution stays closed-form. */
+double gia_forcing_value(const gia_forcing *f, double base, double t);
+
 /* How a component divides emergy among its outgoing pathways. Declared here
  * because gia_edge carries it; the accounting that uses it is in section 8b. */
 typedef enum {
@@ -298,6 +338,7 @@ typedef struct {
     gia_phi       phi;       /* single-component analytic form (Sections 1-3) */
     double        q0;        /* initial quantity, for the network solution     */
     double        quality_input; /* Tr injected by a source; 0 if none        */
+    gia_forcing   forcing;   /* drives the held value; ADR 0006 node attachment */
     const char   *carrier;   /* what this component holds; "" is the implicit
                               * single carrier, so a model that names none
                               * behaves exactly as before. Borrowed from the
@@ -472,9 +513,13 @@ bool gia_system_is_closed(const gia_model *m);
  * an edge -- so the two engines cannot drift apart on terminology.
  * ================================================================== */
 
-/* Flow along one pathway at the operating point `q`, by that pathway's law.
- * This is the quantity F that the emergy pass carries Tr along. */
-double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q);
+/* Flow along one pathway at the operating point `q` and time `t`, by that
+ * pathway's law. This is the quantity F that the emergy pass carries Tr along.
+ *
+ * `t` is needed because a driven component's value is not in `q`: a held
+ * component never moves, so its instantaneous value comes from its waveform. */
+double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q,
+                     double t);
 
 /* Empower (emergy per unit time) and transformity per component at time t.
  * Either output array may be NULL; both are length n_nodes.
