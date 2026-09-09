@@ -298,6 +298,10 @@ typedef struct {
     gia_phi       phi;       /* single-component analytic form (Sections 1-3) */
     double        q0;        /* initial quantity, for the network solution     */
     double        quality_input; /* Tr injected by a source; 0 if none        */
+    const char   *carrier;   /* what this component holds; "" is the implicit
+                              * single carrier, so a model that names none
+                              * behaves exactly as before. Borrowed from the
+                              * cJSON tree.                                    */
     bool          integrates;/* false for source/constant: Q is held, not solved */
     bool          on_cycle;  /* filled in by gia_mark_cycles() */
 } gia_node;
@@ -378,8 +382,41 @@ bool gia_network_state(const gia_model *m, double t, double *out,
  * rather than a single closed form. */
 int gia_count_events(const gia_model *m, double t);
 
-/* Residual of the total over [0, t]: |sum Q(t) - sum Q(0)| across the
- * components that integrate. Reported, never silently corrected.
+/* ---- carriers ----
+ *
+ * A component holds a quantity OF something. Summing a store of grain and a
+ * bank balance into one total is not a conservation check, it is a category
+ * error -- and it is what this engine did until carriers existed: goods and
+ * money went into the same running total, so a violation in one could be
+ * cancelled by a movement in the other and the residual would report zero.
+ *
+ * Carriers are named per component. A model that names none has a single
+ * implicit carrier "" and behaves exactly as it did before.
+ *
+ * A pathway may not cross carriers. Grain does not turn into money by flowing
+ * along an edge; it is exchanged for money, and that coupling is what Odum's
+ * transaction diamond (1972 SecXV) is for. A cross-carrier edge whose law is
+ * not `exchange` is therefore rejected at load rather than quietly moving
+ * quantity between incommensurable stocks. */
+
+/* Number of distinct carriers in the model; at least 1. */
+int gia_carrier_count(const gia_model *m);
+
+/* Name of carrier `idx`; "" for the implicit single carrier. */
+const char *gia_carrier_name(const gia_model *m, int idx);
+
+/* Index of the carrier a component holds. */
+int gia_node_carrier(const gia_model *m, int node_idx);
+
+/* Conservation residual for ONE carrier over [0, t]. */
+double gia_conservation_residual_for(const gia_model *m, double t, int carrier);
+
+/* Worst residual across all carriers over [0, t]. Reported, never silently
+ * corrected.
+ *
+ * This is deliberately a maximum and not a sum: a sum lets a surplus in one
+ * carrier mask a deficit in another, which is precisely the defect carriers
+ * exist to remove.
  *
  * It is a conservation *check* only for a closed system. Odum holds a source at
  * its value rather than integrating it (1972 SecII), so a pathway leaving a

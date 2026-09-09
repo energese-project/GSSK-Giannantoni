@@ -250,12 +250,25 @@ topology and disagree about the algebra, which is the point.
 
 **Still absent.**
 
-1. **Carriers as a first-class concept.** `exchange` works because a currency
-   stock is simply another component, which is how Odum draws it — but there is
-   no per-component carrier tagging, so nothing checks that goods and money are
-   conserved separately. What the kernel has and this does not: leg discovery
-   from the diamond's shape, gating on the money stock, and a price resolved
-   from a node rather than fixed (ADR 0001).
+1. **Leg discovery, money-stock gating, and a price resolved from a node**
+   (ADR 0001). Carriers now exist: a component declares what it holds,
+   conservation is checked per carrier, a pathway may not cross carriers, and
+   an `exchange` must couple two different ones with both currency legs on the
+   counter-carrier. What remains is the rest of the kernel's diamond.
+
+   Leg discovery is deliberately **not** inferred. Given a goods flow a -> b and
+   a money carrier, which money component is the payer and which the receiver
+   is not recoverable from carrier identity alone — it needs the ownership the
+   diamond's shape encodes. Guessing would be inventing semantics Odum's figure
+   does not show, so the legs stay named and are validated by carrier instead.
+
+   The change is worth stating plainly, because the old behaviour was not
+   merely incomplete. `gia_conservation_residual` summed every integrating
+   component into one total, so a model losing 2 units of grain while gaining
+   2 units of money reported a residual of **exactly zero**. A surplus in one
+   carrier cancelled a deficit in another. The residual is now the worst
+   carrier rather than the sum, and a regression test pins that the old summed
+   figure would have hidden it.
 3. **Forcing functions** (ADR 0006).
 4. **Composites and archetypes.** `producer`, `consumer`, `misc_box` and
    `system_frame` are refused with a message pointing at ADR 0010, rather than
