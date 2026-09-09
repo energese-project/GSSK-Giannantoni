@@ -488,6 +488,7 @@ The published `gssk.schema.json` validates the **pre-expansion** surface — the
 ---
 
 *References:*
+- *Odum, H.T. (1972). An Energy Circuit Language for Ecological and Social Systems: Its Physical Basis. In Patten, B.C. (ed.), Systems Analysis and Simulation in Ecology, Vol. II, ch. 4. Academic Press.* — the earliest full statement of the language, defining each module mathematically. Note §XIV: the Production and Regeneration (P-R) module, Odum's green plant, is defined as a **combination** of the cycling receptor (§XIII, `loop_limited`) and self-maintaining (§XII) modules. GSSK's `producer` is the self-maintaining module; P-R itself is not implemented. Module-by-module status is in [odum_1972_conformance.md](odum_1972_conformance.md); the mechanism gap is [ADR 0010](adr/0010-composites-nest-hierarchical-scale-by-path.md).
 - *Odum, H.T. & Odum, E.C. (2000). Modeling for All Scales. Academic Press.*
 - *Giannantoni, C. (2006). Mathematics for Generative Processes. Journal of Mathematical Analysis and Applications.*
 - *Giannantoni, C. (2023). Generativity of Self-Organizing Processes. (Preprint.)*

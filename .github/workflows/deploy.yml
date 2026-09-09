@@ -177,6 +177,16 @@ jobs:
       - name: GNP-loop conservation tests (Phase D.1)
         run: make test-gnp-loop
 
+      # The generative engine is a second binary with no golden CSV behind it,
+      # so nothing else in this workflow would notice it breaking. The suite
+      # pins the claims rather than the digits: drift vanishes exactly when phi
+      # is affine and matches the hand-derived closed form when it is not, the
+      # half-order derivative returns two cancelling branches, the harmony
+      # matrix reconstructs from its single reference couple and balances by
+      # row, and the ordinal step raises ordinality to maximum and then stops.
+      - name: Giannantoni generative engine tests
+        run: make test-giannantoni
+
   # ────────────────────────────────────────────────────────────
   # Quality gate — all Linux-only checks as serial steps.
   # One checkout, one apt-get, one runner.
@@ -348,8 +358,9 @@ jobs:
   # at which point the same push publishes it. This is the same gap the WASM
   # job was added to close, in a different corner.
   #
-  # It deliberately does NOT build WASM: the point is the docs theme and the
-  # demo's static references, and gssk.js/gssk.wasm are covered by the wasm job.
+  # It deliberately does NOT build WASM: the point is that the docs theme
+  # builds and its design tokens inline, and gssk.js/gssk.wasm are covered by
+  # the wasm job.
   # ────────────────────────────────────────────────────────────
   docs:
     name: Docs theme & demo assets
@@ -383,44 +394,6 @@ jobs:
           fi
           echo "Design tokens are inlined in the built docs CSS."
 
-      # Every relative asset web/index.html asks for must either sit in web/ or
-      # be one of the two build outputs the deploy job drops in beside it. This
-      # catches a forgotten `cp` at PR time; the deploy job asserts the same
-      # property again against the assembled artifact.
-      - name: Demo's local asset references must resolve
-        run: |
-          python3 - <<'PY'
-          import os, re, sys
-          BUILT = {'gssk.js', 'gssk.wasm'}   # dropped in beside the demo at deploy time
-          html = open('web/index.html').read()
-          refs = [r for r in re.findall(r'(?:href|src)="([^"#?:]+)"', html)
-                  if not r.startswith(('http', '//', 'data:'))
-                  and not r.endswith('/')]   # `../` is a link to the docs, not an asset
-          missing = [r for r in refs
-                     if os.path.basename(r) not in BUILT
-                     and not os.path.exists(os.path.join('web', r))]
-          if missing:
-              print(f'::error::web/index.html references files that are not in web/ '
-                    f'and are not build outputs: {missing}')
-              sys.exit(1)
-          print(f'All {len(refs)} local demo asset references resolve.')
-          PY
-
-  # ────────────────────────────────────────────────────────────
-  # Swift package (macOS) — separate job, different OS.
-  # ────────────────────────────────────────────────────────────
-  swift:
-    name: Swift (6.0, macOS)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build Swift package
-        run: make swift-build
-
-      - name: Run Swift tests
-        run: make swift-test
-
   # ────────────────────────────────────────────────────────────
   # Pages deploy — main only.
   #
@@ -431,7 +404,7 @@ jobs:
   # lives in the separate `release` job below.
   # ────────────────────────────────────────────────────────────
   deploy:
-    needs: [ build-native, quality, swift, wasm, docs ]
+    needs: [ build-native, quality, wasm, docs ]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
@@ -526,7 +499,7 @@ jobs:
   # produced a release while the release steps lived inside that job.
   # ────────────────────────────────────────────────────────────
   release:
-    needs: [ build-native, quality, swift, wasm ]
+    needs: [ build-native, quality, wasm ]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     steps:

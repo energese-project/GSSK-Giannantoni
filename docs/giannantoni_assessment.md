@@ -1,5 +1,12 @@
 # Assessment: Giannantoni's Incipient Calculus & GSSK Compatibility
 
+> **See also** [odum_1972_conformance.md](odum_1972_conformance.md), which asks
+> the converse question this document does not: not "can GSSK support IDC" but
+> "do Odum's module definitions and Giannantoni's framework support each other".
+> The two directions have different answers — Odum's mathematics feeds IDC with
+> tabulated limits, while MOP as published has no representation for Odum's
+> typed primitives.
+
 ## Summary verdict
 
 **Partial compatibility — with important caveats on the efficiency claims.**
@@ -391,11 +398,66 @@ implementation task; for now Padé with per-step error monitoring is the fallbac
 - Full Giannantoni emergy algebra (max co-product rule vs. sum) is deferred
 - **Complexity**: medium. One additional `double*` array, second pass over edges.
 
-### Phase 3 — Fractional/ordinal generativity (future)
-- Implement the incipient derivative of fractional order for "binary-duet" solutions
-- Map Odum network topology to Relational Space coordinates
-- Implement Harmony Relationship detection and reduction
-- **Complexity**: high. Requires quaternion arithmetic, symbolic preprocessing.
+### Phase 3 — Fractional/ordinal generativity ◐ PARTIALLY IMPLEMENTED
+
+Landed as a **separate engine**, not as an extension of the kernel:
+`include/engine.h`, `src/engine.c`, `src/validation.c`, `src/sim_main.c`,
+built as `bin/giannantoni_sim` and tested by `make test-giannantoni`.
+
+The separation is deliberate. §5.4 above notes that the mapping from an Odum
+network to Relational Space coordinates is not automatic; the sharper obstacle
+is that the kernel carries state as a flat `double *` of scalar storages while
+Relational Space coordinates are complex. Threading the latter through an API
+shaped for the former buys nothing, so the two engines share the build and
+cJSON and nothing else — `src/engine.c` does not include `gssk.h`.
+
+Done:
+
+1. **Persistence of form, and the drift, as a computation rather than a claim.**
+   `phi(t)` is carried as a polynomial, so every `phi^(n)` is exact. The
+   incipient amplitude is `(phi')^n`; the traditional one is the complete Bell
+   polynomial `B_n(phi', ..., phi^(n))` via the standard recursion. The
+   difference is the drift `psi_n`, reported per node and per step in the CSV.
+   It is identically zero exactly when `phi` is affine — which is the
+   constant-coefficient agreement §1 predicts — and the tests pin it against
+   hand-derived closed forms (`psi_2 = a`, `psi_3 = 3 a^2 t` for
+   `phi = a t^2 / 2`).
+
+2. **Binary / duet / n-et.** `(d~/d~t)^(p/q) e^phi` returns all `q` branches as
+   one state. For `p/q = 1/2` and `phi = alpha t` this is the
+   `+/- sqrt(alpha) e^(alpha t)` duet of the 2006 paper, and the branches sum
+   to zero.
+
+3. **Harmony Relationships.** The N x N matrix is generated from a single
+   reference couple `alpha_12` by the `(N-1)` ordinal roots of unity. Two
+   invariants are checked rather than asserted: every entry reconstructs from
+   `alpha_12` alone (the N x N -> 1 reduction), and every row sums to zero
+   because the roots cancel (global balance; N >= 3, since at N = 2 there is
+   one root and no interior to balance against).
+
+4. **The generative step, gated on ordinality.** Ordinality is the fraction of
+   components lying on a closed pathway. Below maximum, the engine spawns a
+   regulator and closes an open pathway; the test then reloads the evolved
+   graph and confirms ordinality actually reached 1, and that a further step is
+   a fixed point. Mode is decided structurally, by `cJSON_Compare` of the seed
+   against the output, not by trusting the input flag.
+
+Not done, and worth being explicit about:
+
+- **The non-commutative algebra.** §5.4's `{r}_s = e^(sigma i (+) phi j (+) theta k)`
+  with spinor products is *not* implemented. The harmony matrix here is over
+  the complex numbers. That is enough for the roots-of-unity reduction and for
+  both invariants above, but it is not Giannantoni's full ordinal algebra, and
+  the quaternion arithmetic named in the original estimate remains future work.
+- **Relational Space coordinates from arbitrary topology.** `alpha_12` is read
+  off the seed graph — modulus from the first relationship's weight, argument
+  from the generativity factor of the component it feeds. That is a defensible
+  reading, not a derivation, and §5.4's point about needing domain knowledge to
+  choose the reference couple still stands.
+- **No bridge to the kernel's solver.** Running one model through both engines
+  and diffing the trajectories would turn the drift critique into a measurement
+  against a real integrator rather than against a closed form. Nothing in the
+  current design prevents it; it simply is not built.
 
 ---
 

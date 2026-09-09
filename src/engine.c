@@ -1,0 +1,1794 @@
+/* engine.c — Giannantoni Generative Computational Framework.
+ *
+ * See include/engine.h for the theory this implements and for why this file
+ * does not include "gssk.h".
+ *
+ * There is no main() here. The CLI lives in src/sim_main.c so that the
+ * engine can be linked into tests without dragging an entry point along.
+ */
+
+#include "engine.h"
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+/* Storage levels are put into exponential form via ln, so they need a floor. */
+#define GIA_EPS 1e-12
+
+/* ================================================================== *
+ * 1. Exponential form
+ * ================================================================== */
+
+double gia_phi_eval(const gia_phi *p, double t) {
+    double acc = 0.0, tp = 1.0;
+    int k;
+    if (!p) return 0.0;
+    for (k = 0; k <= p->degree; k++) {
+        acc += p->c[k] * tp;
+        tp  *= t;
+    }
+    return acc;
+}
+
+double gia_phi_deriv(const gia_phi *p, int order, double t) {
+    double acc = 0.0;
+    int k;
+    if (!p || order < 0) return 0.0;
+    if (order == 0) return gia_phi_eval(p, t);
+
+    /* d^n/dt^n (c_k t^k) = c_k * k!/(k-n)! * t^(k-n), zero for k < n. */
+    for (k = order; k <= p->degree; k++) {
+        double falling = 1.0;
+        int    j;
+        for (j = 0; j < order; j++) falling *= (double)(k - j);
+        acc += p->c[k] * falling * pow(t, (double)(k - order));
+    }
+    return acc;
+}
+
+/* ================================================================== *
+ * 2. Incipient vs. traditional, and the drift
+ * ================================================================== */
+
+double gia_idc_amplitude(const gia_phi *p, int n, double t) {
+    double phi_p;
+    if (n < 0) return 0.0;
+    if (n == 0) return 1.0;
+    /* Persistence of form: the amplitude is a bare power of phi', with no
+     * contribution from any higher derivative. That absence is the point. */
+    phi_p = gia_phi_deriv(p, 1, t);
+    return pow(phi_p, (double)n);
+}
+
+double gia_tdc_amplitude(const gia_phi *p, int n, double t) {
+    /* Complete Bell polynomial B_n(x_1, ..., x_n) with x_j = phi^(j)(t),
+     * via the standard recursion
+     *
+     *     B_0 = 1,   B_{m+1} = sum_{k=0}^{m} C(m,k) B_{m-k} x_{k+1}
+     *
+     * which is exactly Faa di Bruno for the outer function exp. */
+    double x[GIA_MAX_ORDER + 1];
+    double b[GIA_MAX_ORDER + 1];
+    double binom[GIA_MAX_ORDER + 1][GIA_MAX_ORDER + 1];
+    int    i, j, m, k;
+
+    if (n < 0) return 0.0;
+    if (n == 0) return 1.0;
+    if (n > GIA_MAX_ORDER) n = GIA_MAX_ORDER;
+
+    for (i = 0; i <= GIA_MAX_ORDER; i++) {
+        for (j = 0; j <= GIA_MAX_ORDER; j++) binom[i][j] = 0.0;
+        binom[i][0] = 1.0;
+        for (j = 1; j <= i; j++)
+            binom[i][j] = binom[i - 1][j - 1] + binom[i - 1][j];
+    }
+
+    for (j = 1; j <= n; j++) x[j] = gia_phi_deriv(p, j, t);
+
+    b[0] = 1.0;
+    for (m = 0; m < n; m++) {
+        double acc = 0.0;
+        for (k = 0; k <= m; k++) acc += binom[m][k] * b[m - k] * x[k + 1];
+        b[m + 1] = acc;
+    }
+    return b[n];
+}
+
+double gia_idc_derivative(const gia_phi *p, int n, double t) {
+    return gia_idc_amplitude(p, n, t) * exp(gia_phi_eval(p, t));
+}
+
+double gia_tdc_derivative(const gia_phi *p, int n, double t) {
+    return gia_tdc_amplitude(p, n, t) * exp(gia_phi_eval(p, t));
+}
+
+double gia_drift(const gia_phi *p, int n, double t) {
+    return gia_tdc_amplitude(p, n, t) - gia_idc_amplitude(p, n, t);
+}
+
+bool gia_drift_free(const gia_phi *p) {
+    int k;
+    if (!p) return true;
+    /* An affine phi kills every x_j for j >= 2, collapsing the Bell recursion
+     * to B_n = (phi')^n. The two calculi then agree identically, at all
+     * orders and all t -- no evaluation required to know it. */
+    for (k = 2; k <= p->degree; k++)
+        if (p->c[k] != 0.0) return false;
+    return true;
+}
+
+/* ================================================================== *
+ * 3. Binary / duet / n-et
+ * ================================================================== */
+
+gia_net gia_incipient_fractional(const gia_phi *p, int num, int den, double t) {
+    gia_net out;
+    double  phi_p, mag, arg, r, q, e;
+    int     k;
+
+    memset(&out, 0, sizeof(out));
+    if (den < 1)                den = 1;
+    if (den > GIA_MAX_BRANCHES) den = GIA_MAX_BRANCHES;
+    out.count = den;
+
+    phi_p = gia_phi_deriv(p, 1, t);
+    e     = exp(gia_phi_eval(p, t));
+    q     = (double)num / (double)den;
+
+    /* (phi^o)^(num/den) taken over every branch of the den-th root. */
+    mag = fabs(phi_p);
+    arg = (phi_p < 0.0) ? M_PI : 0.0;
+    r   = pow(mag, q);
+
+    for (k = 0; k < den; k++) {
+        double theta = (arg + 2.0 * M_PI * (double)k) * q;
+        out.branch[k] = r * (cos(theta) + I * sin(theta)) * e;
+    }
+    return out;
+}
+
+bool gia_net_is_binary(const gia_net *n) {
+    return n && n->count == 2;
+}
+
+double complex gia_net_sum(const gia_net *n) {
+    double complex acc = 0.0;
+    int k;
+    if (!n) return 0.0;
+    for (k = 0; k < n->count; k++) acc += n->branch[k];
+    return acc;
+}
+
+/* ================================================================== *
+ * 4. MOP Harmony Relationships
+ * ================================================================== */
+
+double complex gia_ordinal_root(int roots, int m) {
+    double theta;
+    if (roots < 1) return 1.0;
+    theta = 2.0 * M_PI * (double)m / (double)roots;
+    return cos(theta) + I * sin(theta);
+}
+
+double complex gia_harmony_reconstruct(int n, double complex alpha_ref,
+                                       int i, int j) {
+    int m;
+    if (n < 2 || i < 0 || j < 0 || i >= n || j >= n) return 0.0;
+    if (i == j) return 0.0;  /* no self-relation on the diagonal */
+    /* Within row i the partners j != i are indexed in ascending order, so the
+     * partner's ordinal position is j, less one if it sits past the diagonal. */
+    m = (j < i) ? j : j - 1;
+    return alpha_ref * gia_ordinal_root(n - 1, m);
+}
+
+bool gia_harmony_init(gia_harmony *h, int n, double complex alpha_ref) {
+    int i, j;
+    if (!h || n < 2) return false;
+    h->n         = n;
+    h->alpha_ref = alpha_ref;
+    h->a         = (double complex *)calloc((size_t)n * (size_t)n,
+                                            sizeof(double complex));
+    if (!h->a) { h->n = 0; return false; }
+
+    for (i = 0; i < n; i++)
+        for (j = 0; j < n; j++)
+            h->a[(size_t)i * (size_t)n + (size_t)j] =
+                gia_harmony_reconstruct(n, alpha_ref, i, j);
+    return true;
+}
+
+void gia_harmony_free(gia_harmony *h) {
+    if (!h) return;
+    free(h->a);
+    h->a = NULL;
+    h->n = 0;
+}
+
+double complex gia_harmony_at(const gia_harmony *h, int i, int j) {
+    if (!h || !h->a || i < 0 || j < 0 || i >= h->n || j >= h->n) return 0.0;
+    return h->a[(size_t)i * (size_t)h->n + (size_t)j];
+}
+
+double gia_harmony_row_residual(const gia_harmony *h) {
+    double worst = 0.0;
+    int    i, j;
+    if (!h || !h->a) return 0.0;
+    for (i = 0; i < h->n; i++) {
+        double complex s = 0.0;
+        double         mod;
+        for (j = 0; j < h->n; j++) s += gia_harmony_at(h, i, j);
+        mod = cabs(s);
+        if (mod > worst) worst = mod;
+    }
+    return worst;
+}
+
+double gia_harmony_reduction_residual(const gia_harmony *h) {
+    double worst = 0.0;
+    int    i, j;
+    if (!h || !h->a) return 0.0;
+    for (i = 0; i < h->n; i++) {
+        for (j = 0; j < h->n; j++) {
+            double d = cabs(gia_harmony_at(h, i, j) -
+                            gia_harmony_reconstruct(h->n, h->alpha_ref, i, j));
+            if (d > worst) worst = d;
+        }
+    }
+    return worst;
+}
+
+/* ================================================================== *
+ * 4b. The network: flow matrix and matrix exponential
+ * ================================================================== */
+
+const char *gia_logic_name(gia_logic l) {
+    switch (l) {
+        case GIA_LOGIC_LINEAR:      return "linear";
+        case GIA_LOGIC_INTERACTION: return "interaction";
+        case GIA_LOGIC_REVERSIBLE:  return "reversible";
+        case GIA_LOGIC_CONSTANT:    return "constant";
+        case GIA_LOGIC_LIMIT:       return "limit";
+        default:                    return "unknown";
+    }
+}
+
+bool gia_matrix_init(gia_matrix *m, int n) {
+    if (!m || n <= 0) return false;
+    m->n = n;
+    m->a = (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    if (!m->a) { m->n = 0; return false; }
+    return true;
+}
+
+void gia_matrix_free(gia_matrix *m) {
+    if (!m) return;
+    free(m->a);
+    m->a = NULL;
+    m->n = 0;
+}
+
+double gia_matrix_at(const gia_matrix *m, int i, int j) {
+    if (!m || !m->a || i < 0 || j < 0 || i >= m->n || j >= m->n) return 0.0;
+    return m->a[(size_t)i * (size_t)m->n + (size_t)j];
+}
+
+static void mat_mul(const double *x, const double *y, double *out, int n) {
+    int i, j, k;
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < n; j++) {
+            double acc = 0.0;
+            for (k = 0; k < n; k++)
+                acc += x[(size_t)i * (size_t)n + (size_t)k] *
+                       y[(size_t)k * (size_t)n + (size_t)j];
+            out[(size_t)i * (size_t)n + (size_t)j] = acc;
+        }
+    }
+}
+
+/* Solve D X = N for X by Gauss-Jordan with partial pivoting. */
+static bool mat_solve(double *D, double *N, double *X, int n) {
+    int i, j, k, piv;
+    double *a = (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    double *b = (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    if (!a || !b) { free(a); free(b); return false; }
+    memcpy(a, D, (size_t)n * (size_t)n * sizeof(double));
+    memcpy(b, N, (size_t)n * (size_t)n * sizeof(double));
+
+    for (k = 0; k < n; k++) {
+        double best = fabs(a[(size_t)k * (size_t)n + (size_t)k]), p;
+        piv = k;
+        for (i = k + 1; i < n; i++) {
+            p = fabs(a[(size_t)i * (size_t)n + (size_t)k]);
+            if (p > best) { best = p; piv = i; }
+        }
+        if (best < 1e-300) { free(a); free(b); return false; }
+        if (piv != k) {
+            for (j = 0; j < n; j++) {
+                double t;
+                t = a[(size_t)k*(size_t)n+(size_t)j];
+                a[(size_t)k*(size_t)n+(size_t)j] = a[(size_t)piv*(size_t)n+(size_t)j];
+                a[(size_t)piv*(size_t)n+(size_t)j] = t;
+                t = b[(size_t)k*(size_t)n+(size_t)j];
+                b[(size_t)k*(size_t)n+(size_t)j] = b[(size_t)piv*(size_t)n+(size_t)j];
+                b[(size_t)piv*(size_t)n+(size_t)j] = t;
+            }
+        }
+        {
+            double d = a[(size_t)k*(size_t)n+(size_t)k];
+            for (j = 0; j < n; j++) {
+                a[(size_t)k*(size_t)n+(size_t)j] /= d;
+                b[(size_t)k*(size_t)n+(size_t)j] /= d;
+            }
+        }
+        for (i = 0; i < n; i++) {
+            double f;
+            if (i == k) continue;
+            f = a[(size_t)i*(size_t)n+(size_t)k];
+            if (f == 0.0) continue;
+            for (j = 0; j < n; j++) {
+                a[(size_t)i*(size_t)n+(size_t)j] -= f * a[(size_t)k*(size_t)n+(size_t)j];
+                b[(size_t)i*(size_t)n+(size_t)j] -= f * b[(size_t)k*(size_t)n+(size_t)j];
+            }
+        }
+    }
+    memcpy(X, b, (size_t)n * (size_t)n * sizeof(double));
+    free(a); free(b);
+    return true;
+}
+
+/* exp(M) by Pade (3,3) with scaling and squaring:
+ *     N = 120I + 60X + 12X^2 + X^3,  D = 120I - 60X + 12X^2 - X^3,  exp = N/D
+ * The same order the kernel's IDC path uses, so the two agree on the linear
+ * core rather than drifting apart on solver choice. */
+bool gia_matrix_exp(const gia_matrix *M, gia_matrix *B) {
+    int    n, i, j, sq = 0, s;
+    size_t sz;
+    double norm = 0.0, scale = 1.0;
+    double *X = NULL, *X2 = NULL, *X3 = NULL, *Nm = NULL, *Dm = NULL, *tmp = NULL;
+    bool ok = false;
+
+    if (!M || !M->a || !B) return false;
+    n  = M->n;
+    sz = (size_t)n * (size_t)n * sizeof(double);
+    if (!gia_matrix_init(B, n)) return false;
+
+    /* Scale so that ||X||_inf is small, then square back up.
+     *
+     * The threshold matters more than it looks. Pade (3,3) truncates at
+     * O(||X||^7), so scaling only to 1/2 leaves an error near 1e-7 -- which is
+     * fine for a stepped solver taking a small dt, and useless here, where the
+     * whole claim is that the incipient solution is exact and closed-form. At
+     * 2^-6 the truncation term falls below double precision, and the cost is a
+     * few extra squarings of a small matrix. */
+    for (i = 0; i < n; i++) {
+        double row = 0.0;
+        for (j = 0; j < n; j++) row += fabs(M->a[(size_t)i*(size_t)n+(size_t)j]);
+        if (row > norm) norm = row;
+    }
+    while (norm * scale > 0.015625) { scale *= 0.5; sq++; }
+
+    /* calloc, not malloc: the Pade numerator and denominator are filled by a
+     * loop over a runtime n, which GCC cannot prove covers the whole buffer --
+     * it reports 'may be used uninitialized' under -Werror where clang does
+     * not. Zeroing costs nothing here and the buffers are small. */
+    X  = (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    X2 = (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    X3 = (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    Nm = (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    Dm = (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    tmp= (double *)calloc((size_t)n * (size_t)n, sizeof(double));
+    if (!X || !X2 || !X3 || !Nm || !Dm || !tmp) goto done;
+
+    for (i = 0; i < n * n; i++) X[i] = M->a[i] * scale;
+    mat_mul(X, X, X2, n);
+    mat_mul(X2, X, X3, n);
+
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < n; j++) {
+            size_t k = (size_t)i * (size_t)n + (size_t)j;
+            double id = (i == j) ? 120.0 : 0.0;
+            Nm[k] = id + 60.0 * X[k] + 12.0 * X2[k] + X3[k];
+            Dm[k] = id - 60.0 * X[k] + 12.0 * X2[k] - X3[k];
+        }
+    }
+    if (!mat_solve(Dm, Nm, B->a, n)) goto done;
+
+    for (s = 0; s < sq; s++) {
+        mat_mul(B->a, B->a, tmp, n);
+        memcpy(B->a, tmp, sz);
+    }
+    ok = true;
+
+done:
+    free(X); free(X2); free(X3); free(Nm); free(Dm); free(tmp);
+    if (!ok) gia_matrix_free(B);
+    return ok;
+}
+
+/* ---- the flow matrix, assembled from Odum's pathway laws ---- */
+
+/* True when a threshold pathway is open at the operating point. The clamp on
+ * `subtract` is the same kind of boundary and is treated the same way. */
+static bool edge_is_open(const gia_edge *e, const double *q) {
+    double qa;
+    if (e->from < 0) return false;
+    qa = q ? q[e->from] : 0.0;
+    if (e->logic == GIA_LOGIC_THRESHOLD) return qa > e->threshold;
+    if (e->logic == GIA_LOGIC_SUBTRACT) {
+        double qc = (e->control >= 0 && q) ? q[e->control] : 0.0;
+        return (qa - qc) > 0.0;
+    }
+    return true;
+}
+
+bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out) {
+    int i, n, dim;
+    if (!m || !out || m->n_nodes <= 0) return false;
+    n   = m->n_nodes;
+    dim = n + 1;                      /* augmented: column n carries b */
+    if (!gia_matrix_init(out, dim)) return false;
+
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        int    a = e->from, b = e->to;
+        double g;
+        bool   drain_a, fill_b;
+
+        if (a < 0 || b < 0) continue;
+
+        /* Odum SecV: a heat sink absorbs and is never depleted, so a pathway
+         * leaving one contributes no drain term. A held component (source or
+         * constant, SecII) is likewise never drained. */
+        drain_a = m->nodes[a].integrates && m->nodes[a].kind != GIA_NODE_SINK;
+        fill_b  = m->nodes[b].integrates;
+
+        switch (e->logic) {
+            case GIA_LOGIC_CONSTANT:
+                /* F = k, independent of state: an affine term, so it lands in
+                 * the augmented column rather than in a conductance. */
+                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)n] -= e->weight;
+                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)n] += e->weight;
+                continue;
+
+            case GIA_LOGIC_THRESHOLD:
+                /* Odum SecXI: a fixed rate while open, nothing while shut.
+                 * Also affine. The discontinuity is handled by the event loop
+                 * in gia_network_state, not here. */
+                if (!edge_is_open(e, q)) continue;
+                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)n] -= e->weight;
+                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)n] += e->weight;
+                continue;
+
+            case GIA_LOGIC_GAIN: {
+                /* Odum SecIX: F = k Q_control. The control sets the rate; the
+                 * origin supplies the power but does not scale the flow, so the
+                 * entry sits in the control's column. */
+                int c = (e->control >= 0) ? e->control : b;
+                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)c] -= e->weight;
+                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)c] += e->weight;
+                continue;
+            }
+
+            case GIA_LOGIC_SUBTRACT: {
+                /* ADR 0008: F = max(0, k (Q_a - Q_c)). While the clamp is off
+                 * the law is linear in two quantities, so it touches four
+                 * entries the way `reversible` does -- but it reads a CONTROL
+                 * rather than the target, and the control is never consumed. */
+                int c = (e->control >= 0) ? e->control : b;
+                if (!edge_is_open(e, q)) continue;
+                if (drain_a) {
+                    out->a[(size_t)a*(size_t)dim+(size_t)a] -= e->weight;
+                    out->a[(size_t)a*(size_t)dim+(size_t)c] += e->weight;
+                }
+                if (fill_b) {
+                    out->a[(size_t)b*(size_t)dim+(size_t)a] += e->weight;
+                    out->a[(size_t)b*(size_t)dim+(size_t)c] -= e->weight;
+                }
+                continue;
+            }
+
+            case GIA_LOGIC_RATIO: {
+                /* ADR 0002: F = k Q_a / max(Q_c, eps). Linear in Q_a with a
+                 * conductance set by the denominator, so the floor is what
+                 * keeps it from diverging as the control goes to zero. */
+                int    c  = (e->control >= 0) ? e->control : b;
+                double qc = q ? q[c] : 1.0;
+                if (qc < GIA_EPS) qc = GIA_EPS;
+                g = e->weight / qc;
+                break;
+            }
+
+            case GIA_LOGIC_EXCHANGE: {
+                /* Odum 1972 SecXV, Eq (103): J_energy = P J_currency, and
+                 * "flows of currency move opposite in direction to the flow of
+                 * potential energy". So the goods move origin -> target at
+                 * F = k Q_origin, and F/P of currency moves the other way,
+                 * between the two currency legs.
+                 *
+                 * No second quantity per component is needed: the currency
+                 * stock is simply another component, which is how Odum draws
+                 * it. What is NOT modelled here, and is in the kernel: leg
+                 * discovery from the diamond's shape, gating on the money
+                 * stock, and a price resolved from a node rather than fixed
+                 * (ADR 0001). Price is constant and the legs are named. */
+                double k = e->weight;
+                double P = (fabs(e->price) > GIA_EPS) ? e->price : 1.0;
+                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)a] -= k;
+                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)a] += k;
+                if (e->cur_from >= 0 && m->nodes[e->cur_from].integrates)
+                    out->a[(size_t)e->cur_from*(size_t)dim+(size_t)a] -= k / P;
+                if (e->cur_to >= 0 && m->nodes[e->cur_to].integrates)
+                    out->a[(size_t)e->cur_to*(size_t)dim+(size_t)a] += k / P;
+                continue;
+            }
+
+            case GIA_LOGIC_LINEAR:
+                g = e->weight;
+                break;
+
+            case GIA_LOGIC_INTERACTION: {
+                /* Odum SecX: F = k Q_a Q_ctl, linearised about the operating
+                 * point by folding the control into the conductance. This is
+                 * where A stops being constant, and so where psi appears. */
+                double qc = (e->control >= 0 && q) ? q[e->control] : 1.0;
+                g = e->weight * qc;
+                break;
+            }
+
+            case GIA_LOGIC_LIMIT: {
+                double qa = q ? q[a] : 0.0;
+                double C  = (e->capacity > GIA_EPS) ? e->capacity : 1.0;
+                g = e->weight * C / (C + qa);
+                break;
+            }
+
+            case GIA_LOGIC_REVERSIBLE:
+                g = e->weight;
+                break;
+
+            default:
+                continue;
+        }
+
+        if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)a] -= g;
+        if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)a] += g;
+
+        if (e->logic == GIA_LOGIC_REVERSIBLE) {
+            if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)b] += g;
+            if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)b] -= g;
+        }
+    }
+    return true;
+}
+
+bool gia_flow_matrix_is_constant(const gia_model *m) {
+    int i;
+    if (!m) return true;
+    for (i = 0; i < m->n_edges; i++) {
+        switch (m->edges[i].logic) {
+            case GIA_LOGIC_INTERACTION:  /* folds a control into the conductance */
+            case GIA_LOGIC_LIMIT:        /* conductance depends on the origin    */
+            case GIA_LOGIC_RATIO:        /* conductance depends on the divisor   */
+            case GIA_LOGIC_THRESHOLD:    /* regime flips at a crossing           */
+            case GIA_LOGIC_SUBTRACT:     /* clamp flips at a crossing            */
+                return false;
+            default:
+                break;
+        }
+    }
+    return true;
+}
+
+/* Does this model contain a pathway that switches on or off? Those are solved
+ * piecewise: there is no smooth alpha across a crossing, so persistence of form
+ * holds on each side and not through it. */
+static bool has_switching(const gia_model *m) {
+    int i;
+    for (i = 0; i < m->n_edges; i++)
+        if (m->edges[i].logic == GIA_LOGIC_THRESHOLD ||
+            m->edges[i].logic == GIA_LOGIC_SUBTRACT) return true;
+    return false;
+}
+
+/* One smooth advance: Q(t+h) = exp(A h) Q(t), with A frozen at `q`.
+ * Uses the augmented (n+1) form so constant and open-threshold pathways, which
+ * contribute a rate rather than a conductance, are carried exactly. */
+static bool advance(const gia_model *m, const double *q, double h, double *out) {
+    gia_matrix A, Ah, E;
+    int        i, j, n = m->n_nodes, dim = n + 1;
+    bool       ok = false;
+
+    memset(&A, 0, sizeof(A)); memset(&Ah, 0, sizeof(Ah)); memset(&E, 0, sizeof(E));
+
+    if (!gia_build_flow_matrix(m, q, &A)) goto done;
+    if (!gia_matrix_init(&Ah, dim))       goto done;
+    for (i = 0; i < dim * dim; i++) Ah.a[i] = A.a[i] * h;
+    if (!gia_matrix_exp(&Ah, &E))         goto done;
+
+    for (i = 0; i < n; i++) {
+        double acc = gia_matrix_at(&E, i, n);   /* phantom component, fixed at 1 */
+        for (j = 0; j < n; j++) acc += gia_matrix_at(&E, i, j) * q[j];
+        out[i] = acc;
+    }
+    ok = true;
+done:
+    gia_matrix_free(&A); gia_matrix_free(&Ah); gia_matrix_free(&E);
+    return ok;
+}
+
+/* Signed distance to a switching boundary: > 0 while the pathway is open. */
+static double boundary_gap(const gia_model *m, const gia_edge *e,
+                           const double *q) {
+    double qa, qc;
+    (void)m;
+    if (e->from < 0) return 1.0;
+    qa = q[e->from];
+    if (e->logic == GIA_LOGIC_THRESHOLD) return qa - e->threshold;
+    if (e->logic == GIA_LOGIC_SUBTRACT) {
+        qc = (e->control >= 0) ? q[e->control] : 0.0;
+        return qa - qc;
+    }
+    return 1.0;
+}
+
+/* Earliest crossing in (0, span] of any switching pathway, located by the
+ * Illinois variant of false position -- the same method the kernel uses. The
+ * regime is frozen during the search, which is what makes the bracket valid:
+ * inside one regime the trajectory is a single exponential.
+ *
+ * Returns the crossing time, or `span` if none. */
+static double locate_event(const gia_model *m, const double *q0, double span,
+                           double *work) {
+    int    i;
+    double earliest = span;
+
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        double lo, hi, glo, ghi, mid, gmid;
+        int    it, side = 0;
+
+        if (e->logic != GIA_LOGIC_THRESHOLD && e->logic != GIA_LOGIC_SUBTRACT)
+            continue;
+
+        glo = boundary_gap(m, e, q0);
+        if (!advance(m, q0, earliest, work)) continue;
+        ghi = boundary_gap(m, e, work);
+        if ((glo > 0.0) == (ghi > 0.0)) continue;   /* no sign change: no crossing */
+
+        lo = 0.0; hi = earliest;
+        for (it = 0; it < 64; it++) {
+            double denom = (ghi - glo);
+            if (fabs(denom) < 1e-300) break;
+            mid = lo - glo * (hi - lo) / denom;
+            if (!(mid > lo && mid < hi)) mid = 0.5 * (lo + hi);
+            if (!advance(m, q0, mid, work)) break;
+            gmid = boundary_gap(m, e, work);
+            if (fabs(gmid) < 1e-14 || (hi - lo) < 1e-12) { hi = mid; break; }
+            if ((gmid > 0.0) == (glo > 0.0)) {
+                lo = mid; glo = gmid;
+                if (side == -1) ghi *= 0.5;         /* Illinois: halve the stale end */
+                side = -1;
+            } else {
+                hi = mid; ghi = gmid;
+                if (side == +1) glo *= 0.5;
+                side = +1;
+            }
+        }
+        if (hi < earliest) earliest = hi;
+    }
+    return earliest;
+}
+
+#define GIA_MAX_EVENTS 64
+
+/* Walk [0, t], breaking at each located crossing. Fills `out`; when
+ * `out_events` is non-NULL it receives the number of crossings taken. */
+static bool run_to(const gia_model *m, double t, double *out, int *out_events) {
+    int     n = m->n_nodes, i, events = 0;
+    double *cur = NULL, *nxt = NULL, *work = NULL;
+    double  elapsed = 0.0;
+    bool    ok = false;
+
+    cur  = (double *)malloc((size_t)n * sizeof(double));
+    nxt  = (double *)malloc((size_t)n * sizeof(double));
+    work = (double *)malloc((size_t)n * sizeof(double));
+    if (!cur || !nxt || !work) goto done;
+
+    for (i = 0; i < n; i++) cur[i] = m->nodes[i].q0;
+
+    if (t <= 0.0) { memcpy(out, cur, (size_t)n * sizeof(double)); ok = true; goto done; }
+
+    while (elapsed < t && events <= GIA_MAX_EVENTS) {
+        double span = t - elapsed;
+        double h    = has_switching(m) ? locate_event(m, cur, span, work) : span;
+
+        if (h <= 0.0 || h > span) h = span;
+        if (!advance(m, cur, h, nxt)) goto done;
+
+        memcpy(cur, nxt, (size_t)n * sizeof(double));
+        elapsed += h;
+
+        if (h < span) {
+            /* A boundary was reached. Step fractionally past it so the regime
+             * is re-evaluated on the far side rather than re-locating the same
+             * crossing forever. */
+            double eps = (t > 0.0) ? t * 1e-9 : 1e-12;
+            if (!advance(m, cur, eps, nxt)) goto done;
+            memcpy(cur, nxt, (size_t)n * sizeof(double));
+            elapsed += eps;
+            events++;
+        }
+    }
+    memcpy(out, cur, (size_t)n * sizeof(double));
+    if (out_events) *out_events = events;
+    ok = true;
+done:
+    free(cur); free(nxt); free(work);
+    return ok;
+}
+
+int gia_count_events(const gia_model *m, double t) {
+    double *q;
+    int     events = 0;
+    if (!m || m->n_nodes <= 0) return 0;
+    q = (double *)malloc((size_t)m->n_nodes * sizeof(double));
+    if (!q) return 0;
+    (void)run_to(m, t, q, &events);
+    free(q);
+    return events;
+}
+
+bool gia_network_state(const gia_model *m, double t, double *out,
+                       double *out_drift) {
+    if (!m || !out || m->n_nodes <= 0) return false;
+    if (!run_to(m, t, out, NULL)) return false;
+
+    if (out_drift) {
+        /* Incipient: (d~/d~t)^n e^alpha = (alpha^o)^n e^alpha, alpha^o = A.
+         * For constant A, d/dt exp(At) = A exp(At) -- identical, so psi is
+         * exactly zero. Where A depends on Q it is re-evaluated at the evolved
+         * point, and the difference is the drift. */
+        if (gia_flow_matrix_is_constant(m)) {
+            *out_drift = 0.0;
+        } else {
+            gia_matrix A0, A1;
+            double    *q0;
+            double     worst = 0.0;
+            int        i, j, n = m->n_nodes;
+
+            memset(&A0, 0, sizeof(A0)); memset(&A1, 0, sizeof(A1));
+            q0 = (double *)malloc((size_t)n * sizeof(double));
+            if (q0) {
+                for (i = 0; i < n; i++) q0[i] = m->nodes[i].q0;
+                if (gia_build_flow_matrix(m, q0, &A0) &&
+                    gia_build_flow_matrix(m, out, &A1)) {
+                    for (i = 0; i < n; i++) {
+                        double di = gia_matrix_at(&A0, i, n);
+                        double dt_ = gia_matrix_at(&A1, i, n);
+                        for (j = 0; j < n; j++) {
+                            di  += gia_matrix_at(&A0, i, j) * out[j];
+                            dt_ += gia_matrix_at(&A1, i, j) * out[j];
+                        }
+                        if (fabs(dt_ - di) > worst) worst = fabs(dt_ - di);
+                    }
+                }
+                gia_matrix_free(&A0); gia_matrix_free(&A1); free(q0);
+            }
+            *out_drift = worst;
+        }
+    }
+    return true;
+}
+
+bool gia_system_is_closed(const gia_model *m) {
+    int i;
+    if (!m) return true;
+    for (i = 0; i < m->n_edges; i++) {
+        int a = m->edges[i].from;
+        if (a < 0) continue;
+        if (!m->nodes[a].integrates) return false;  /* forced across a boundary */
+    }
+    return true;
+}
+
+double gia_conservation_residual(const gia_model *m, double t) {
+    double *q, s0 = 0.0, st = 0.0;
+    int     i;
+    if (!m || m->n_nodes <= 0) return 0.0;
+    q = (double *)malloc((size_t)m->n_nodes * sizeof(double));
+    if (!q) return 0.0;
+    if (!gia_network_state(m, t, q, NULL)) { free(q); return 0.0; }
+    for (i = 0; i < m->n_nodes; i++) {
+        if (!m->nodes[i].integrates) continue;
+        s0 += m->nodes[i].q0;
+        st += q[i];
+    }
+    free(q);
+    return fabs(st - s0);
+}
+
+/* ================================================================== *
+ * 5. Model loading
+ * ================================================================== */
+
+const char *gia_node_kind_name(gia_node_kind k) {
+    switch (k) {
+        case GIA_NODE_SOURCE:       return "source";
+        case GIA_NODE_STORAGE:      return "storage";
+        case GIA_NODE_SINK:         return "sink";
+        case GIA_NODE_CONSTANT:     return "constant";
+        case GIA_NODE_INTERACTION:  return "interaction";
+        case GIA_NODE_GAIN:         return "gain";
+        case GIA_NODE_LOOP_LIMITED: return "loop_limited";
+        case GIA_NODE_SWITCH:       return "switch";
+        case GIA_NODE_EXCHANGE:     return "exchange";
+        case GIA_NODE_CONSUMER:     return "consumer";
+        default:                    return "unknown";
+    }
+}
+
+static gia_node_kind kind_of(const char *type) {
+    if (!type)                              return GIA_NODE_UNKNOWN;
+    if (!strcmp(type, "source"))            return GIA_NODE_SOURCE;
+    if (!strcmp(type, "storage"))           return GIA_NODE_STORAGE;
+    if (!strcmp(type, "store"))             return GIA_NODE_STORAGE;
+    if (!strcmp(type, "sink"))              return GIA_NODE_SINK;
+    if (!strcmp(type, "constant"))          return GIA_NODE_CONSTANT;
+    if (!strcmp(type, "interaction"))       return GIA_NODE_INTERACTION;
+    if (!strcmp(type, "gain"))              return GIA_NODE_GAIN;
+    if (!strcmp(type, "loop_limited"))      return GIA_NODE_LOOP_LIMITED;
+    if (!strcmp(type, "switch"))            return GIA_NODE_SWITCH;
+    if (!strcmp(type, "exchange"))          return GIA_NODE_EXCHANGE;
+    return GIA_NODE_UNKNOWN;
+}
+
+/* Types this engine deliberately refuses rather than accepts as a label.
+ *
+ * `switch` (Odum 1972 SecXI) needs event location: the flow is discontinuous, so
+ * there is no smooth alpha across a crossing and the incipient form holds only
+ * piecewise. `exchange` (SecXV) needs two carriers coupled by price, and this
+ * engine carries one quantity per component.
+ *
+ * Accepting either and quietly giving it storage semantics would produce the
+ * exact defect this engine was criticised for: a vocabulary that looks
+ * meaningful and does nothing. See docs/odum_1972_conformance.md. */
+static bool kind_is_refused(const char *type, const char **why) {
+    if (!type) return false;
+    if (!strcmp(type, "producer")  || !strcmp(type, "consumer") ||
+        !strcmp(type, "misc_box")  || !strcmp(type, "system_frame")) {
+        *why = "composite types are not expanded here (see ADR 0010)";
+        return true;
+    }
+    return false;
+}
+
+static double num_field(const cJSON *obj, const char *key, double fallback) {
+    const cJSON *it = cJSON_GetObjectItemCaseSensitive(obj, key);
+    return cJSON_IsNumber(it) ? it->valuedouble : fallback;
+}
+
+static const char *str_field(const cJSON *obj, const char *key,
+                             const char *fallback) {
+    const cJSON *it = cJSON_GetObjectItemCaseSensitive(obj, key);
+    return (cJSON_IsString(it) && it->valuestring) ? it->valuestring : fallback;
+}
+
+/* Put a node into exponential form f(t) = e^phi(t).
+ *
+ * The assignment is not arbitrary, and the degree of phi is the whole of it:
+ *
+ *   affine phi (degree <= 1)  -- constant-coefficient process. IDC and TDC
+ *       agree identically, at every order. Sources, storages and consumers
+ *       land here: a steady inflow, an exponential store and a metabolic
+ *       drain are all linear in their own rate.
+ *
+ *   quadratic phi (degree 2)  -- genuinely variable-coefficient. The Bell
+ *       recursion picks up phi'' and the traditional derivative drifts away
+ *       from the incipient one. Interactions and emergent regulators land
+ *       here, which is the substantive claim: in an Odum graph the drift is
+ *       not spread evenly, it is concentrated exactly on the nodes that
+ *       transform rather than store, and those are the generative ones.
+ */
+static void phi_for_node(gia_node *nd, const cJSON *jn) {
+    memset(&nd->phi, 0, sizeof(nd->phi));
+
+    switch (nd->kind) {
+        case GIA_NODE_SOURCE: {
+            double v = num_field(jn, "initial_value", 1.0);
+            nd->phi.c[1] = v;
+            nd->phi.degree = 1;
+            break;
+        }
+        case GIA_NODE_INTERACTION: {
+            double g = num_field(jn, "generativity_factor", 1.0);
+            nd->phi.c[2] = 0.5 * g;      /* phi = g t^2 / 2 */
+            nd->phi.degree = 2;
+            break;
+        }
+        case GIA_NODE_STORAGE: {
+            double level = num_field(jn, "current_level", 1.0);
+            double cap   = num_field(jn, "capacity", 0.0);
+            double rate  = (cap > GIA_EPS) ? (level / cap) : 0.0;
+            if (level < GIA_EPS) level = GIA_EPS;
+            nd->phi.c[0] = log(level);   /* so that f(0) = current_level */
+            nd->phi.c[1] = rate;         /* fractional fullness as the rate  */
+            nd->phi.degree = 1;
+            break;
+        }
+        case GIA_NODE_CONSUMER: {
+            double mr = num_field(jn, "metabolic_rate", 0.0);
+            nd->phi.c[1] = -mr;
+            nd->phi.degree = 1;
+            break;
+        }
+        case GIA_NODE_GAIN: {
+            /* Odum SecIX: output is proportional to the control signal, so the
+             * amplifier's own form is linear in its gain. */
+            double k = num_field(jn, "k", num_field(jn, "gain", 1.0));
+            nd->phi.c[1] = k;
+            nd->phi.degree = 1;
+            break;
+        }
+        case GIA_NODE_EXCHANGE:
+        case GIA_NODE_SWITCH: {
+            /* Odum SecXI: on or off. Its own analytic form is a level; the
+             * switching itself lives on the threshold pathways it gates. */
+            nd->phi.c[0] = log(fmax(num_field(jn, "value", 1.0), GIA_EPS));
+            nd->phi.degree = 0;
+            break;
+        }
+        case GIA_NODE_LOOP_LIMITED: {
+            /* Odum SecXIII: saturating, so the exponent carries curvature. */
+            double k = num_field(jn, "k", 1.0);
+            nd->phi.c[2] = 0.5 * k;
+            nd->phi.degree = 2;
+            break;
+        }
+        case GIA_NODE_SINK:
+        case GIA_NODE_CONSTANT: {
+            nd->phi.c[0] = log(fmax(num_field(jn, "value", 1.0), GIA_EPS));
+            nd->phi.degree = 0;
+            break;
+        }
+        default: {
+            nd->phi.c[1] = num_field(jn, "initial_value", 0.0);
+            nd->phi.degree = 1;
+            break;
+        }
+    }
+}
+
+/* Map the seed's pathway label onto an Odum law. R2.3: a `flow_type` must mean
+ * something or be rejected -- an inert vocabulary that looks meaningful is
+ * worse than none. `logic` is preferred when present; `flow_type` is the
+ * fallback for the descriptive labels the seed format uses. */
+static bool logic_of(const char *s, gia_logic *out) {
+    if (!s) return false;
+    if (!strcmp(s, "linear"))                 { *out = GIA_LOGIC_LINEAR;      return true; }
+    if (!strcmp(s, "interaction"))            { *out = GIA_LOGIC_INTERACTION; return true; }
+    if (!strcmp(s, "reversible"))             { *out = GIA_LOGIC_REVERSIBLE;  return true; }
+    if (!strcmp(s, "constant"))               { *out = GIA_LOGIC_CONSTANT;    return true; }
+    if (!strcmp(s, "limit"))                  { *out = GIA_LOGIC_LIMIT;       return true; }
+    if (!strcmp(s, "gain"))                   { *out = GIA_LOGIC_GAIN;        return true; }
+    if (!strcmp(s, "ratio"))                  { *out = GIA_LOGIC_RATIO;       return true; }
+    if (!strcmp(s, "subtract"))               { *out = GIA_LOGIC_SUBTRACT;    return true; }
+    if (!strcmp(s, "threshold"))              { *out = GIA_LOGIC_THRESHOLD;   return true; }
+    if (!strcmp(s, "exchange"))               { *out = GIA_LOGIC_EXCHANGE;    return true; }
+    /* Descriptive labels from the Odum-shaped seed format. */
+    if (!strcmp(s, "inflow"))                 { *out = GIA_LOGIC_LINEAR;      return true; }
+    if (!strcmp(s, "outflow"))                { *out = GIA_LOGIC_LINEAR;      return true; }
+    if (!strcmp(s, "flow"))                   { *out = GIA_LOGIC_LINEAR;      return true; }
+    if (!strcmp(s, "generative_production"))  { *out = GIA_LOGIC_INTERACTION; return true; }
+    if (!strcmp(s, "ordinal_feedback"))       { *out = GIA_LOGIC_INTERACTION; return true; }
+    if (!strcmp(s, "ordinal_ascent"))         { *out = GIA_LOGIC_LINEAR;      return true; }
+    if (!strcmp(s, "emergent_feedback_loop")) { *out = GIA_LOGIC_LINEAR;      return true; }
+    if (!strcmp(s, "diffusion"))              { *out = GIA_LOGIC_REVERSIBLE;  return true; }
+    return false;
+}
+
+static int find_node(const gia_model *m, const char *id) {
+    int i;
+    if (!id) return -1;
+    for (i = 0; i < m->n_nodes; i++)
+        if (m->nodes[i].id && !strcmp(m->nodes[i].id, id)) return i;
+    return -1;
+}
+
+bool gia_model_load(gia_model *m, cJSON *root) {
+    cJSON *jnodes, *jedges, *jparams;
+    int    i, n, e;
+
+    if (!m || !root) return false;
+    memset(m, 0, sizeof(*m));
+    m->root = root;
+
+    jnodes = cJSON_GetObjectItemCaseSensitive(root, "nodes");
+    jedges = cJSON_GetObjectItemCaseSensitive(root, "edges");
+    if (!cJSON_IsArray(jnodes)) {
+        fprintf(stderr, "engine: model has no \"nodes\" array\n");
+        return false;
+    }
+
+    n = cJSON_GetArraySize(jnodes);
+    if (n <= 0) {
+        fprintf(stderr, "engine: model has no nodes\n");
+        return false;
+    }
+
+    m->system_name = str_field(root, "system_name", "(unnamed system)");
+    m->nodes = (gia_node *)calloc((size_t)n, sizeof(gia_node));
+    if (!m->nodes) return false;
+    m->n_nodes = n;
+
+    for (i = 0; i < n; i++) {
+        const cJSON *jn = cJSON_GetArrayItem(jnodes, i);
+        gia_node    *nd = &m->nodes[i];
+        const char *ty  = str_field(jn, "type", NULL);
+        const char *why = NULL;
+
+        nd->id    = str_field(jn, "id", NULL);
+        nd->label = str_field(jn, "label", nd->id ? nd->id : "(unlabelled)");
+
+        if (kind_is_refused(ty, &why)) {
+            fprintf(stderr, "engine: node %d ('%s'): type '%s' is not "
+                            "implemented here -- %s\n",
+                    i, nd->id ? nd->id : "?", ty, why);
+            gia_model_free(m);
+            return false;
+        }
+        nd->kind = kind_of(ty);
+        if (nd->kind == GIA_NODE_UNKNOWN) {
+            fprintf(stderr, "engine: node %d ('%s'): unknown type '%s'\n",
+                    i, nd->id ? nd->id : "?", ty ? ty : "(missing)");
+            gia_model_free(m);
+            return false;
+        }
+        phi_for_node(nd, jn);
+        nd->quality_input = num_field(jn, "quality_input", 0.0);
+
+        /* Live quantity for the network solution, and whether it is solved for.
+         * Odum holds a source at its value rather than integrating it (1972
+         * SecII), and the same is true of a constant. */
+        switch (nd->kind) {
+            case GIA_NODE_STORAGE:
+                nd->q0 = num_field(jn, "current_level",
+                                   num_field(jn, "value", 0.0));
+                nd->integrates = true;
+                break;
+            case GIA_NODE_SOURCE:
+            case GIA_NODE_CONSTANT:
+                /* Odum SecII: a source is a forcing function. Its quantity is
+                 * held, never integrated, so a pathway leaving it is not
+                 * depleting it. Same for a constant. */
+                nd->q0 = num_field(jn, "initial_value",
+                                   num_field(jn, "value", 1.0));
+                nd->integrates = false;
+                break;
+            case GIA_NODE_SINK:
+                /* Odum SecV: absorbs used energy and is never drained. */
+                nd->q0 = num_field(jn, "value", 0.0);
+                nd->integrates = true;
+                break;
+            default:
+                nd->q0 = num_field(jn, "value",
+                                   num_field(jn, "initial_value", 0.0));
+                nd->integrates = true;
+                break;
+        }
+        if (!nd->id) {
+            fprintf(stderr, "engine: node %d has no \"id\"\n", i);
+            gia_model_free(m);
+            return false;
+        }
+    }
+
+    e = cJSON_IsArray(jedges) ? cJSON_GetArraySize(jedges) : 0;
+    if (e > 0) {
+        m->edges = (gia_edge *)calloc((size_t)e, sizeof(gia_edge));
+        if (!m->edges) { gia_model_free(m); return false; }
+        m->n_edges = e;
+        for (i = 0; i < e; i++) {
+            const cJSON *je = cJSON_GetArrayItem(jedges, i);
+            gia_edge    *ed = &m->edges[i];
+            const char *lg;
+            ed->from      = find_node(m, str_field(je, "source", NULL));
+            ed->to        = find_node(m, str_field(je, "target", NULL));
+            ed->flow_type = str_field(je, "flow_type", "flow");
+            ed->weight    = num_field(je, "weight", 1.0);
+            ed->capacity  = num_field(je, "capacity", 0.0);
+            ed->threshold = num_field(je, "threshold", 0.0);
+            ed->price     = num_field(je, "price", 1.0);
+            ed->cur_from  = find_node(m, str_field(je, "currency_origin", NULL));
+            ed->cur_to    = find_node(m, str_field(je, "currency_target", NULL));
+            {   /* docs/emergy_synthesis.md 8: partition is the default, because
+                 * a split is the ordinary case and co-production is the claim. */
+                const char *om = str_field(je, "output_mode", "partition");
+                if (!strcmp(om, "replicate"))      ed->out_mode = GIA_OUT_REPLICATE;
+                else if (!strcmp(om, "partition")) ed->out_mode = GIA_OUT_PARTITION;
+                else {
+                    fprintf(stderr, "engine: edge %d: unknown output_mode '%s' "
+                                    "(expected 'partition' or 'replicate')\n", i, om);
+                    gia_model_free(m);
+                    return false;
+                }
+            }
+            ed->control   = find_node(m, str_field(je, "control_node", NULL));
+
+            lg = str_field(je, "logic", ed->flow_type);
+            if (!logic_of(lg, &ed->logic)) {
+                fprintf(stderr, "engine: edge %d: unknown pathway law '%s'\n",
+                        i, lg);
+                gia_model_free(m);
+                return false;
+            }
+            /* A work gate needs a control quantity; Odum 1972 SecX is explicit
+             * that it is a junction of two flows. Default the control to the
+             * target, which is the autocatalytic reading. */
+            if ((ed->logic == GIA_LOGIC_INTERACTION ||
+                 ed->logic == GIA_LOGIC_GAIN      ||
+                 ed->logic == GIA_LOGIC_RATIO     ||
+                 ed->logic == GIA_LOGIC_SUBTRACT) && ed->control < 0)
+                ed->control = ed->to;
+
+            if (ed->from < 0 || ed->to < 0)
+                fprintf(stderr,
+                        "engine: warning: edge %d references an unknown node; "
+                        "it will not contribute to ordinality\n", i);
+        }
+    }
+
+    jparams = cJSON_GetObjectItemCaseSensitive(root, "simulation_params");
+    m->t_end      = num_field(jparams, "t_val", 1.0);
+    m->order      = (int)num_field(jparams, "derivative_order", 1);
+    if (m->order < 0)              m->order = 0;
+    if (m->order > GIA_MAX_ORDER)  m->order = GIA_MAX_ORDER;
+    {
+        const cJSON *g = cJSON_GetObjectItemCaseSensitive(jparams,
+                                                          "generative_mode");
+        m->generative = cJSON_IsBool(g) ? (bool)cJSON_IsTrue(g) : true;
+    }
+    return true;
+}
+
+void gia_model_free(gia_model *m) {
+    if (!m) return;
+    free(m->nodes);
+    free(m->edges);
+    m->nodes   = NULL;
+    m->edges   = NULL;
+    m->n_nodes = 0;
+    m->n_edges = 0;
+}
+
+/* ================================================================== *
+ * 8b. Emergy and transformity — the second accounting
+ * ================================================================== */
+
+double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q) {
+    double qa, qc;
+    if (!m || !e || e->from < 0 || e->to < 0 || !q) return 0.0;
+    qa = q[e->from];
+
+    switch (e->logic) {
+        case GIA_LOGIC_LINEAR:      return e->weight * qa;
+        case GIA_LOGIC_EXCHANGE:    return e->weight * qa;
+        case GIA_LOGIC_CONSTANT:    return e->weight;
+        case GIA_LOGIC_THRESHOLD:   return edge_is_open(e, q) ? e->weight : 0.0;
+        case GIA_LOGIC_GAIN:
+            qc = (e->control >= 0) ? q[e->control] : q[e->to];
+            return e->weight * qc;
+        case GIA_LOGIC_INTERACTION:
+            qc = (e->control >= 0) ? q[e->control] : 1.0;
+            return e->weight * qa * qc;
+        case GIA_LOGIC_LIMIT: {
+            double C = (e->capacity > GIA_EPS) ? e->capacity : 1.0;
+            return e->weight * qa * C / (C + qa);
+        }
+        case GIA_LOGIC_REVERSIBLE:  return e->weight * (qa - q[e->to]);
+        case GIA_LOGIC_RATIO:
+            qc = (e->control >= 0) ? q[e->control] : q[e->to];
+            if (qc < GIA_EPS) qc = GIA_EPS;
+            return e->weight * qa / qc;
+        case GIA_LOGIC_SUBTRACT:
+            qc = (e->control >= 0) ? q[e->control] : q[e->to];
+            return edge_is_open(e, q) ? e->weight * (qa - qc) : 0.0;
+        default:                    return 0.0;
+    }
+}
+
+/* Mark the edges that close a cycle.
+ *
+ * Odum's fourth rule: emergy already counted on the way round a loop is not
+ * counted again when the loop returns. A depth-first colouring identifies
+ * exactly the edges that reach back into the current path, and those carry
+ * quantity without re-injecting emergy. Without this, a feedback loop
+ * manufactures emergy on every pass and the excess below would measure the
+ * loop rather than the co-productions. */
+static void mark_back_edges(const gia_model *m, char *colour, bool *is_back,
+                            int at) {
+    int i;
+    colour[at] = 1;                                   /* on the current path */
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        if (e->from != at || e->to < 0) continue;
+        if (colour[e->to] == 1)      is_back[i] = true;   /* reaches back */
+        else if (colour[e->to] == 0) mark_back_edges(m, colour, is_back, e->to);
+    }
+    colour[at] = 2;                                   /* finished */
+}
+
+bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
+    double *q = NULL, *flow = NULL, *em_in = NULL, *out_tot = NULL;
+    bool   *is_back = NULL;
+    char   *colour = NULL;
+    int     i, pass, n;
+    bool    ok = false;
+
+    if (!m || m->n_nodes <= 0) return false;
+    n = m->n_nodes;
+
+    q       = (double *)calloc((size_t)n, sizeof(double));
+    em_in   = (double *)calloc((size_t)n, sizeof(double));
+    out_tot = (double *)calloc((size_t)n, sizeof(double));
+    colour  = (char   *)calloc((size_t)n, sizeof(char));
+    flow    = (double *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
+                               sizeof(double));
+    is_back = (bool   *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
+                               sizeof(bool));
+    if (!q || !em_in || !out_tot || !colour || !flow || !is_back) goto done;
+
+    if (!gia_network_state(m, t, q, NULL)) goto done;
+
+    for (i = 0; i < m->n_edges; i++) flow[i] = gia_edge_flow(m, &m->edges[i], q);
+
+    for (i = 0; i < n; i++)
+        if (colour[i] == 0) mark_back_edges(m, colour, is_back, i);
+
+    /* Total energy leaving each component, which is the denominator a partition
+     * shares emergy out in proportion to. */
+    for (i = 0; i < m->n_edges; i++) {
+        int a = m->edges[i].from;
+        if (a < 0 || is_back[i]) continue;
+        out_tot[a] += fabs(flow[i]);
+    }
+
+    /* Propagate from the sources. The acyclic part is at most n levels deep, so
+     * n relaxation passes carry emergy all the way through it. */
+    for (pass = 0; pass < n + 1; pass++) {
+        for (i = 0; i < n; i++) em_in[i] = 0.0;
+
+        for (i = 0; i < m->n_edges; i++) {
+            const gia_edge *e = &m->edges[i];
+            int    a = e->from, b = e->to;
+            double f, carried;
+
+            if (a < 0 || b < 0 || is_back[i]) continue;
+            f = fabs(flow[i]);
+            if (f <= 0.0) continue;
+
+            if (!m->nodes[a].integrates && m->nodes[a].quality_input > 0.0) {
+                /* A boundary source injects quality at its declared rate. */
+                carried = f * m->nodes[a].quality_input;
+            } else if (e->out_mode == GIA_OUT_REPLICATE) {
+                /* Co-production: each product carries the WHOLE emergy of the
+                 * process, because each required all of it. */
+                carried = em_in[a];
+            } else {
+                /* Partition: a share of one kind of flow, so a share of the
+                 * emergy. */
+                carried = (out_tot[a] > 0.0) ? em_in[a] * (f / out_tot[a]) : 0.0;
+            }
+            em_in[b] += carried;
+        }
+    }
+
+    /* A boundary source has no inflow, so its em_in is zero -- but its empower
+     * is not: it is what the source delivers. Reporting the inflow for a source
+     * would show a sun with no power. Report what it emits. */
+    for (i = 0; i < m->n_edges; i++) {
+        int a = m->edges[i].from;
+        if (a < 0 || is_back[i]) continue;
+        if (!m->nodes[a].integrates && m->nodes[a].quality_input > 0.0)
+            em_in[a] += fabs(flow[i]) * m->nodes[a].quality_input;
+    }
+
+    if (em) memcpy(em, em_in, (size_t)n * sizeof(double));
+    if (tr) {
+        for (i = 0; i < n; i++) {
+            /* Transformity is emergy per unit quantity: the component's quality.
+             * A source states its own rather than deriving one. */
+            if (!m->nodes[i].integrates && m->nodes[i].quality_input > 0.0)
+                tr[i] = m->nodes[i].quality_input;
+            else
+                tr[i] = (fabs(q[i]) > GIA_EPS) ? em_in[i] / q[i] : 0.0;
+        }
+    }
+    ok = true;
+
+done:
+    free(q); free(flow); free(em_in); free(out_tot); free(colour); free(is_back);
+    return ok;
+}
+
+double gia_emergy_excess(const gia_model *m, double t) {
+    double *em = NULL, *q = NULL, *flow = NULL, *out_em = NULL;
+    bool   *is_back = NULL;
+    char   *colour = NULL;
+    double  excess = 0.0, *out_tot = NULL;
+    int     i, n;
+
+    if (!m || m->n_nodes <= 0) return 0.0;
+    n = m->n_nodes;
+
+    em      = (double *)calloc((size_t)n, sizeof(double));
+    q       = (double *)calloc((size_t)n, sizeof(double));
+    out_em  = (double *)calloc((size_t)n, sizeof(double));
+    out_tot = (double *)calloc((size_t)n, sizeof(double));
+    colour  = (char   *)calloc((size_t)n, sizeof(char));
+    flow    = (double *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
+                               sizeof(double));
+    is_back = (bool   *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
+                               sizeof(bool));
+    if (!em || !q || !out_em || !out_tot || !colour || !flow || !is_back)
+        goto done;
+
+    if (!gia_emergy_at(m, t, em, NULL))        goto done;
+    if (!gia_network_state(m, t, q, NULL))     goto done;
+
+    for (i = 0; i < m->n_edges; i++) flow[i] = gia_edge_flow(m, &m->edges[i], q);
+    for (i = 0; i < n; i++)
+        if (colour[i] == 0) mark_back_edges(m, colour, is_back, i);
+    for (i = 0; i < m->n_edges; i++) {
+        int a = m->edges[i].from;
+        if (a < 0 || is_back[i]) continue;
+        out_tot[a] += fabs(flow[i]);
+    }
+
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        int    a = e->from;
+        double f;
+        if (a < 0 || e->to < 0 || is_back[i]) continue;
+        f = fabs(flow[i]);
+        if (f <= 0.0) continue;
+        if (!m->nodes[a].integrates && m->nodes[a].quality_input > 0.0)
+            out_em[a] += f * m->nodes[a].quality_input;
+        else if (e->out_mode == GIA_OUT_REPLICATE)
+            out_em[a] += em[a];
+        else
+            out_em[a] += (out_tot[a] > 0.0) ? em[a] * (f / out_tot[a]) : 0.0;
+    }
+
+    /* Emergy created, component by component. A partition contributes nothing:
+     * what leaves equals what arrived. A replication contributes the whole
+     * inflow again for every product past the first. */
+    for (i = 0; i < n; i++) {
+        double made = out_em[i] - em[i];
+        if (!m->nodes[i].integrates) continue;   /* a boundary source is not creating */
+        if (made > 0.0) excess += made;
+    }
+
+done:
+    free(em); free(q); free(out_em); free(out_tot); free(colour);
+    free(flow); free(is_back);
+    return excess;
+}
+
+/* ================================================================== *
+ * 6. Ordinality
+ * ================================================================== */
+
+/* Depth-first reachability from `at`, looking for `target`. */
+static bool reaches(const gia_model *m, int at, int target, bool *seen) {
+    int i;
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *ed = &m->edges[i];
+        if (ed->from != at || ed->to < 0) continue;
+        if (ed->to == target) return true;
+        if (!seen[ed->to]) {
+            seen[ed->to] = true;
+            if (reaches(m, ed->to, target, seen)) return true;
+        }
+    }
+    return false;
+}
+
+/* Shared by gia_mark_cycles and gia_generate so the latter can stay const. */
+static int cycles_into(const gia_model *m, bool *out) {
+    int i, count = 0;
+    bool *seen;
+
+    if (!m || m->n_nodes <= 0) return 0;
+    seen = (bool *)malloc((size_t)m->n_nodes * sizeof(bool));
+    if (!seen) return 0;
+
+    for (i = 0; i < m->n_nodes; i++) {
+        int k;
+        for (k = 0; k < m->n_nodes; k++) seen[k] = false;
+        seen[i] = true;
+        out[i]  = reaches(m, i, i, seen);
+        if (out[i]) count++;
+    }
+    free(seen);
+    return count;
+}
+
+int gia_mark_cycles(gia_model *m) {
+    bool *flags;
+    int   i, count;
+
+    if (!m || m->n_nodes <= 0) return 0;
+    flags = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
+    if (!flags) return 0;
+    count = cycles_into(m, flags);
+    for (i = 0; i < m->n_nodes; i++) m->nodes[i].on_cycle = flags[i];
+    free(flags);
+    return count;
+}
+
+double gia_ordinality(gia_model *m) {
+    int count;
+    if (!m || m->n_nodes <= 0) return 0.0;
+    count = gia_mark_cycles(m);
+    return (double)count / (double)m->n_nodes;
+}
+
+bool gia_at_maximum_ordinality(gia_model *m) {
+    if (!m || m->n_nodes <= 0) return false;
+    return gia_mark_cycles(m) == m->n_nodes;
+}
+
+/* ================================================================== *
+ * 7. Mode 1 — functional trajectories
+ * ================================================================== */
+
+bool gia_sample_at(const gia_model *m, double t,
+                   double *q, double *idc, double *tdc, double *psi) {
+    int i;
+    if (!m || m->n_nodes <= 0) return false;
+
+    if (q) {
+        if (!gia_network_state(m, t, q, psi)) {
+            for (i = 0; i < m->n_nodes; i++) q[i] = m->nodes[i].q0;
+            if (psi) *psi = 0.0;
+            return false;
+        }
+    } else if (psi) {
+        *psi = 0.0;
+    }
+    for (i = 0; i < m->n_nodes; i++) {
+        const gia_phi *p = &m->nodes[i].phi;
+        if (idc) idc[i] = gia_idc_derivative(p, m->order, t);
+        if (tdc) tdc[i] = gia_tdc_derivative(p, m->order, t);
+    }
+    return true;
+}
+
+bool gia_write_trajectories(const gia_model *m, const char *path, int steps) {
+    FILE   *f;
+    int     i, s;
+    double  dt;
+    double *q, *idc, *tdc, *em, *tr;
+
+    if (!m || !path) return false;
+    if (steps < 1) steps = 1;
+
+    f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "engine: cannot write %s: ", path);
+        perror(NULL);
+        return false;
+    }
+
+    /* Three columns per node: the incipient value, the traditional value, and
+     * the drift between them. The drift column is the reason the traditional
+     * one is computed at all -- it makes the 2006 critique a measurement. */
+    /* Per component: the network quantity Q from the matrix exponential, then
+     * the single-component analytic form and the drift between the calculi.
+     * The _Q column is the simulation -- it depends on the whole graph. The
+     * _idc/_tdc/_drift columns are the analytic form of Sections 1-3, which
+     * depends only on that component. */
+    fprintf(f, "time");
+    for (i = 0; i < m->n_nodes; i++)
+        fprintf(f, ",%s_Q,%s_Em,%s_Tr,%s_idc,%s_tdc,%s_drift",
+                m->nodes[i].id, m->nodes[i].id, m->nodes[i].id,
+                m->nodes[i].id, m->nodes[i].id, m->nodes[i].id);
+    fprintf(f, ",psi_network,conservation,emergy_excess\n");
+
+    q   = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    idc = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    tdc = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    em  = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    tr  = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    if (!q || !idc || !tdc || !em || !tr) {
+        free(q); free(idc); free(tdc); free(em); free(tr);
+        fclose(f); return false;
+    }
+
+    dt = m->t_end / (double)steps;
+    for (s = 0; s <= steps; s++) {
+        double t = (double)s * dt;
+        double psi = 0.0;
+
+        (void)gia_sample_at(m, t, q, idc, tdc, &psi);
+
+        (void)gia_emergy_at(m, t, em, tr);
+
+        fprintf(f, "%.6f", t);
+        for (i = 0; i < m->n_nodes; i++)
+            fprintf(f, ",%.10g,%.10g,%.10g,%.10g,%.10g,%.10g",
+                    q[i], em[i], tr[i], idc[i], tdc[i], tdc[i] - idc[i]);
+        fprintf(f, ",%.10g,%.10g,%.10g\n", psi,
+                gia_conservation_residual(m, t), gia_emergy_excess(m, t));
+    }
+
+    free(q); free(idc); free(tdc); free(em); free(tr);
+    fclose(f);
+    return true;
+}
+
+/* ================================================================== *
+ * 8. Mode 2 — the generative ordinal step
+ * ================================================================== */
+
+static bool id_taken(const cJSON *nodes, const char *id) {
+    const cJSON *it;
+    cJSON_ArrayForEach(it, nodes) {
+        const char *nid = str_field(it, "id", NULL);
+        if (nid && !strcmp(nid, id)) return true;
+    }
+    return false;
+}
+
+/* Replace in place where the key already exists, so the field keeps its
+ * position in the object. Delete-then-add would move it to the end, which
+ * costs nothing semantically but turns a one-line change into two hunks in
+ * any text diff of the seed against the output. */
+static void set_string(cJSON *obj, const char *key, const char *value) {
+    cJSON *item = cJSON_CreateString(value);
+    if (!item) return;
+    if (cJSON_GetObjectItemCaseSensitive(obj, key)) {
+        if (!cJSON_ReplaceItemInObjectCaseSensitive(obj, key, item))
+            cJSON_Delete(item);
+    } else {
+        cJSON_AddItemToObject(obj, key, item);
+    }
+}
+
+cJSON *gia_generate(const gia_model *m) {
+    cJSON *out, *nodes, *edges, *nn, *ne;
+    bool  *on_cycle;
+    int    i, open = -1, hub = -1, best_in = -1;
+    double mean_w = 0.0, ordinality;
+    char   rid[64];
+    int    suffix;
+
+    if (!m || !m->root) return NULL;
+
+    /* The output always starts as a faithful copy of the seed. If nothing
+     * below fires, it compares equal to the input and the validator will
+     * correctly report a functional run. */
+    out = cJSON_Duplicate(m->root, 1);
+    if (!out) return NULL;
+
+    if (!m->generative) return out;
+
+    on_cycle = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
+    if (!on_cycle) return out;
+    cycles_into(m, on_cycle);
+
+    for (i = 0; i < m->n_nodes; i++) {
+        if (!on_cycle[i]) { open = i; break; }
+    }
+    ordinality = 0.0;
+    for (i = 0; i < m->n_nodes; i++) if (on_cycle[i]) ordinality += 1.0;
+    ordinality /= (double)m->n_nodes;
+    free(on_cycle);
+
+    /* Already at Maximum Ordinality: every component is on a closed pathway,
+     * there is no open relationship left to close, and the correct behaviour
+     * is to change nothing. */
+    if (open < 0) return out;
+
+    /* The regulator draws from the graph's convergence point -- the node the
+     * most flows arrive at -- and returns to the open component, closing it
+     * into a loop. */
+    for (i = 0; i < m->n_nodes; i++) {
+        int j, in_deg = 0;
+        if (i == open) continue;
+        for (j = 0; j < m->n_edges; j++)
+            if (m->edges[j].to == i) in_deg++;
+        if (in_deg > best_in) { best_in = in_deg; hub = i; }
+    }
+    if (hub < 0) return out;
+
+    for (i = 0; i < m->n_edges; i++) mean_w += m->edges[i].weight;
+    mean_w = (m->n_edges > 0) ? mean_w / (double)m->n_edges : 1.0;
+
+    nodes = cJSON_GetObjectItemCaseSensitive(out, "nodes");
+    edges = cJSON_GetObjectItemCaseSensitive(out, "edges");
+    if (!cJSON_IsArray(nodes)) return out;
+    if (!cJSON_IsArray(edges)) {
+        edges = cJSON_AddArrayToObject(out, "edges");
+        if (!edges) return out;
+    }
+
+    suffix = 1;
+    snprintf(rid, sizeof(rid), "emergent_gain_%d", suffix);
+    while (id_taken(nodes, rid) && suffix < 1000) {
+        suffix++;
+        snprintf(rid, sizeof(rid), "emergent_gain_%d", suffix);
+    }
+
+    nn = cJSON_CreateObject();
+    if (!nn) return out;
+    cJSON_AddStringToObject(nn, "id", rid);
+    cJSON_AddStringToObject(nn, "label", "Emergent Capture Amplifier");
+    /* Odum 1972 SecIX. A component sits off every closed pathway when nothing
+     * returns to it, and what closes that loop in Odum is not a flow back into
+     * the source but a control flow that amplifies capture -- the autocatalytic
+     * feedback of the Maximum Power Principle, which MOP succeeds. `gain` is
+     * also a primitive, so the output loads under GSSK_Init; "regulator", which
+     * this used to emit, is in no vocabulary at all. */
+    cJSON_AddStringToObject(nn, "type", "gain");
+    /* The new component enters as the (N+1)-th, so its ordinal rank is N. */
+    cJSON_AddNumberToObject(nn, "ordinality_rank", (double)m->n_nodes);
+    cJSON_AddStringToObject(nn, "emerged_from", m->nodes[open].id);
+    cJSON_AddItemToArray(nodes, nn);
+
+    ne = cJSON_CreateObject();
+    if (ne) {
+        cJSON_AddStringToObject(ne, "source", m->nodes[hub].id);
+        cJSON_AddStringToObject(ne, "target", rid);
+        cJSON_AddStringToObject(ne, "flow_type", "ordinal_ascent");
+        cJSON_AddNumberToObject(ne, "weight", mean_w);
+        cJSON_AddItemToArray(edges, ne);
+    }
+
+    ne = cJSON_CreateObject();
+    if (ne) {
+        cJSON_AddStringToObject(ne, "source", rid);
+        cJSON_AddStringToObject(ne, "target", m->nodes[open].id);
+        cJSON_AddStringToObject(ne, "flow_type", "emergent_feedback_loop");
+        /* Further from Maximum Ordinality, a stronger corrective return. */
+        cJSON_AddNumberToObject(ne, "weight", 1.0 - ordinality);
+        cJSON_AddItemToArray(edges, ne);
+    }
+
+    set_string(out, "system_name",
+               "Evolved Self-Organizing Graph (Post-MOP Ordinal Step)");
+
+    printf("  MOP ordinal step: '%s' was not on a closed pathway.\n",
+           m->nodes[open].id);
+    printf("  Spawned '%s'; closed the loop via '%s' -> '%s' -> '%s'.\n",
+           rid, m->nodes[hub].id, rid, m->nodes[open].id);
+    return out;
+}
+
+/* Same numbers as gia_write_trajectories(), laid out for a terminal.
+ *
+ * One section per component rather than one wide table: four columns per
+ * component times N components does not fit a terminal.
+ *
+ * Q and the phi columns are different quantities and are labelled so, because
+ * confusing them is easy and costly. Q is the simulation: it comes from
+ * Q(t) = exp(A t) Q(0) and depends on the whole graph. The phi columns are the
+ * single-component analytic form of Sections 1-3, which depends only on that
+ * component's own parameters and ignores every edge -- they are what makes the
+ * drift theorem checkable against a closed form, and they are not a trajectory
+ * of the system.
+ *
+ * A source shows this most sharply: Odum 1972 SecII holds a source at its value
+ * rather than integrating it, so its Q is flat, while its phi form grows.
+ */
+void gia_print_trajectories(const gia_model *m, int steps) {
+    int     i, s;
+    double  dt;
+    double *q, *idc, *tdc;
+
+    if (!m || m->n_nodes <= 0) return;
+    if (steps < 1) steps = 1;
+    dt = m->t_end / (double)steps;
+
+    q   = (double *)malloc((size_t)m->n_nodes * sizeof(double));
+    idc = (double *)malloc((size_t)m->n_nodes * sizeof(double));
+    tdc = (double *)malloc((size_t)m->n_nodes * sizeof(double));
+    if (!q || !idc || !tdc) { free(q); free(idc); free(tdc); return; }
+
+    for (i = 0; i < m->n_nodes; i++) {
+        const gia_node *nd = &m->nodes[i];
+
+        printf("\n  %s  (%s, %s)\n", nd->id, gia_node_kind_name(nd->kind),
+               nd->integrates ? "integrated" : "held, not integrated");
+        printf("  %12s %16s | %14s %14s %14s\n",
+               "time", "Q (network)", "phi idc", "phi tdc", "phi drift");
+        printf("  %12s %16s | %14s %14s %14s\n",
+               "------------", "----------------", "--------------",
+               "--------------", "--------------");
+
+        for (s = 0; s <= steps; s++) {
+            double t = (double)s * dt;
+            (void)gia_sample_at(m, t, q, idc, tdc, NULL);
+            printf("  %12.4f %16.6g | %14.6g %14.6g %14.6g\n",
+                   t, q[i], idc[i], tdc[i], tdc[i] - idc[i]);
+        }
+    }
+
+    printf("\n  Q is the simulation: Q(t) = exp(A t) Q(0), where A is the flow\n");
+    printf("  matrix assembled from the pathway laws, so it depends on the\n");
+    printf("  whole graph. The phi columns are the single-component analytic\n");
+    printf("  form and ignore every edge -- they are where the drift theorem\n");
+    printf("  is checked against a closed form, not a trajectory of the system.\n");
+
+    printf("\n  network summary at horizon t = %g\n", m->t_end);
+    printf("  %-20s %10s %16s %16s\n",
+           "component", "solved", "Q(0)", "Q(t_end)");
+    printf("  %-20s %10s %16s %16s\n",
+           "--------------------", "------", "----------------",
+           "----------------");
+
+    if (gia_network_state(m, m->t_end, q, NULL)) {
+        for (i = 0; i < m->n_nodes; i++)
+            printf("  %-20s %10s %16.6g %16.6g\n",
+                   m->nodes[i].id, m->nodes[i].integrates ? "yes" : "held",
+                   m->nodes[i].q0, q[i]);
+    }
+
+    {
+        double psi = 0.0;
+        bool   constA = gia_flow_matrix_is_constant(m);
+        (void)gia_network_state(m, m->t_end, q, &psi);
+        printf("\n  flow matrix         %s\n",
+               constA ? "constant -- incipient solution is exact"
+                      : "state-dependent (multiplicative junction)");
+        printf("  psi_network         %.6g%s\n", psi,
+               constA ? "  (exactly zero: the calculi agree)" : "");
+        double *em = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+        double *tr = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+        if (em && tr && gia_emergy_at(m, m->t_end, em, tr)) {
+            double xs = gia_emergy_excess(m, m->t_end);
+            printf("\n  emergy at t = %g   (empower, and transformity Em/Q)\n",
+                   m->t_end);
+            printf("  %-20s %18s %18s\n", "component", "Em", "Tr");
+            printf("  %-20s %18s %18s\n", "--------------------",
+                   "------------------", "------------------");
+            for (i = 0; i < m->n_nodes; i++)
+                printf("  %-20s %18.6g %18.6g\n", m->nodes[i].id, em[i], tr[i]);
+            printf("\n  emergy created       %.6g\n", xs);
+            if (xs > 0.0) {
+                printf("    Emergy is NOT conserved here, and that is correct:\n");
+                printf("    a co-production gives each product the whole emergy\n");
+                printf("    of the process, because each required all of it.\n");
+                printf("    This excess is irreducible to the inputs -- the\n");
+                printf("    thing a conservative calculus cannot express, and\n");
+                printf("    Giannantoni's reason for needing another one.\n");
+            } else {
+                printf("    Every bifurcation here is a partition, so emergy is\n");
+                printf("    conserved. Mark an edge output_mode \"replicate\" to\n");
+                printf("    make it a co-production and this becomes non-zero.\n");
+            }
+        }
+        free(em); free(tr);
+
+        if (gia_system_is_closed(m)) {
+            printf("  system              closed\n");
+            printf("  conservation        %.3e  (must be ~0)\n",
+                   gia_conservation_residual(m, m->t_end));
+        } else {
+            printf("  system              open -- a pathway leaves a held\n");
+            printf("                      component, which delivers quantity\n");
+            printf("                      without being depleted (Odum SecII)\n");
+            printf("  net boundary inflow %.6g  (expected, not an error)\n",
+                   gia_conservation_residual(m, m->t_end));
+        }
+    }
+
+    free(q); free(idc); free(tdc);
+}
+

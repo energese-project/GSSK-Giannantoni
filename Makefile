@@ -42,6 +42,7 @@ OBJECTS = $(LIB_DIR)/gssk.o $(LIB_DIR)/advanced.o $(LIB_DIR)/cJSON.o
 TARGET_LIB = $(LIB_DIR)/libgssk.a
 TARGET_CLI = $(BIN_DIR)/gssk
 TARGET_COMPARE = $(BIN_DIR)/csv_compare
+TARGET_SIM = $(BIN_DIR)/giannantoni_sim
 
 # ──────────────────────────────────────────────────────────────
 # Containerised Linux toolchains (Apple `container` CLI)
@@ -66,14 +67,14 @@ UBUNTU_VERSION   := 24.04
 CWORKDIR         := /work
 CRUN              = $(CONTAINER_BIN) run --rm --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR)
 
-.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-forcing-wasm test-carrier-api test-edge-flows test-schema check-version test-python demo demo-python plot-demo directories swift-build swift-test swift-clean dist \
+.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-forcing-wasm test-carrier-api test-edge-flows test-schema check-version test-python demo demo-python plot-demo directories dist \
         shared asan test-asan coverage-build coverage-report coverage-check \
         fuzz-build fuzz-run test-valgrind bench bench-check bench-gen \
         container-start container-image container-image-wasm container-image-linux \
         container-image-demo demo-native \
         wasm-container test-linux test-linux-clang shell-wasm shell-linux ci-local
 
-all: directories $(TARGET_LIB) $(TARGET_CLI) $(TARGET_COMPARE)
+all: directories $(TARGET_LIB) $(TARGET_CLI) $(TARGET_COMPARE) $(TARGET_SIM)
 
 directories:
 	@mkdir -p $(BIN_DIR) $(LIB_DIR) $(DIST_DIR) tests/results tests/expected
@@ -82,7 +83,20 @@ directories:
 $(TARGET_LIB): $(OBJECTS)
 	ar rcs $@ $^
 
-$(LIB_DIR)/%.o: $(SRC_DIR)/%.c
+# Every object depends on every header.
+#
+# Without this the pattern rule has no header prerequisites at all, so editing
+# a header rebuilds nothing. That is not merely a staleness annoyance: change a
+# struct in include/*.h and the objects that were not rebuilt keep the old
+# layout, the archive links without complaint, and the binary segfaults on a
+# field offset. That is exactly what happened when `gia_node` gained fields --
+# engine.o was rebuilt, sim_main.o and validation.o were not.
+#
+# Coarse on purpose. This project has two headers; per-object dependency
+# generation (-MMD -MP) would be more precise and is not worth the machinery.
+HEADERS = $(wildcard $(INC_DIR)/*.h)
+
+$(LIB_DIR)/%.o: $(SRC_DIR)/%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # CLI Tool
@@ -93,7 +107,106 @@ $(TARGET_CLI): $(SRC_DIR)/main.c $(TARGET_LIB)
 $(TARGET_COMPARE): $(TEST_DIR)/csv_compare.c
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
 
+# ──────────────────────────────────────────────────────────────
+# Giannantoni Simulation Targets
+# ──────────────────────────────────────────────────────────────
+#
+# The generative engine is a separate binary from bin/gssk, not a subcommand
+# of it. The two engines share this build and cJSON; they share no headers.
+# src/engine.c deliberately does not include gssk.h -- see the note at the
+# top of include/engine.h for why the Relational Space coordinates do not fit
+# through an API shaped for a flat double * of scalar storages.
+#
+# TARGET_SIM itself is defined up with the other TARGET_* variables, because
+# `all:` expands its prerequisite list immediately and would otherwise see it
+# as empty.
+
+# Default seed graph if MODEL is not passed explicitly
+MODEL ?= examples/giannantoni/input.json
+
+# Simulation objects. sim_main.o carries the entry point, kept out of
+# engine.o so tests can link the engine without one.
+SIM_OBJS = $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o $(LIB_DIR)/sim_main.o
+
+# engine.o, validation.o and sim_main.o are built by the $(LIB_DIR)/%.o
+# pattern rule above; they need no rules of their own.
+
+# libgssk.a is linked for cJSON, which lives in it. No GSSK kernel symbol is
+# referenced, so the archive contributes cJSON.o and nothing else.
+$(TARGET_SIM): $(SIM_OBJS) $(TARGET_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+.PHONY: simulate simulate-linux test-giannantoni demo-giannantoni bench-giannantoni
+
+# Native execution
+simulate: directories $(TARGET_SIM)
+	@echo "=== Running Giannantoni Simulation (Native) ==="
+	@./$(TARGET_SIM) $(MODEL)
+
+# Containerized execution (Apple container CLI)
+simulate-linux: container-image-linux
+	@echo "=== Running Giannantoni Simulation (Linux Container) ==="
+	$(CRUN) $(IMAGE_LINUX) sh -c 'make CC=gcc $(TARGET_SIM) && ./$(TARGET_SIM) $(MODEL)'
+
+# Side-by-side demo of the two modes. Same binary, same flags, no config
+# change between the runs -- which is the point. The mode is not something you
+# select; it is what the engine turns out to have done, decided afterwards by
+# diffing the output graph against the seed.
+#
+#   input.json       solar source is fed by nothing and returns to nothing,
+#                    so ordinality is 3/4 and a regulator emerges to close it.
+#   closed_loop.json every component already sits on a closed pathway, so
+#                    there is nothing left to close and the run is functional.
+demo-giannantoni: directories $(TARGET_SIM)
+	@echo
+	@echo "### 1. Seed below maximum ordinality -> expect GENERATIVE"
+	@./$(TARGET_SIM) examples/giannantoni/input.json --steps 5 --print \
+	    --csv $(TEST_DIR)/results/gia_generative.csv \
+	    --out $(TEST_DIR)/results/gia_generative.json
+	@echo
+	@echo "### 2. Seed already at maximum ordinality -> expect FUNCTIONAL"
+	@./$(TARGET_SIM) examples/giannantoni/closed_loop.json --steps 5 --print \
+	    --csv $(TEST_DIR)/results/gia_functional.csv \
+	    --out $(TEST_DIR)/results/gia_functional.json
+	@echo
+	@echo "### 3. Feed run 1's own output back in -> expect FUNCTIONAL (fixed point)"
+	@./$(TARGET_SIM) $(TEST_DIR)/results/gia_generative.json \
+	    --csv $(TEST_DIR)/results/gia_fixpoint.csv \
+	    --out $(TEST_DIR)/results/gia_fixpoint.json
+
+# Comparative stress test: the incipient closed form against RK4 and Euler on
+# the same ODE, plus the demonstration that the analytic drift psi survives
+# dt -> 0 and is therefore not an integration error.
+TARGET_BENCH_GIA = $(BIN_DIR)/bench_giannantoni
+
+$(TARGET_BENCH_GIA): bench/bench_giannantoni.c $(LIB_DIR)/engine.o $(TARGET_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+bench-giannantoni: directories $(TARGET_BENCH_GIA)
+	@./$(TARGET_BENCH_GIA)
+
+# Engine unit tests: drift theorem, duet branches, harmony invariants,
+# ordinality and the generative step.
+TARGET_TEST_GIA = $(BIN_DIR)/test_giannantoni
+
+$(TARGET_TEST_GIA): $(TEST_DIR)/test_giannantoni.c $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o $(TARGET_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+test-giannantoni: directories $(TARGET_TEST_GIA)
+	@echo "=== Giannantoni engine tests ==="
+	@./$(TARGET_TEST_GIA)
+
 # Tests
+#
+# This glob is deliberately shallow. The Giannantoni engine speaks its own
+# model vocabulary -- `system_name`, nodes keyed by `type`, edges by
+# `flow_type` -- which the GSSK kernel's schema rejects on sight ("unknown
+# top-level key 'system_name'"). That is correct: they are two languages for
+# two engines, not one language one of them gets wrong. The generative seeds
+# therefore live one level down in examples/giannantoni/, which keeps them
+# out of both this glob and the independent one in
+# scripts/validate_models.py -- a structural separation rather than an
+# exclusion list in each place that would have to be kept in step.
 MODELS = $(wildcard examples/*.json)
 RESULTS = $(patsubst examples/%.json,tests/results/%.csv,$(MODELS))
 
@@ -469,7 +582,7 @@ test-schema: directories $(TARGET_DUMP_SER)
 	@./$(TARGET_DUMP_SER) $(SER_DIR) $(MODELS) $(wildcard tests/schema_fixtures/*.json)
 	@python3 scripts/validate_models.py
 
-clean: swift-clean
+clean:
 	rm -rf $(BIN_DIR) $(LIB_DIR) $(DIST_DIR) tests/results coverage/
 
 # ──────────────────────────────────────────────────────────────
@@ -645,24 +758,6 @@ wasm: dist
 	-s EXPORTED_FUNCTIONS='$(WASM_EXPORTS)' \
 	-s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","stringToUTF8","UTF8ToString","lengthBytesUTF8","allocate","ALLOC_NORMAL","HEAPU8","HEAPF64","HEAPU32"]' \
 	-o $(DIST_DIR)/gssk.js
-
-# ──────────────────────────────────────────────────────────────
-# Swift Package (Requires Swift toolchain)
-# ──────────────────────────────────────────────────────────────
-
-# Build the Swift package (CGSSK + GSSK wrapper)
-swift-build:
-	@command -v swift >/dev/null 2>&1 || { echo "swift not found — install Xcode or swift.org toolchain"; exit 1; }
-	swift build
-
-# Run the Swift test suite
-swift-test:
-	@command -v swift >/dev/null 2>&1 || { echo "swift not found — install Xcode or swift.org toolchain"; exit 1; }
-	swift test
-
-# Remove Swift build artefacts (.build/ directory)
-swift-clean:
-	@command -v swift >/dev/null 2>&1 && swift package clean || rm -rf .build
 
 # ──────────────────────────────────────────────────────────────
 # Containerised Linux builds
