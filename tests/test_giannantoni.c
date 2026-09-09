@@ -1067,24 +1067,25 @@ static void test_carrier_validation(void) {
     ok("a cross-carrier linear pathway is rejected", !gia_model_load(&m, root));
     cJSON_Delete(root);
 
-    /* Paying for goods with goods is not a transaction. */
+    /* Paying for goods with goods IS a transaction -- it is barter, and it is
+     * covered in [23]. What is still rejected is a counter-flow whose two legs
+     * hold DIFFERENT carriers from each other: one leg pair moves one kind of
+     * thing, and half-grain-half-money is two exchanges, not one. */
     root = cJSON_Parse(
         "{\"nodes\":["
         "  {\"id\":\"a\",\"type\":\"storage\",\"carrier\":\"goods\","
         "   \"current_level\":10.0},"
         "  {\"id\":\"b\",\"type\":\"storage\",\"carrier\":\"goods\","
         "   \"current_level\":0.0},"
-        "  {\"id\":\"c\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "  {\"id\":\"pay\",\"type\":\"storage\",\"carrier\":\"money\","
         "   \"current_level\":5.0},"
-        "  {\"id\":\"d\",\"type\":\"storage\",\"carrier\":\"goods\","
-        "   \"current_level\":0.0},"
-        "  {\"id\":\"m\",\"type\":\"storage\",\"carrier\":\"money\","
-        "   \"current_level\":1.0}],"
+        "  {\"id\":\"recv\",\"type\":\"storage\",\"carrier\":\"sheep\","
+        "   \"current_level\":0.0}],"
         " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"exchange\","
-        "            \"weight\":0.5,\"price\":0.25,"
-        "            \"currency_origin\":\"c\",\"currency_target\":\"d\"}]}");
+        "            \"weight\":0.5,\"exchange_ratio\":0.25,"
+        "            \"counter_origin\":\"pay\",\"counter_target\":\"recv\"}]}");
     if (!root) { ok("parse", false); return; }
-    ok("an exchange paying its own carrier is rejected",
+    ok("counter-flow legs holding different carriers is rejected",
        !gia_model_load(&m, root));
     cJSON_Delete(root);
 }
@@ -1102,6 +1103,115 @@ static void test_carrier_default(void) {
     close_to("conservation is unchanged from before carriers existed",
              gia_conservation_residual(&m, 2.0), 0.0, 1e-9);
     gia_model_free(&m);
+    cJSON_Delete(root);
+}
+
+/* ------------------------------------------------------------------ *
+ * 23. Barter
+ *
+ * Goods for goods is a real process, and an exchange does not require one side
+ * to be money. Odum's SecXV transactor is written for currency, but what it
+ * describes -- two counter-flowing quantities coupled by a ratio -- holds for
+ * grain against sheep just as well.
+ * ------------------------------------------------------------------ */
+
+/* Grain moves one way, sheep the other, at 3 bushels per sheep. Both are
+ * tagged "goods", which an earlier revision rejected outright. `%s` lets the
+ * same model be built with or without an unrelated money component. */
+static cJSON *barter_model(const char *extra_node, const char *neutral_names) {
+    static char buf[1500];
+    snprintf(buf, sizeof(buf),
+        "{\"nodes\":["
+        "  {\"id\":\"grain_a\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":30.0},"
+        "  {\"id\":\"grain_b\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"sheep_b\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":50.0},"
+        "  {\"id\":\"sheep_a\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":0.0}%s],"
+        " \"edges\":[{\"source\":\"grain_a\",\"target\":\"grain_b\","
+        "            \"logic\":\"exchange\",\"weight\":0.5,\"%s\":3.0,"
+        "            \"%s\":\"sheep_b\",\"%s\":\"sheep_a\"}],"
+        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}",
+        extra_node,
+        neutral_names ? "exchange_ratio"  : "price",
+        neutral_names ? "counter_origin"  : "currency_origin",
+        neutral_names ? "counter_target"  : "currency_target");
+    return cJSON_Parse(buf);
+}
+
+static void test_barter(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[5], grain_moved, sheep_moved;
+
+    printf("\n[23] barter: an exchange need not involve money\n");
+
+    root = barter_model("", 0);
+    if (!root) { ok("parse", false); return; }
+    ok("a same-carrier barter loads", gia_model_load(&m, root));
+    ok("both sides are the same carrier", gia_carrier_count(&m) == 1);
+
+    ok("solves", gia_network_state(&m, 2.0, q, NULL));
+    grain_moved = 30.0 - q[0];
+    sheep_moved = q[3];
+    ok("grain moved", grain_moved > 0.0);
+    ok("sheep moved the other way", sheep_moved > 0.0);
+
+    /* The same relation as Odum's Eq (103), with an exchange ratio in place of
+     * a price: 3 bushels per sheep. */
+    close_to("grain per sheep = the exchange ratio",
+             grain_moved / sheep_moved, 3.0, 1e-9);
+    close_to("goods are conserved across the barter",
+             gia_conservation_residual(&m, 2.0), 0.0, 1e-7);
+    gia_model_free(&m);
+    cJSON_Delete(root);
+
+    /* The incoherence that made this worth fixing: the check was guarded on
+     * the model having more than one carrier, so the identical edge was legal
+     * alone and illegal once an unrelated money node existed elsewhere. */
+    root = barter_model(",{\"id\":\"vault\",\"type\":\"storage\","
+                        "\"carrier\":\"money\",\"current_level\":7.0}", 0);
+    if (root) {
+        ok("the same barter still loads with an unrelated money component "
+           "present", gia_model_load(&m, root));
+        ok("the model now has two carriers", gia_carrier_count(&m) == 2);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+
+    /* Neutral spelling must behave identically to the money-specific one. */
+    root = barter_model("", "neutral");
+    if (root) {
+        ok("counter_origin / counter_target / exchange_ratio also load",
+           gia_model_load(&m, root));
+        ok("solves under the neutral spelling",
+           gia_network_state(&m, 2.0, q, NULL));
+        close_to("and gives the same ratio", (30.0 - q[0]) / q[3], 3.0, 1e-9);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+}
+
+static void test_exchange_self_payment(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[24] an exchange may not pay itself\n");
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"m\",\"type\":\"storage\",\"current_level\":5.0}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"exchange\","
+        "            \"weight\":0.5,\"exchange_ratio\":2.0,"
+        "            \"counter_origin\":\"m\",\"counter_target\":\"m\"}]}");
+    if (!root) { ok("parse", false); return; }
+    /* Both legs on one component cancel to nothing; that is a modelling
+     * error, not a zero-value transaction. */
+    ok("both legs on the same component is rejected", !gia_model_load(&m, root));
     cJSON_Delete(root);
 }
 
@@ -1130,6 +1240,8 @@ int main(void) {
     test_carriers();
     test_carrier_validation();
     test_carrier_default();
+    test_barter();
+    test_exchange_self_payment();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);
