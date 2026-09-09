@@ -802,10 +802,14 @@ static void test_exchange_law(void) {
     printf("\n[17] exchange pathway: Odum SecXV, J_energy = P J_currency\n");
     root = cJSON_Parse(
         "{\"nodes\":["
-        "  {\"id\":\"goods_a\",\"type\":\"storage\",\"current_level\":10.0},"
-        "  {\"id\":\"goods_b\",\"type\":\"storage\",\"current_level\":0.0},"
-        "  {\"id\":\"cash_b\",\"type\":\"storage\",\"current_level\":100.0},"
-        "  {\"id\":\"cash_a\",\"type\":\"storage\",\"current_level\":0.0}],"
+        "  {\"id\":\"goods_a\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":10.0},"
+        "  {\"id\":\"goods_b\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"cash_b\",\"type\":\"storage\",\"carrier\":\"money\","
+        "   \"current_level\":100.0},"
+        "  {\"id\":\"cash_a\",\"type\":\"storage\",\"carrier\":\"money\","
+        "   \"current_level\":0.0}],"
         " \"edges\":[{\"source\":\"goods_a\",\"target\":\"goods_b\","
         "            \"logic\":\"exchange\",\"weight\":0.5,\"price\":0.25,"
         "            \"currency_origin\":\"cash_b\","
@@ -832,6 +836,17 @@ static void test_exchange_law(void) {
     /* Odum's ratio, Eq (103), recovered from the trajectory. */
     close_to("J_energy / J_currency = P",
              (10.0 - q[0]) / q[3], 0.25, 1e-9);
+
+    /* Each carrier balances on its own. Before carriers, goods leaving and
+     * cash arriving went into one total and could cancel; now the two are
+     * accounted separately and both must hold. */
+    ok("the exchange couples two carriers",  gia_carrier_count(&m) == 2);
+    close_to("goods are conserved on their own",
+             gia_conservation_residual_for(&m, 2.0, gia_node_carrier(&m, 0)),
+             0.0, 1e-7);
+    close_to("money is conserved on its own",
+             gia_conservation_residual_for(&m, 2.0, gia_node_carrier(&m, 2)),
+             0.0, 1e-7);
 
     gia_model_free(&m); cJSON_Delete(root);
 }
@@ -959,6 +974,137 @@ static void test_emergy_feedback(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 20. Carriers
+ *
+ * A component holds a quantity OF something. Summing a store of grain and a
+ * bank balance is not a conservation check, and the headline test here is that
+ * the old single total actively HID a violation: goods fall by 2 while money
+ * rises by 2, so the sum is unchanged and reports zero, while each carrier
+ * is individually out by 2.
+ * ------------------------------------------------------------------ */
+
+static const char *TWO_CARRIER =
+    "{\"nodes\":["
+    "  {\"id\":\"grain\",\"type\":\"storage\",\"carrier\":\"goods\","
+    "   \"current_level\":10.0},"
+    "  {\"id\":\"eaten\",\"type\":\"constant\",\"carrier\":\"goods\","
+    "   \"value\":0.0},"
+    "  {\"id\":\"mint\",\"type\":\"source\",\"carrier\":\"money\",\"value\":1.0},"
+    "  {\"id\":\"purse\",\"type\":\"storage\",\"carrier\":\"money\","
+    "   \"current_level\":0.0}],"
+    " \"edges\":["
+    "  {\"source\":\"grain\",\"target\":\"eaten\",\"logic\":\"constant\","
+    "   \"weight\":1.0},"
+    "  {\"source\":\"mint\",\"target\":\"purse\",\"logic\":\"linear\","
+    "   \"weight\":1.0}],"
+    " \"simulation_params\":{\"t_val\":2.0,\"derivative_order\":1,"
+    "                       \"generative_mode\":false}}";
+
+static void test_carriers(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[4], goods, money, summed;
+    int        i, cg, cm;
+
+    printf("\n[20] carriers: a summed total hides what per-carrier catches\n");
+
+    root = cJSON_Parse(TWO_CARRIER);
+    if (!root) { ok("parse", false); return; }
+    ok("two-carrier model loads", gia_model_load(&m, root));
+
+    ok("two carriers are found", gia_carrier_count(&m) == 2);
+    cg = gia_node_carrier(&m, 0);
+    cm = gia_node_carrier(&m, 3);
+    ok("grain and purse hold different carriers", cg != cm);
+    ok("grain's carrier is named 'goods'",
+       !strcmp(gia_carrier_name(&m, cg), "goods"));
+    ok("purse's carrier is named 'money'",
+       !strcmp(gia_carrier_name(&m, cm), "money"));
+
+    ok("solves", gia_network_state(&m, 2.0, q, NULL));
+    /* grain drains at a fixed rate 1 into a held component: 10 -> 8.
+     * purse fills from a held source at rate 1: 0 -> 2. */
+    close_to("grain(2) = 10 - 2", q[0], 8.0, 1e-9);
+    close_to("purse(2) = 2",     q[3], 2.0, 1e-9);
+
+    goods = gia_conservation_residual_for(&m, 2.0, cg);
+    money = gia_conservation_residual_for(&m, 2.0, cm);
+    close_to("goods are out by 2", goods, 2.0, 1e-9);
+    close_to("money is out by 2",  money, 2.0, 1e-9);
+
+    /* The defect this replaces: one running total over every integrating
+     * component. Goods lost exactly cancels money gained. */
+    summed = 0.0;
+    for (i = 0; i < m.n_nodes; i++)
+        if (m.nodes[i].integrates) summed += q[i] - m.nodes[i].q0;
+    close_to("a single summed total reports zero -- the violation is hidden",
+             fabs(summed), 0.0, 1e-9);
+
+    ok("the reported residual is the worst carrier, not the sum",
+       gia_conservation_residual(&m, 2.0) > 1.0);
+
+    gia_model_free(&m);
+    cJSON_Delete(root);
+}
+
+static void test_carrier_validation(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[21] a pathway may not cross carriers\n");
+
+    /* Grain does not become money by flowing along an edge. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"grain\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":10.0},"
+        "  {\"id\":\"purse\",\"type\":\"storage\",\"carrier\":\"money\","
+        "   \"current_level\":0.0}],"
+        " \"edges\":[{\"source\":\"grain\",\"target\":\"purse\","
+        "            \"logic\":\"linear\",\"weight\":1.0}]}");
+    if (!root) { ok("parse", false); return; }
+    ok("a cross-carrier linear pathway is rejected", !gia_model_load(&m, root));
+    cJSON_Delete(root);
+
+    /* Paying for goods with goods is not a transaction. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":10.0},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"c\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":5.0},"
+        "  {\"id\":\"d\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"m\",\"type\":\"storage\",\"carrier\":\"money\","
+        "   \"current_level\":1.0}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"exchange\","
+        "            \"weight\":0.5,\"price\":0.25,"
+        "            \"currency_origin\":\"c\",\"currency_target\":\"d\"}]}");
+    if (!root) { ok("parse", false); return; }
+    ok("an exchange paying its own carrier is rejected",
+       !gia_model_load(&m, root));
+    cJSON_Delete(root);
+}
+
+static void test_carrier_default(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[22] a model naming no carrier is unchanged\n");
+    root = cJSON_Parse(LINEAR_NET);
+    if (!root) { ok("parse", false); return; }
+    ok("loads", gia_model_load(&m, root));
+    ok("exactly one implicit carrier", gia_carrier_count(&m) == 1);
+    ok("it is the empty name", !strcmp(gia_carrier_name(&m, 0), ""));
+    close_to("conservation is unchanged from before carriers existed",
+             gia_conservation_residual(&m, 2.0), 0.0, 1e-9);
+    gia_model_free(&m);
+    cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -981,6 +1127,9 @@ int main(void) {
     test_exchange_law();
     test_emergy();
     test_emergy_feedback();
+    test_carriers();
+    test_carrier_validation();
+    test_carrier_default();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

@@ -797,7 +797,50 @@ bool gia_system_is_closed(const gia_model *m) {
     return true;
 }
 
-double gia_conservation_residual(const gia_model *m, double t) {
+int gia_carrier_count(const gia_model *m) {
+    int i, j, n = 0;
+    if (!m) return 1;
+    for (i = 0; i < m->n_nodes; i++) {
+        const char *c = m->nodes[i].carrier ? m->nodes[i].carrier : "";
+        int seen = 0;
+        for (j = 0; j < i; j++) {
+            const char *d = m->nodes[j].carrier ? m->nodes[j].carrier : "";
+            if (!strcmp(c, d)) { seen = 1; break; }
+        }
+        if (!seen) n++;
+    }
+    return n > 0 ? n : 1;
+}
+
+const char *gia_carrier_name(const gia_model *m, int idx) {
+    int i, j, n = 0;
+    if (!m || idx < 0) return "";
+    for (i = 0; i < m->n_nodes; i++) {
+        const char *c = m->nodes[i].carrier ? m->nodes[i].carrier : "";
+        int seen = 0;
+        for (j = 0; j < i; j++) {
+            const char *d = m->nodes[j].carrier ? m->nodes[j].carrier : "";
+            if (!strcmp(c, d)) { seen = 1; break; }
+        }
+        if (seen) continue;
+        if (n == idx) return c;
+        n++;
+    }
+    return "";
+}
+
+int gia_node_carrier(const gia_model *m, int node_idx) {
+    int k, n;
+    const char *c;
+    if (!m || node_idx < 0 || node_idx >= m->n_nodes) return 0;
+    c = m->nodes[node_idx].carrier ? m->nodes[node_idx].carrier : "";
+    n = gia_carrier_count(m);
+    for (k = 0; k < n; k++)
+        if (!strcmp(c, gia_carrier_name(m, k))) return k;
+    return 0;
+}
+
+double gia_conservation_residual_for(const gia_model *m, double t, int carrier) {
     double *q, s0 = 0.0, st = 0.0;
     int     i;
     if (!m || m->n_nodes <= 0) return 0.0;
@@ -806,11 +849,27 @@ double gia_conservation_residual(const gia_model *m, double t) {
     if (!gia_network_state(m, t, q, NULL)) { free(q); return 0.0; }
     for (i = 0; i < m->n_nodes; i++) {
         if (!m->nodes[i].integrates) continue;
+        if (gia_node_carrier(m, i) != carrier) continue;
         s0 += m->nodes[i].q0;
         st += q[i];
     }
     free(q);
     return fabs(st - s0);
+}
+
+double gia_conservation_residual(const gia_model *m, double t) {
+    int    k, n;
+    double worst = 0.0;
+    if (!m) return 0.0;
+    /* The maximum, not the sum. A sum would let a surplus in one carrier
+     * cancel a deficit in another and report zero -- which is the defect
+     * carriers exist to remove, not one to carry forward. */
+    n = gia_carrier_count(m);
+    for (k = 0; k < n; k++) {
+        double r = gia_conservation_residual_for(m, t, k);
+        if (r > worst) worst = r;
+    }
+    return worst;
 }
 
 /* ================================================================== *
@@ -1051,6 +1110,7 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         }
         phi_for_node(nd, jn);
         nd->quality_input = num_field(jn, "quality_input", 0.0);
+        nd->carrier       = str_field(jn, "carrier", "");
 
         /* Live quantity for the network solution, and whether it is solved for.
          * Odum holds a source at its value rather than integrating it (1972
@@ -1140,6 +1200,61 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                 fprintf(stderr,
                         "engine: warning: edge %d references an unknown node; "
                         "it will not contribute to ordinality\n", i);
+        }
+    }
+
+    /* A pathway may not cross carriers. Grain does not become money by flowing
+     * along an edge -- it is exchanged for money, and that coupling is what the
+     * transaction diamond is for. Anything else moving quantity between
+     * incommensurable stocks is a modelling error, so it is named rather than
+     * quietly integrated. */
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *ed = &m->edges[i];
+        if (ed->from < 0 || ed->to < 0) continue;
+        if (ed->logic == GIA_LOGIC_EXCHANGE) continue;
+        if (gia_node_carrier(m, ed->from) != gia_node_carrier(m, ed->to)) {
+            fprintf(stderr,
+                    "engine: edge %d ('%s' -> '%s'): carrier '%s' cannot flow "
+                    "into carrier '%s'; use logic \"exchange\" to couple two "
+                    "carriers by price (Odum 1972 SecXV)\n",
+                    i, m->nodes[ed->from].id, m->nodes[ed->to].id,
+                    gia_carrier_name(m, gia_node_carrier(m, ed->from)),
+                    gia_carrier_name(m, gia_node_carrier(m, ed->to)));
+            gia_model_free(m);
+            return false;
+        }
+    }
+
+    /* An exchange must couple DIFFERENT carriers, and its currency legs must
+     * both hold the counter-carrier. Paying for goods with goods is not a
+     * transaction. */
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *ed = &m->edges[i];
+        int primary, cf, ct;
+        if (ed->logic != GIA_LOGIC_EXCHANGE) continue;
+        if (ed->from < 0 || ed->to < 0) continue;
+        if (ed->cur_from < 0 || ed->cur_to < 0) {
+            fprintf(stderr, "engine: edge %d: exchange needs currency_origin "
+                            "and currency_target\n", i);
+            gia_model_free(m);
+            return false;
+        }
+        primary = gia_node_carrier(m, ed->from);
+        cf      = gia_node_carrier(m, ed->cur_from);
+        ct      = gia_node_carrier(m, ed->cur_to);
+        if (cf != ct) {
+            fprintf(stderr, "engine: edge %d: the two currency legs hold "
+                            "different carriers ('%s' and '%s')\n", i,
+                    gia_carrier_name(m, cf), gia_carrier_name(m, ct));
+            gia_model_free(m);
+            return false;
+        }
+        if (cf == primary && gia_carrier_count(m) > 1) {
+            fprintf(stderr, "engine: edge %d: exchange pays for carrier '%s' "
+                            "with the same carrier; a transaction couples two\n",
+                    i, gia_carrier_name(m, primary));
+            gia_model_free(m);
+            return false;
         }
     }
 
