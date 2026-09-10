@@ -361,8 +361,21 @@ jobs:
   # builds and its design tokens inline, and gssk.js/gssk.wasm are covered by
   # the wasm job.
   # ────────────────────────────────────────────────────────────
+  # Documentation.
+  #
+  # The site is BUILT here and not published anywhere. That is deliberate
+  # rather than an oversight: the documentation is Markdown that GitHub
+  # already renders in the repository, and the Pages deploy that used to
+  # publish it also published a demo assembled from web/, which this
+  # repository does not carry.
+  #
+  # Building it in CI still earns its place. It is what catches a theme that
+  # no longer compiles or a design token that failed to inline — failures
+  # that are invisible in the Markdown sources and would only have shown up
+  # in a deployed artifact nobody now produces.
+  # ────────────────────────────────────────────────────────────
   docs:
-    name: Docs theme & demo assets
+    name: Documentation builds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

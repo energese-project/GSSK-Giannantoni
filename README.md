@@ -1,16 +1,19 @@
-# GSSK: General Systems Simulation Kernel
+# GSSK-Giannantoni
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22339312.svg)](https://doi.org/10.5281/zenodo.22339312)
-[![CI](https://github.com/energese-project/GSSK/actions/workflows/deploy.yml/badge.svg)](https://github.com/energese-project/GSSK/actions/workflows/deploy.yml)
+[![CI](https://github.com/energese-project/GSSK-Giannantoni/actions/workflows/deploy.yml/badge.svg)](https://github.com/energese-project/GSSK-Giannantoni/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Language: C99](https://img.shields.io/badge/language-C99-00599C.svg)](include/gssk.h)
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20WebAssembly-lightgrey.svg)](#building)
 [![Coverage gate](https://img.shields.io/badge/coverage%20gate-%E2%89%A585%25-brightgreen.svg)](#testing)
-[![Docs](https://img.shields.io/badge/docs-VitePress-42b883.svg)](https://energese-project.github.io/GSSK/)
 
-A high-performance C99 numerical engine for General Systems Theory and Howard T. Odum's Energy Systems Language.
+Two C99 engines over Howard T. Odum's Energy Systems Language: the GSSK kernel, and a second engine implementing Corrado Giannantoni's Incipient Differential Calculus and Maximum Ordinality Principle.
 
-A model is a JSON description of storages, sources, sinks and the pathways between them. GSSK integrates the resulting system of ordinary differential equations — Euler, RK4, or adaptive Dormand–Prince — and tracks several carriers independently over the same network: energy, material, money, information. Odum's symbol vocabulary is implemented as node primitives and composite archetypes, with emergy and transformity accounting over the same topology, and deterministic snapshot/replay for reproducible runs. Bindings are provided for C, Python, JavaScript/WebAssembly and Swift.
+Forked from [energese-project/GSSK](https://github.com/energese-project/GSSK) to pursue the Giannantoni framework independently. The C surface is carried over; the Swift, Python, JavaScript and web trees are not.
+
+A model is a JSON description of storages, sources, sinks and the pathways between them. GSSK integrates the resulting system of ordinary differential equations — Euler, RK4, or adaptive Dormand–Prince — and tracks several carriers independently over the same network: energy, material, money, information. Odum's symbol vocabulary is implemented as node primitives and composite archetypes, with emergy and transformity accounting over the same topology, and deterministic snapshot/replay for reproducible runs. The C API is the surface; WebAssembly is built from the same sources.
+
+`bin/giannantoni_sim` is the second engine. It solves a network by matrix exponential rather than by stepping — `Q(t) = exp(A t) Q(0)`, exact wherever the flow matrix is constant — reports the derivative drift between the incipient and traditional calculi, carries emergy under Odum's non-conservative algebra, and can add components to a graph that is below maximum ordinality. It deliberately shares no headers with the kernel; [ADR 0011](docs/adr/0011-two-engines-declared-lossy-projection.md) records why.
 
 ## Quick Demo
 
@@ -42,13 +45,13 @@ The decay model follows Q(t) = 100·exp(−0.05·t). The household model has 23 
 make test
 ```
 
-### Python binding demo
+### The Giannantoni engine
 
 ```bash
-make demo-python
+make demo-giannantoni
 ```
 
-Prints model name, node/edge/carrier counts, final state, and an error check against the analytical solution.
+Runs the same binary three times with no configuration change between them. A seed below maximum ordinality gains a component and reports a generative run; one already closed reports a functional run; feeding the first run's own output back in is a fixed point. Which mode a run was in is decided by diffing the output graph against the seed, not by trusting a flag.
 
 ### Benchmark
 
@@ -67,9 +70,7 @@ make bench
 - `tests/` — Regression suite, fuzz target, fuzz corpus
 - `examples/` — Reference JSON models
 - `bench/` — Benchmark runner and generated models
-- `python/` — Python ctypes binding
-- `js/` — JavaScript/TypeScript WASM wrapper
-- `docs/` — VitePress documentation source
+- `docs/` — Markdown documentation, read here in the repository
 - `scripts/` — Release tooling
 
 ## Building
@@ -77,13 +78,13 @@ make bench
 ### Prerequisites
 - GCC or Clang
 - Make
-- Python 3 (for Python binding and bench-gen)
+- Python 3 (for the schema validator and bench-gen)
 
 ### Build
 
 ```bash
 make            # native library + CLI
-make shared     # shared library for Python binding
+make shared     # shared library
 make wasm       # WebAssembly (requires emscripten)
 ```
 
@@ -91,8 +92,8 @@ make wasm       # WebAssembly (requires emscripten)
 
 ```bash
 make test              # regression suite (CSV diff)
-make test-python       # Python binding (31 tests)
-swift test             # Swift binding (61 tests)
+make test-giannantoni  # the Giannantoni engine
+make bench-giannantoni # incipient closed form vs RK4 and Euler
 make test-asan         # AddressSanitizer + UBSan (requires clang)
 make coverage-check    # lcov coverage gate ≥ 85%
 make test-valgrind     # Valgrind leak check (Linux)
@@ -101,17 +102,20 @@ make fuzz-run          # 30 s LibFuzzer run (requires clang)
 
 ## Documentation
 
-- **[Live Docs](https://energese-project.github.io/GSSK/)** — VitePress site (Concepts, API Reference, Cookbook, Examples)
-- **[Interactive Demo](https://energese-project.github.io/GSSK/demo/)** — browser WASM simulation
+Nothing is published; the documentation is Markdown in this repository and GitHub renders it.
+
 - [docs/concepts.md](docs/concepts.md) — ESL, integration methods, carriers, sensitivity
-- [docs/api-reference.md](docs/api-reference.md) — C / Python / JS / Swift API
+- [docs/odum_1972_conformance.md](docs/odum_1972_conformance.md) — the two engines scored against Odum's 1972 chapter, module by module, and whether the two frameworks support each other
+- [docs/giannantoni_assessment.md](docs/giannantoni_assessment.md) — what the IDC and MOP papers claim, and which claims hold
+- [docs/adr/](docs/adr/) — architecture decisions
+- [docs/api-reference.md](docs/api-reference.md) — C API
 - [docs/cookbook.md](docs/cookbook.md) — parametric sweep, sensitivity, snapshot round-trip
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — release history
 
 ## NPM Installation (GitHub)
 
 ```bash
-npm install energese-project/GSSK#dist
+npm install energese-project/GSSK-Giannantoni#dist
 ```
 
 Installs the pre-compiled WASM binaries and TypeScript definitions.
