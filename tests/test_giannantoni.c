@@ -1327,6 +1327,104 @@ static void test_forcing_refusals(void) {
     }
 }
 
+/* ------------------------------------------------------------------ *
+ * 27. Edge-attached forcing (ADR 0006's other attachment point)
+ *
+ * A driven RATE is a different problem from a driven value, and the
+ * difference is the point of this test. A driven value is additive and, for a
+ * waveform that generates itself, absorbable into A -- so psi stays zero. A
+ * driven rate multiplies the state, k(t)*Q, which no augmentation linearises.
+ *
+ * So this is the only model in the suite whose psi is non-zero without any
+ * multiplicative junction: no interaction, limit, ratio, threshold or subtract
+ * edge appears anywhere in it.
+ * ------------------------------------------------------------------ */
+
+static void test_edge_rate_forcing(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[2], psi = -1.0, err, want, t = 1.5;
+    double     A = 0.4, w = 3.0, off = 0.6;
+
+    printf("\n[27] a driven RATE drifts; a driven VALUE does not\n");
+
+    /* One storage draining through one linear pathway whose RATE is driven:
+     *     dQ/dt = -k(t) Q,  k(t) = off + A sin(w t)
+     *     =>  Q(t) = Q0 exp( -( off t + A (1 - cos w t) / w ) )              */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"tank\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"out\",\"type\":\"sink\",\"value\":0.0}],"
+        " \"edges\":[{\"source\":\"tank\",\"target\":\"out\","
+        "            \"logic\":\"linear\",\"weight\":1.0,"
+        "            \"forcing\":{\"kind\":\"sine\",\"amplitude\":0.4,"
+        "                        \"rate\":3.0,\"offset\":0.6}}],"
+        " \"simulation_params\":{\"t_val\":1.5,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    ok("a rate-forced pathway loads", gia_model_load(&m, root));
+    ok("the pathway's law is plain linear",
+       m.edges[0].logic == GIA_LOGIC_LINEAR);
+    ok("the driver is on the edge, not the node",
+       m.edges[0].forcing.kind == GIA_FORCE_SINE &&
+       m.nodes[0].forcing.kind == GIA_FORCE_NONE);
+
+    /* Unlike the node attachment, this genuinely varies the matrix. */
+    ok("a driven rate makes the flow matrix non-constant",
+       !gia_flow_matrix_is_constant(&m));
+
+    ok("solves", gia_network_state(&m, t, q, &psi));
+
+    /* This is where the closed form ends. k(t)Q is not absorbable, so the
+     * answer is composed over subintervals and carries a real error -- which
+     * is why it is reported rather than hidden. The tolerance below is what
+     * the method actually delivers, not a number chosen to pass. */
+    want = 10.0 * exp(-(off * t + A * (1.0 - cos(w * t)) / w));
+    close_to("tank(t) = Q0 exp(-(off t + A(1-cos wt)/w))", q[0], want, 1e-3);
+
+    /* The headline: drift without a multiplicative junction anywhere. Every
+     * other non-zero psi in this suite comes from state dependence. */
+    ok("psi is non-zero with no interaction, limit, ratio, threshold or "
+       "subtract edge present", psi > 0.0);
+
+    /* And the honesty check. A drift smaller than the integration error of the
+     * trajectory it was derived from would be evidence of nothing, so the
+     * error is reported and the test asserts psi stands clear of it. */
+    err = gia_integration_error(&m, t);
+    {   /* The estimator has to be worth trusting, so check it against the
+         * error we can actually measure: it should be the same size, not
+         * merely small. A bound that quietly understates is worse than none,
+         * because psi is read against it. */
+        double truth = fabs(q[0] - want);
+        printf("      psi %.6g, reported error %.3e, true error %.3e\n",
+               psi, err, truth);
+        ok("the reported error is a fair estimate of the true error",
+           err > 0.5 * truth && err < 2.0 * truth);
+    }
+    ok("the composed solution's error is smaller than the drift", err < psi);
+    ok("so psi is measuring the calculi, not the integrator", psi > 100.0 * err);
+
+    gia_model_free(&m);
+    cJSON_Delete(root);
+}
+
+static void test_constant_matrix_has_no_integration_error(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[28] a constant matrix composes nothing, so it costs nothing\n");
+    root = cJSON_Parse(LINEAR_NET);
+    if (!root) { ok("parse", false); return; }
+    ok("loads", gia_model_load(&m, root));
+    ok("the matrix is constant", gia_flow_matrix_is_constant(&m));
+    /* One exponential IS the answer here, so there is no composition and
+     * nothing to lose accuracy to. */
+    close_to("integration error is exactly zero",
+             gia_integration_error(&m, 2.0), 0.0, 0.0);
+    gia_model_free(&m);
+    cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -1356,6 +1454,8 @@ int main(void) {
     test_exchange_self_payment();
     test_forcing();
     test_forcing_refusals();
+    test_edge_rate_forcing();
+    test_constant_matrix_has_no_integration_error();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

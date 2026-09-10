@@ -360,6 +360,11 @@ typedef struct {
     int         cur_from;    /* currency leg paying, for exchange edges */
     int         cur_to;      /* currency leg receiving, for exchange edges */
     gia_output_mode out_mode;/* partition (split) or replicate (co-product) */
+    gia_forcing  forcing;    /* drives the RATE k; ADR 0006 edge attachment.
+                              * Unlike the node attachment this is NOT
+                              * absorbable: the flow becomes k(t)*Q, bilinear
+                              * in driver and state, so the matrix genuinely
+                              * depends on t and the closed form ends here. */
 } gia_edge;
 
 typedef struct {
@@ -398,7 +403,8 @@ void gia_model_free(gia_model *m);
  * pins the phantom component at 1.
  *
  * Returns false on allocation failure. */
-bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out);
+bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
+                           gia_matrix *out);
 
 /* True when the flow matrix is the same at two different operating points, i.e.
  * when A is constant and the incipient solution is exact and closed-form. */
@@ -417,6 +423,18 @@ bool gia_flow_matrix_is_constant(const gia_model *m);
  * the Illinois method, as the kernel does. */
 bool gia_network_state(const gia_model *m, double t, double *out,
                        double *out_drift);
+
+/* Richardson estimate of the integration error in Q(t), from the difference
+ * between the composed solution and one computed with twice as many
+ * subintervals, scaled by 4/3 because the step is second order and the raw
+ * difference is only three quarters of the error it is estimating.
+ *
+ * Exactly zero when the flow matrix is constant, because there is nothing being
+ * composed -- the single exponential IS the answer. Non-zero only where the
+ * engine had to compose, and it exists so that a reported psi can be read
+ * against it: a drift smaller than the integration error of the trajectory it
+ * came from is not evidence of anything. */
+double gia_integration_error(const gia_model *m, double t);
 
 /* Number of switching crossings located over [0, t]. Zero for a smooth model.
  * A non-zero count is the reason the solution over that span is piecewise

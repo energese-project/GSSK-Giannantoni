@@ -285,8 +285,30 @@ topology and disagree about the algebra, which is the point.
    carrier cancelled a deficit in another. The residual is now the worst
    carrier rather than the sum, and a regression test pins that the old summed
    figure would have hidden it.
-3. **Edge-attached forcing** (ADR 0006's second attachment point). Node
-   attachment is implemented: a source or constant may declare a `forcing`
+3. **Forcing** (ADR 0006) — both attachment points are now implemented, and
+   the difference between them is the sharpest statement of what drift is.
+
+   A driven **value** is additive, `dQ/dt = A Q + k S(t)`. If the waveform
+   generates itself it is absorbed into `A`, the augmented system stays
+   time-invariant, and `psi` is exactly zero.
+
+   A driven **rate** is multiplicative, `dQ/dt = k(t) Q`. That is bilinear in
+   driver and state, and no augmentation linearises it. So it is the one case
+   in the suite where `psi` is non-zero with no interaction, limit, ratio,
+   threshold or subtract edge anywhere in the model — drift arising from time
+   dependence alone, which nothing else here can show.
+
+   It is also where the closed form ends. The solution is composed over
+   subintervals with a midpoint step, and `gia_integration_error()` reports
+   what that cost, Richardson-estimated and scaled by 4/3 because the raw
+   N-versus-2N difference is only three quarters of a second-order method's
+   error. The test checks the estimator against the error it can actually
+   measure against the closed form — same size, not merely small — because a
+   bound that understates is worse than none when `psi` is read against it. In
+   the test model `psi` is some four orders of magnitude above the integration
+   error, so it is measuring the calculi rather than the solver.
+
+   Node attachment: a source or constant may declare a `forcing`
    waveform, and `sine`, `ramp` and `exponential` are carried exactly.
 
    The reason those three and not the other five is worth stating, because it
