@@ -523,7 +523,8 @@ static bool edge_is_open(const gia_edge *e, const double *q) {
     return true;
 }
 
-bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out) {
+bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
+                           gia_matrix *out) {
     int i, n, dim;
     if (!m || !out || m->n_nodes <= 0) return false;
     n   = m->n_nodes;
@@ -558,10 +559,15 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
     for (i = 0; i < m->n_edges; i++) {
         const gia_edge *e = &m->edges[i];
         int    a = e->from, b = e->to;
-        double g;
+        double g, k_t;
         bool   drain_a, fill_b;
 
         if (a < 0 || b < 0) continue;
+
+        /* ADR 0006 edge attachment: the waveform drives the RATE. Evaluated at
+         * t rather than carried as state, because k(t)*Q is bilinear and there
+         * is no augmentation that makes it linear again. */
+        k_t = gia_forcing_value(&e->forcing, e->weight, t);
 
         /* Odum SecV: a heat sink absorbs and is never depleted, so a pathway
          * leaving one contributes no drain term. A held component (source or
@@ -573,8 +579,8 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
             case GIA_LOGIC_CONSTANT:
                 /* F = k, independent of state: an affine term, so it lands in
                  * the augmented column rather than in a conductance. */
-                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)n] -= e->weight;
-                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)n] += e->weight;
+                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)n] -= k_t;
+                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)n] += k_t;
                 continue;
 
             case GIA_LOGIC_THRESHOLD:
@@ -582,8 +588,8 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
                  * Also affine. The discontinuity is handled by the event loop
                  * in gia_network_state, not here. */
                 if (!edge_is_open(e, q)) continue;
-                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)n] -= e->weight;
-                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)n] += e->weight;
+                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)n] -= k_t;
+                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)n] += k_t;
                 continue;
 
             case GIA_LOGIC_GAIN: {
@@ -591,8 +597,8 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
                  * origin supplies the power but does not scale the flow, so the
                  * entry sits in the control's column. */
                 int c = (e->control >= 0) ? e->control : b;
-                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)c] -= e->weight;
-                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)c] += e->weight;
+                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)c] -= k_t;
+                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)c] += k_t;
                 continue;
             }
 
@@ -604,12 +610,12 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
                 int c = (e->control >= 0) ? e->control : b;
                 if (!edge_is_open(e, q)) continue;
                 if (drain_a) {
-                    out->a[(size_t)a*(size_t)dim+(size_t)a] -= e->weight;
-                    out->a[(size_t)a*(size_t)dim+(size_t)c] += e->weight;
+                    out->a[(size_t)a*(size_t)dim+(size_t)a] -= k_t;
+                    out->a[(size_t)a*(size_t)dim+(size_t)c] += k_t;
                 }
                 if (fill_b) {
-                    out->a[(size_t)b*(size_t)dim+(size_t)a] += e->weight;
-                    out->a[(size_t)b*(size_t)dim+(size_t)c] -= e->weight;
+                    out->a[(size_t)b*(size_t)dim+(size_t)a] += k_t;
+                    out->a[(size_t)b*(size_t)dim+(size_t)c] -= k_t;
                 }
                 continue;
             }
@@ -621,7 +627,7 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
                 int    c  = (e->control >= 0) ? e->control : b;
                 double qc = q ? q[c] : 1.0;
                 if (qc < GIA_EPS) qc = GIA_EPS;
-                g = e->weight / qc;
+                g = k_t / qc;
                 break;
             }
 
@@ -638,7 +644,7 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
                  * discovery from the diamond's shape, gating on the money
                  * stock, and a price resolved from a node rather than fixed
                  * (ADR 0001). Price is constant and the legs are named. */
-                double k = e->weight;
+                double k = k_t;
                 double P = (fabs(e->price) > GIA_EPS) ? e->price : 1.0;
                 if (drain_a) add_origin_term(m, out, dim, a, a, -k);
                 if (fill_b)  add_origin_term(m, out, dim, b, a,  k);
@@ -650,7 +656,7 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
             }
 
             case GIA_LOGIC_LINEAR:
-                g = e->weight;
+                g = k_t;
                 break;
 
             case GIA_LOGIC_INTERACTION: {
@@ -658,19 +664,19 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, gia_matrix *out)
                  * point by folding the control into the conductance. This is
                  * where A stops being constant, and so where psi appears. */
                 double qc = (e->control >= 0 && q) ? q[e->control] : 1.0;
-                g = e->weight * qc;
+                g = k_t * qc;
                 break;
             }
 
             case GIA_LOGIC_LIMIT: {
                 double qa = q ? q[a] : 0.0;
                 double C  = (e->capacity > GIA_EPS) ? e->capacity : 1.0;
-                g = e->weight * C / (C + qa);
+                g = k_t * C / (C + qa);
                 break;
             }
 
             case GIA_LOGIC_REVERSIBLE:
-                g = e->weight;
+                g = k_t;
                 break;
 
             default:
@@ -692,6 +698,10 @@ bool gia_flow_matrix_is_constant(const gia_model *m) {
     int i;
     if (!m) return true;
     for (i = 0; i < m->n_edges; i++) {
+        /* A driven RATE is the one kind of time dependence that cannot be
+         * absorbed. A driven node VALUE can be, which is why the node
+         * attachment leaves this true -- see the note above. */
+        if (m->edges[i].forcing.kind != GIA_FORCE_NONE) return false;
         switch (m->edges[i].logic) {
             case GIA_LOGIC_INTERACTION:  /* folds a control into the conductance */
             case GIA_LOGIC_LIMIT:        /* conductance depends on the origin    */
@@ -733,7 +743,12 @@ static bool has_switching(const gia_model *m) {
  * Uses the augmented (n+1) form so constant and open-threshold pathways, which
  * contribute a rate rather than a conductance, are carried exactly. */
 static bool advance_from(const gia_model *m, const double *q, double t0,
-                         double h, double *out) {
+                         double h, double *out);
+
+/* Build A at `at` (state) and `t_at` (time), then apply exp(A h) to `q`. */
+static bool advance_from_at(const gia_model *m, const double *q,
+                            const double *at, double t_at, double t0, double h,
+                            double *out) {
     gia_matrix A, Ah, E;
     double    *x = NULL;
     int        i, j, n = m->n_nodes, dim;
@@ -742,15 +757,15 @@ static bool advance_from(const gia_model *m, const double *q, double t0,
     memset(&A, 0, sizeof(A)); memset(&Ah, 0, sizeof(Ah)); memset(&E, 0, sizeof(E));
     dim = n + forcing_extra_count(m) + 1;
 
-    if (!gia_build_flow_matrix(m, q, &A)) goto done;
+    if (!gia_build_flow_matrix(m, at, t_at, &A)) goto done;
     if (!gia_matrix_init(&Ah, dim))       goto done;
     for (i = 0; i < dim * dim; i++) Ah.a[i] = A.a[i] * h;
     if (!gia_matrix_exp(&Ah, &E))         goto done;
 
-    /* Full augmented state at t0: components, then each waveform's own state,
-     * then the phantom 1. The waveform states are evaluated AT t0 rather than
-     * reset, so a run broken at an event resumes the driver where it left off
-     * instead of restarting it. */
+    /* Full augmented state at the interval start: components, then each
+     * waveform's own state, then the phantom 1. The waveform states are
+     * evaluated there rather than reset, so a run broken at an event resumes
+     * the driver where it left off instead of restarting it. */
     x = (double *)calloc((size_t)dim, sizeof(double));
     if (!x) goto done;
     for (i = 0; i < n; i++) x[i] = q[i];
@@ -780,6 +795,58 @@ done:
     free(x);
     gia_matrix_free(&A); gia_matrix_free(&Ah); gia_matrix_free(&E);
     return ok;
+}
+
+/* One midpoint step.
+ *
+ * advance_from() freezes A at the interval's midpoint IN TIME but at its start
+ * IN STATE. That is first order where A depends on the state. Predicting to
+ * the midpoint first and rebuilding A there makes the step second order, which
+ * matters once the matrix genuinely varies: without it a rate-forced or
+ * interaction model was being solved with A frozen across the whole horizon. */
+static bool advance_mid(const gia_model *m, const double *q, double t0,
+                        double h, double *out) {
+    double *mid;
+    bool    ok;
+    int     n = m->n_nodes;
+
+    if (h <= 0.0) { memcpy(out, q, (size_t)n * sizeof(double)); return true; }
+
+    mid = (double *)malloc((size_t)n * sizeof(double));
+    if (!mid) return false;
+    if (!advance_from(m, q, t0, 0.5 * h, mid)) { free(mid); return false; }
+    /* Rebuild at the predicted midpoint, then take the whole step from q. */
+    ok = advance_from_at(m, q, mid, t0 + 0.5 * h, t0, h, out);
+    free(mid);
+    return ok;
+}
+
+/* Compose a span out of `steps` midpoint steps. One step is exact when A is
+ * constant, so the composition costs nothing in that case and is skipped. */
+static bool advance_span(const gia_model *m, const double *q, double t0,
+                         double h, int steps, double *out) {
+    double *cur;
+    int     i, n = m->n_nodes;
+    bool    ok = true;
+
+    if (steps < 1) steps = 1;
+    if (steps == 1) return advance_mid(m, q, t0, h, out);
+
+    cur = (double *)malloc((size_t)n * sizeof(double));
+    if (!cur) return false;
+    memcpy(cur, q, (size_t)n * sizeof(double));
+    for (i = 0; i < steps && ok; i++) {
+        ok = advance_mid(m, cur, t0 + (double)i * h / steps, h / steps, out);
+        if (ok) memcpy(cur, out, (size_t)n * sizeof(double));
+    }
+    memcpy(out, cur, (size_t)n * sizeof(double));
+    free(cur);
+    return ok;
+}
+
+static bool advance_from(const gia_model *m, const double *q, double t0,
+                         double h, double *out) {
+    return advance_from_at(m, q, q, t0 + 0.5 * h, t0, h, out);
 }
 
 static bool advance(const gia_model *m, const double *q, double h, double *out) {
@@ -851,9 +918,18 @@ static double locate_event(const gia_model *m, const double *q0, double span,
 
 #define GIA_MAX_EVENTS 64
 
+/* Subintervals used when the flow matrix is not constant.
+ *
+ * When A IS constant the single exponential is the exact answer and this is
+ * bypassed entirely, so the cost is only paid where there is something to
+ * compose. gia_integration_error() reports what the composition cost in
+ * accuracy, by comparing against twice as many. */
+#define GIA_SUBSTEPS 64
+
 /* Walk [0, t], breaking at each located crossing. Fills `out`; when
  * `out_events` is non-NULL it receives the number of crossings taken. */
-static bool run_to(const gia_model *m, double t, double *out, int *out_events) {
+static bool run_to_n(const gia_model *m, double t, int substeps,
+                     double *out, int *out_events) {
     int     n = m->n_nodes, i, events = 0;
     double *cur = NULL, *nxt = NULL, *work = NULL;
     double  elapsed = 0.0;
@@ -873,7 +949,10 @@ static bool run_to(const gia_model *m, double t, double *out, int *out_events) {
         double h    = has_switching(m) ? locate_event(m, cur, span, work) : span;
 
         if (h <= 0.0 || h > span) h = span;
-        if (!advance(m, cur, h, nxt)) goto done;
+        /* One exponential is exact for a constant A; otherwise compose. */
+        if (!advance_span(m, cur, elapsed, h,
+                          gia_flow_matrix_is_constant(m) ? 1 : substeps,
+                          nxt)) goto done;
 
         memcpy(cur, nxt, (size_t)n * sizeof(double));
         elapsed += h;
@@ -883,7 +962,7 @@ static bool run_to(const gia_model *m, double t, double *out, int *out_events) {
              * is re-evaluated on the far side rather than re-locating the same
              * crossing forever. */
             double eps = (t > 0.0) ? t * 1e-9 : 1e-12;
-            if (!advance(m, cur, eps, nxt)) goto done;
+            if (!advance_from(m, cur, elapsed, eps, nxt)) goto done;
             memcpy(cur, nxt, (size_t)n * sizeof(double));
             elapsed += eps;
             events++;
@@ -895,6 +974,43 @@ static bool run_to(const gia_model *m, double t, double *out, int *out_events) {
 done:
     free(cur); free(nxt); free(work);
     return ok;
+}
+
+static bool run_to(const gia_model *m, double t, double *out, int *out_events) {
+    return run_to_n(m, t, GIA_SUBSTEPS, out, out_events);
+}
+
+double gia_integration_error(const gia_model *m, double t) {
+    double *a = NULL, *b = NULL, worst = 0.0;
+    int     i, n;
+
+    if (!m || m->n_nodes <= 0) return 0.0;
+    /* Nothing is composed when A is constant: the single exponential IS the
+     * answer, so there is no integration error to report. */
+    if (gia_flow_matrix_is_constant(m)) return 0.0;
+
+    n = m->n_nodes;
+    a = (double *)malloc((size_t)n * sizeof(double));
+    b = (double *)malloc((size_t)n * sizeof(double));
+    if (!a || !b) { free(a); free(b); return 0.0; }
+
+    if (run_to_n(m, t, GIA_SUBSTEPS,     a, NULL) &&
+        run_to_n(m, t, GIA_SUBSTEPS * 2, b, NULL)) {
+        for (i = 0; i < n; i++) {
+            double d = fabs(b[i] - a[i]);
+            if (d > worst) worst = d;
+        }
+        /* The raw difference between N and 2N steps is not the error of the
+         * N-step answer -- it is the error times (1 - 2^-p) for a method of
+         * order p. The step here is midpoint, so p = 2 and the factor is 3/4;
+         * scaling by 4/3 turns the difference into an estimate of the error
+         * actually carried. Without this the reported figure understates the
+         * error by a quarter, which for a number whose whole job is to be
+         * compared against psi is the wrong direction to be wrong in. */
+        worst *= 4.0 / 3.0;
+    }
+    free(a); free(b);
+    return worst;
 }
 
 int gia_count_events(const gia_model *m, double t) {
@@ -930,8 +1046,10 @@ bool gia_network_state(const gia_model *m, double t, double *out,
             q0 = (double *)malloc((size_t)n * sizeof(double));
             if (q0) {
                 for (i = 0; i < n; i++) q0[i] = m->nodes[i].q0;
-                if (gia_build_flow_matrix(m, q0, &A0) &&
-                    gia_build_flow_matrix(m, out, &A1)) {
+                /* A0 at the start, A1 at the end -- so this captures a matrix that
+                 * varies with t as well as one that varies with the state. */
+                if (gia_build_flow_matrix(m, q0, 0.0, &A0) &&
+                    gia_build_flow_matrix(m, out, t, &A1)) {
                     for (i = 0; i < n; i++) {
                         double di = gia_matrix_at(&A0, i, n);
                         double dt_ = gia_matrix_at(&A1, i, n);
@@ -1384,6 +1502,32 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                                       str_field(je, "currency_origin", NULL)));
             ed->cur_to    = find_node(m, str_field(je, "counter_target",
                                       str_field(je, "currency_target", NULL)));
+            {   /* ADR 0006's second attachment point: the same waveform
+                 * vocabulary, driving this pathway's rate rather than a
+                 * component's held value. */
+                const cJSON *fj = cJSON_GetObjectItemCaseSensitive(je, "forcing");
+                memset(&ed->forcing, 0, sizeof(ed->forcing));
+                ed->forcing.kind = GIA_FORCE_NONE;
+                if (cJSON_IsObject(fj)) {
+                    const char *kind = str_field(fj, "kind", "none");
+                    if      (!strcmp(kind, "none")) ed->forcing.kind = GIA_FORCE_NONE;
+                    else if (!strcmp(kind, "sine")) ed->forcing.kind = GIA_FORCE_SINE;
+                    else if (!strcmp(kind, "ramp")) ed->forcing.kind = GIA_FORCE_RAMP;
+                    else if (!strcmp(kind, "exponential"))
+                                                    ed->forcing.kind = GIA_FORCE_EXPONENTIAL;
+                    else {
+                        fprintf(stderr, "engine: edge %d: forcing kind '%s' is "
+                                        "not implemented\n", i, kind);
+                        gia_model_free(m);
+                        return false;
+                    }
+                    ed->forcing.amplitude = num_field(fj, "amplitude", 1.0);
+                    ed->forcing.rate      = num_field(fj, "rate",
+                                            num_field(fj, "frequency", 1.0));
+                    ed->forcing.phase     = num_field(fj, "phase", 0.0);
+                    ed->forcing.offset    = num_field(fj, "offset", 0.0);
+                }
+            }
             {   /* docs/emergy_synthesis.md 8: partition is the default, because
                  * a split is the ordinary case and co-production is the claim. */
                 const char *om = str_field(je, "output_mode", "partition");
@@ -1531,6 +1675,15 @@ double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q,
     if (!m->nodes[e->from].integrates &&
         m->nodes[e->from].forcing.kind != GIA_FORCE_NONE)
         qa = gia_forcing_value(&m->nodes[e->from].forcing, qa, t);
+
+    {   /* The emergy pass carries Tr along F, so F must use the driven rate. */
+        double k = gia_forcing_value(&e->forcing, e->weight, t);
+        gia_edge driven = *e;
+        driven.forcing.kind = GIA_FORCE_NONE;
+        driven.weight = k;
+        if (e->forcing.kind != GIA_FORCE_NONE)
+            return gia_edge_flow(m, &driven, q, t);
+    }
 
     switch (e->logic) {
         case GIA_LOGIC_LINEAR:      return e->weight * qa;
