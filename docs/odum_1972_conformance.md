@@ -334,6 +334,38 @@ topology and disagree about the algebra, which is the point.
 5. **The n-et for n ≥ 3.** Open in Giannantoni's own papers; multiplicative
    chains take the Padé linearisation with `ψ` reported.
 
+### The Level 1 claim, measured
+
+`docs/giannantoni_assessment.md` §5.3 makes a claim it flags as unquantified:
+that any system modelled through the MOP lens has an explicit solution. The
+projection of ADR 0011 turns that into a number. Over the 24 GSSK models in
+`examples/`:
+
+    mean coverage 92.3%     none below 71%
+
+What stops the remaining 7.7% is not scattered. It is four named things, each
+already recorded:
+
+| blocker | models | recorded in |
+|---|---|---|
+| a processing node's law lives in its own `params` | 3 | below |
+| endogenous price resolved from a node | 4 | ADR 0001 |
+| composites and user archetypes | 2 | ADR 0010 |
+| n-ary interaction, more than one control node | 1 | ADR 0008 |
+
+The first is an architectural difference worth stating on its own, because it
+was not visible until the projection measured it. **GSSK configures a
+processing node through the node's own `params` block; this engine puts laws on
+pathways.** A GSSK `interaction`, `gain`, `loop_limited`, `exchange` or
+`switch` node carrying parameters has nowhere to put them here, and a node
+emitted without them is a storage wearing the name. The projection drops it and
+says so, rather than producing a model that runs and is not the one anybody
+wrote.
+
+That rule matters more than the percentage. An earlier revision of the
+projection dropped node `params` silently and scored these same models at
+**97.2%** — a figure that was higher, and wrong.
+
 **Odum's mathematics can feed Giannantoni's calculus, module by module, with the
 limits tabulated in §2. Giannantoni's framework cannot yet carry Odum's
 vocabulary.** Any convergence of the two engines has to solve direction two

@@ -126,7 +126,8 @@ MODEL ?= examples/giannantoni/input.json
 
 # Simulation objects. sim_main.o carries the entry point, kept out of
 # engine.o so tests can link the engine without one.
-SIM_OBJS = $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o $(LIB_DIR)/sim_main.o
+SIM_OBJS = $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o \
+           $(LIB_DIR)/projection.o $(LIB_DIR)/sim_main.o
 
 # engine.o, validation.o and sim_main.o are built by the $(LIB_DIR)/%.o
 # pattern rule above; they need no rules of their own.
@@ -189,7 +190,8 @@ bench-giannantoni: directories $(TARGET_BENCH_GIA)
 # ordinality and the generative step.
 TARGET_TEST_GIA = $(BIN_DIR)/test_giannantoni
 
-$(TARGET_TEST_GIA): $(TEST_DIR)/test_giannantoni.c $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o $(TARGET_LIB)
+$(TARGET_TEST_GIA): $(TEST_DIR)/test_giannantoni.c $(LIB_DIR)/engine.o \
+                    $(LIB_DIR)/validation.o $(LIB_DIR)/projection.o $(TARGET_LIB)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 test-giannantoni: directories $(TARGET_TEST_GIA)

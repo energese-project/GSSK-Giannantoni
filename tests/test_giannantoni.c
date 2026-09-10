@@ -1425,6 +1425,129 @@ static void test_constant_matrix_has_no_integration_error(void) {
     cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 29. Projection and coverage (ADR 0011)
+ *
+ * The number exists to make a claim measurable. What matters more than the
+ * fraction is that it never flatters: a component the engine cannot carry is
+ * DROPPED and named, never emitted in a form that looks like it worked.
+ * ------------------------------------------------------------------ */
+
+static void test_projection_full(void) {
+    cJSON        *g, *mop = NULL;
+    gia_coverage  cov;
+
+    printf("\n[29] projection: a model inside the vocabulary scores 100%%\n");
+
+    g = cJSON_Parse(
+        "{\"metadata\":{\"name\":\"linear core\"},"
+        " \"nodes\":[{\"id\":\"sun\",\"type\":\"source\",\"value\":100.0},"
+        "           {\"id\":\"grass\",\"type\":\"storage\",\"value\":10.0}],"
+        " \"edges\":[{\"id\":\"prod\",\"origin\":\"sun\",\"target\":\"grass\","
+        "            \"logic\":\"linear\",\"params\":{\"k\":0.1}}],"
+        " \"config\":{\"t_end\":10.0}}");
+    if (!g) { ok("parse", false); return; }
+
+    ok("projects", gia_project(g, &mop, &cov));
+    close_to("coverage is 1.0", gia_coverage_fraction(&cov), 1.0, 1e-12);
+    ok("nothing was found wanting", cov.n_findings == 0);
+    ok("every node carried", cov.nodes_carried == cov.nodes_total);
+    ok("every edge carried", cov.edges_carried == cov.edges_total);
+
+    /* The projected model must be a model, not a fragment: the MOP engine has
+     * to be able to load and run it. */
+    if (mop) {
+        gia_model m;
+        double    q[2];
+        ok("the projection loads in the MOP engine", gia_model_load(&m, mop));
+        ok("and solves", gia_network_state(&m, 10.0, q, NULL));
+        /* dQ/dt = k * 100 with the source held: Q(10) = 10 + 0.1*100*10 */
+        close_to("grass(10) = 10 + k*100*10", q[1], 110.0, 1e-6);
+        gia_model_free(&m);
+        cJSON_Delete(mop);
+    }
+    cJSON_Delete(g);
+}
+
+static void test_projection_names_its_losses(void) {
+    cJSON        *g, *mop = NULL;
+    gia_coverage  cov;
+    const cJSON  *nodes;
+
+    printf("\n[30] projection: what it cannot carry is named, not substituted\n");
+
+    g = cJSON_Parse(
+        "{\"nodes\":[{\"id\":\"sun\",\"type\":\"source\",\"value\":1.0},"
+        "           {\"id\":\"forest\",\"type\":\"producer\",\"value\":5.0},"
+        "           {\"id\":\"soil\",\"type\":\"storage\",\"value\":0.0}],"
+        " \"edges\":[{\"id\":\"a\",\"origin\":\"sun\",\"target\":\"soil\","
+        "            \"logic\":\"linear\",\"params\":{\"k\":0.1}}]}");
+    if (!g) { ok("parse", false); return; }
+    ok("projects", gia_project(g, &mop, &cov));
+
+    ok("coverage is below 1", gia_coverage_fraction(&cov) < 1.0);
+    ok("a finding was recorded", cov.n_findings == 1);
+    ok("the finding names the blocking module",
+       strstr(cov.finding[0], "producer") != NULL &&
+       strstr(cov.finding[0], "composite") != NULL);
+
+    /* The point: the composite is ABSENT from the output. Emitting it as a
+     * storage would have produced a model that runs and is not the one
+     * anybody wrote. */
+    nodes = cJSON_GetObjectItemCaseSensitive(mop, "nodes");
+    ok("the unprojectable node is absent from the output",
+       cJSON_GetArraySize(nodes) == 2);
+    {
+        const cJSON *it; bool found = false;
+        cJSON_ArrayForEach(it, nodes) {
+            const cJSON *id = cJSON_GetObjectItemCaseSensitive(it, "id");
+            if (cJSON_IsString(id) && !strcmp(id->valuestring, "forest"))
+                found = true;
+        }
+        ok("and was not silently substituted", !found);
+    }
+    cJSON_Delete(mop);
+    cJSON_Delete(g);
+}
+
+static void test_projection_processing_node_params(void) {
+    cJSON        *g, *mop = NULL;
+    gia_coverage  cov;
+
+    printf("\n[31] a processing node's law lives in node params here, on "
+           "pathways there\n");
+
+    /* GSSK Phase 7 configures a processing node through its own params block.
+     * This engine puts laws on pathways, so those parameters have nowhere to
+     * land, and a node emitted without them is a storage wearing the name. */
+    g = cJSON_Parse(
+        "{\"nodes\":[{\"id\":\"gate\",\"type\":\"interaction\",\"value\":0.0,"
+        "            \"params\":{\"k\":0.5}},"
+        "           {\"id\":\"tank\",\"type\":\"storage\",\"value\":1.0}],"
+        " \"edges\":[]}");
+    if (!g) { ok("parse", false); return; }
+    ok("projects", gia_project(g, &mop, &cov));
+    ok("the configured processing node is not carried",
+       cov.nodes_carried == 1 && cov.nodes_total == 2);
+    ok("and the reason names where the law lives",
+       cov.n_findings == 1 && strstr(cov.finding[0], "node params") != NULL);
+    cJSON_Delete(mop);
+    cJSON_Delete(g);
+
+    /* A processing node with no params has no law to lose, so it carries. */
+    g = cJSON_Parse(
+        "{\"nodes\":[{\"id\":\"gate\",\"type\":\"interaction\",\"value\":0.0},"
+        "           {\"id\":\"tank\",\"type\":\"storage\",\"value\":1.0}],"
+        " \"edges\":[]}");
+    if (g) {
+        mop = NULL;
+        ok("an unconfigured processing node carries",
+           gia_project(g, &mop, &cov) && cov.nodes_carried == 2);
+        cJSON_Delete(mop);
+        cJSON_Delete(g);
+    }
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -1456,6 +1579,9 @@ int main(void) {
     test_forcing_refusals();
     test_edge_rate_forcing();
     test_constant_matrix_has_no_integration_error();
+    test_projection_full();
+    test_projection_names_its_losses();
+    test_projection_processing_node_params();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

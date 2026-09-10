@@ -176,6 +176,7 @@ int main(int argc, char **argv) {
     const char *model_path = NULL;
     const char *csv_path   = DEFAULT_CSV;
     bool        show_table = false;
+    bool        project    = false;
     const char *out_path   = DEFAULT_OUT;
     const char *seed_path  = NULL;
     int         steps      = DEFAULT_STEPS;
@@ -203,6 +204,8 @@ int main(int argc, char **argv) {
             steps = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--seed") && i + 1 < argc) {
             seed_path = argv[++i];
+        } else if (!strcmp(argv[i], "--project")) {
+            project = true;
         } else if (!strcmp(argv[i], "--print")) {
             show_table = true;
         } else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
@@ -210,6 +213,9 @@ int main(int argc, char **argv) {
                    "[--steps N] [--print] [--seed PATH]\n", argv[0]);
             printf("  model.json defaults to %s\n", DEFAULT_MODEL);
             printf("  --print  also render the trajectories on stdout\n");
+            printf("  --project  read the file as a GSSK-schema model, report\n");
+            printf("           what fraction of it this engine can carry, and\n");
+            printf("           run the projection\n");
             printf("  --seed   where to write the re-serialised seed for\n");
             printf("           diffing (default: <out> with .seed before .json)\n");
             return EXIT_SUCCESS;
@@ -236,6 +242,23 @@ int main(int argc, char **argv) {
         if (err) fprintf(stderr, " (near: %.32s)", err);
         fprintf(stderr, "\n");
         goto done;
+    }
+
+    if (project) {
+        /* ADR 0011: one-way, and it declares what it drops. The report names
+         * the blocking modules rather than publishing a bare percentage,
+         * because a score below 100%% is a fact about this model and not a
+         * verdict on the framework. */
+        cJSON        *projected = NULL;
+        gia_coverage  cov;
+        if (!gia_project(root, &projected, &cov)) {
+            fprintf(stderr, "%s does not look like a GSSK-schema model\n",
+                    model_path);
+            goto done;
+        }
+        gia_report_coverage(&cov);
+        cJSON_Delete(root);
+        root = projected;          /* run what could be carried */
     }
 
     if (!gia_model_load(&model, root)) goto done;
