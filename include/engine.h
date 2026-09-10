@@ -614,6 +614,51 @@ void gia_print_trajectories(const gia_model *m, int steps);
 cJSON *gia_generate(const gia_model *m);
 
 /* ================================================================== *
+ * 8c. Projection — a GSSK model read into MOP terms, declaring its losses
+ *
+ * ADR 0011 decisions 2 and 3. The direction is one-way and forced: GSSK is the
+ * Odum conformance authority, and MOP has no typed relations to invent, so a
+ * MOP-to-GSSK path would have to make up the typing it lacks. There is no such
+ * path here and there should not be one.
+ *
+ * The projection exists to produce a NUMBER. docs/giannantoni_assessment.md
+ * 5.3 makes a Level 1 claim -- that any system modelled through the MOP lens
+ * has an explicit solution -- and flags it as unquantified. Coverage measures
+ * it against real models: what fraction of a model's components and pathways
+ * the MOP engine can actually carry, and, where it cannot, WHICH module
+ * stopped it.
+ *
+ * A bare percentage would be the wrong deliverable. A model scoring 60% does
+ * not mean MOP is 60% correct; it means that model uses modules this engine
+ * cannot carry, and the report has to name them. Nothing is ever silently
+ * substituted -- a component that cannot be projected is dropped and recorded,
+ * never approximated into something that looks like it worked.
+ * ================================================================== */
+
+#define GIA_MAX_FINDINGS 64
+
+typedef struct {
+    int  nodes_total,  nodes_carried;
+    int  edges_total,  edges_carried;
+    int  n_findings;
+    int  n_elided;                    /* findings past the cap */
+    char finding[GIA_MAX_FINDINGS][192];
+} gia_coverage;
+
+/* Read a GSSK-schema model and produce a MOP input. The caller owns *out_mop
+ * and must cJSON_Delete() it. `cov` is filled in either way. Returns false only
+ * on a malformed document, not on incomplete coverage: a model the projection
+ * can only partly carry is a result, not an error. */
+bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov);
+
+/* Carried elements over total, in [0, 1]. 1.0 for a model wholly within the
+ * MOP engine's vocabulary. */
+double gia_coverage_fraction(const gia_coverage *cov);
+
+/* Human-readable report: the fraction, and every module that blocked it. */
+void gia_report_coverage(const gia_coverage *cov);
+
+/* ================================================================== *
  * 9. Validation — which mode did the engine actually run in?
  *
  * Decided structurally, by comparing the graph that went in against the one
