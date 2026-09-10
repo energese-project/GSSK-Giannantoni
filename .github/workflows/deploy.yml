@@ -35,7 +35,6 @@ concurrency:
 
 permissions:
   contents: write
-  pages: write
   id-token: write
   actions: read
 
@@ -373,7 +372,7 @@ jobs:
         with:
           node-version: 20
 
-      # The theme imports web/energese.css across directories. If that path
+      # The theme imports its design tokens from a sibling file. If that path
       # breaks, or the token file is deleted, this is what says so — the build
       # fails rather than silently emitting an unresolved @import.
       - name: Build documentation
@@ -395,108 +394,20 @@ jobs:
           echo "Design tokens are inlined in the built docs CSS."
 
   # ────────────────────────────────────────────────────────────
-  # Pages deploy — main only.
-  #
-  # This job is gated on the `github-pages` environment, whose branch policy
-  # permits `main` and nothing else. That gate applies to the WHOLE job, so
-  # anything that must also run for a tag cannot live here — a tag push is
-  # rejected before the first step executes. Release publishing therefore
-  # lives in the separate `release` job below.
-  # ────────────────────────────────────────────────────────────
-  deploy:
-    needs: [ build-native, quality, wasm, docs ]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y build-essential
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 3.1.64
-
-      - name: Build native
-        run: make all
-
-      - name: Build WASM
-        run: make wasm
-
-      - name: Build documentation
-        run: |
-          npm install
-          npm run docs:build
-
-      - name: Prepare Pages artifact
-        run: |
-          mkdir -p public/demo
-          cp -r docs/.vitepress/dist/* public/
-          cp web/index.html public/demo/
-          cp web/favicon.png public/demo/
-          # The demo links this with a relative href and has no build step, so
-          # it has to travel with index.html. Without it every colour on the
-          # page falls back to an unset custom property and the demo renders
-          # unstyled — a failure that only appears in the deployed artifact.
-          cp web/energese.css public/demo/
-          cp dist/gssk.js public/demo/
-          cp dist/gssk.wasm public/demo/
-          touch public/.nojekyll
-          sed -i 's|../dist/gssk.js|gssk.js|' public/demo/index.html
-
-      # The demo is assembled by copying files, not by a bundler, so nothing
-      # checks that what index.html asks for actually arrived. A missing
-      # stylesheet or wasm blob is invisible until someone loads the deployed
-      # page. This asserts every local asset the demo references is in the
-      # artifact.
-      - name: Verify the demo's local assets reached the artifact
-        run: |
-          python3 - <<'PY'
-          import os, re, sys
-          html = open('public/demo/index.html').read()
-          refs = [r for r in re.findall(r'(?:href|src)="([^"#?:]+)"', html)
-                  if not r.startswith(('http', '//', 'data:'))
-                  and not r.endswith('/')]   # `../` is a link to the docs, not an asset
-          missing = [r for r in refs
-                     if not os.path.exists(os.path.join('public/demo', r))]
-          if missing:
-              print(f'::error::demo assets referenced but not in the artifact: {missing}')
-              sys.exit(1)
-          print(f'All {len(refs)} local demo asset references resolve.')
-          PY
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: 'public'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
-
-  # ────────────────────────────────────────────────────────────
   # Release — main (rolling `latest`) and version tags (immutable).
   #
-  # Deliberately NOT gated on the `github-pages` environment. That gate is
-  # what made the versioned-release path unreachable: its branch policy
-  # allows only `main`, so a tag push failed the deploy job in about a
-  # second, before any step ran. No number of pushed tags could ever have
-  # produced a release while the release steps lived inside that job.
+  # There is no Pages deploy any more. It published a demo assembled from
+  # web/, and web/ is not carried by this repository — the job's first act was
+  # `cp web/index.html public/demo/`, which failed on every push to main once
+  # that tree went. The documentation site is still BUILT and checked by the
+  # `docs` job on every pull request; what is gone is publishing it, and the
+  # demo it was published beside.
+  #
+  # This job was already deliberately NOT gated on the `github-pages`
+  # environment, and that stays true for the reason it was written down: the
+  # gate's branch policy allowed only `main`, so a tag push failed in about a
+  # second before any step ran, and no number of pushed tags could ever have
+  # produced a release while the release steps lived inside the deploy job.
   # ────────────────────────────────────────────────────────────
   release:
     needs: [ build-native, quality, wasm ]
