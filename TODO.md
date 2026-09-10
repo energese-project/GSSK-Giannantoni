@@ -671,6 +671,26 @@ general-purpose ODE library. The wedge is:
 - [ ] Revisit ADR 0011 only when MOP can express a discontinuity (switch), a
       control-versus-power split (gain), more than one carrier (exchange), and
       the n-et for n >= 3 is solved or carries a stated error bound.
+
+### 10.6 Where a law lives (ADR 0012)
+
+> The projection measured a 92.3% mean coverage over the 24 GSSK example
+> models, and the largest single blocker is that Odum's work gate, amplifier,
+> switch, cycling receptor and transactor are MODULES — hyperedges over a
+> neighbourhood — while this engine has only binary pathways. ADR 0012 records
+> where a law belongs and why, and settles that the n-ary product needs no new
+> mathematics: all inputs but the energy input fold into the conductance.
+
+- [x] ADR 0012 written.
+- [ ] Decide the tension ADR 0012 deliberately leaves open: whether the
+      pathway-level `interaction`, `limit`, `ratio` and `subtract` logics are
+      kept as the binary special cases, or removed as a breaking change.
+      Keeping both is the two-spellings drift ADR 0008 argued against. This
+      wants deciding BEFORE the module work starts, not after.
+- [ ] A schema for declaring a module and its role assignments.
+- [ ] Module-hosted laws in the engine, with the n-ary fold and fan-out.
+- [ ] Report the n-ary and processing-node findings as ONE finding in the
+      coverage report; they are one limitation seen from two syntaxes.
 - [ ] More seed graphs under `examples/giannantoni/` — the vocabulary is
       separate from `gssk.schema.json` by design, which is why the seeds live
       one directory down and out of both regression globs.
