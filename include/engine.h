@@ -522,9 +522,23 @@ bool gia_system_is_closed(const gia_model *m);
  *       it to exist. Emergy out exceeds emergy in. This is the irreducible
  *       excess, and it is where the accounting stops being conservative.
  *
- * Feedback is not counted twice (Odum's fourth rule): emergy propagates from
- * the sources along the acyclic part of the graph, and an edge closing a cycle
- * carries quantity without re-injecting emergy that has already been counted.
+ * Odum's fourth rule is that emergy is never counted twice within a system, and
+ * it has two halves. Feedback is the first: emergy propagates from the sources
+ * along the acyclic part of the graph, and an edge closing a cycle carries
+ * quantity without re-injecting emergy already counted.
+ *
+ * The second half is co-products REUNITING. If a process replicates, each
+ * product carries the whole emergy — so when two such products later arrive at
+ * the same component, adding them would count that emergy twice. Odum's rule is
+ * to take the MAXIMUM across inputs that share a co-production ancestor, and to
+ * sum only across inputs that do not.
+ *
+ * Note what that is NOT. It is not a blanket maximum over a process's inputs.
+ * Two genuinely independent sources feeding one process contribute independent
+ * emergy and are summed; the maximum applies only where the shared ancestry
+ * means the same emergy would otherwise be counted more than once. The engine
+ * detects that ancestry rather than asking the modeller to declare it, because
+ * whether two inflows share a co-production is a property of the graph.
  *
  * The vocabulary is the neutral one from docs/emergy_synthesis.md --
  * `quality_input` on a source, `output_mode` of "partition" or "replicate" on

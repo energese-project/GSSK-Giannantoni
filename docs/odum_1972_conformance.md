@@ -227,8 +227,28 @@ Odum's rules, using the neutral vocabulary of `docs/emergy_synthesis.md`:
 - `output_mode: "replicate"` is a **co-production** — each product takes the
   **whole** emergy, because each required all of it. Emergy out exceeds emergy
   in, and the difference is the irreducible excess;
-- an edge closing a cycle carries quantity but re-injects no emergy, so feedback
-  is not counted twice (Odum's fourth rule).
+- Odum's fourth rule — emergy is never counted twice — in **both** halves:
+  - an edge closing a cycle carries quantity but re-injects no emergy;
+  - **co-products that reunite are maxed, not added.** If a process replicates,
+    each product carries the whole emergy, so when two of them later arrive at
+    the same component, summing would count that emergy twice. The engine takes
+    the maximum across inputs sharing a co-production ancestor and sums only
+    across inputs that do not.
+
+  That second half is not a blanket maximum over a process's inputs, and the
+  distinction matters: two genuinely independent sources contribute independent
+  emergy and are summed. Applying a maximum there would discard real emergy.
+  Shared ancestry is *detected* from the graph rather than declared by the
+  modeller, because whether two inflows descend from one co-production is a
+  fact about the topology and not a judgement call.
+
+  Odum's own example, solar driving wind and rain which then both drive a
+  river: the river receives 10, not 20.
+
+**What is still not implemented** is the input-side variant some formulations
+state as "a process takes the maximum transformity of its inputs". That is a
+different claim from the reunion rule above, it is not what
+`docs/giannantoni_assessment.md` §3 describes, and it is not implemented here.
 
 `gia_emergy_excess()` reports the emergy created across the network. It is
 exactly zero when every bifurcation is a partition and positive as soon as one
