@@ -1548,6 +1548,102 @@ static void test_projection_processing_node_params(void) {
     }
 }
 
+/* ------------------------------------------------------------------ *
+ * 32. Odum's fourth rule, second half: co-products reuniting
+ *
+ * The textbook case. Solar drives the atmosphere, which produces wind AND rain
+ * as co-products — each carrying the WHOLE emergy, because each required all
+ * of it. When both then drive one downstream process, adding them would count
+ * the sun twice. Odum's rule is to take the maximum across inputs that share a
+ * co-production ancestor, and to sum only across inputs that do not.
+ * ------------------------------------------------------------------ */
+
+static void test_reunited_coproducts(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     em[5], sun_empower;
+
+    printf("\n[32] reunited co-products are maxed, not added\n");
+
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,"
+        "   \"quality_input\":1.0},"
+        "  {\"id\":\"atm\",\"type\":\"storage\",\"current_level\":5.0},"
+        "  {\"id\":\"wind\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"rain\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"river\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"sun\",\"target\":\"atm\",\"logic\":\"linear\","
+        "   \"weight\":1.0},"
+        "  {\"source\":\"atm\",\"target\":\"wind\",\"logic\":\"linear\","
+        "   \"weight\":0.5,\"output_mode\":\"replicate\"},"
+        "  {\"source\":\"atm\",\"target\":\"rain\",\"logic\":\"linear\","
+        "   \"weight\":0.5,\"output_mode\":\"replicate\"},"
+        "  {\"source\":\"wind\",\"target\":\"river\",\"logic\":\"linear\","
+        "   \"weight\":0.5},"
+        "  {\"source\":\"rain\",\"target\":\"river\",\"logic\":\"linear\","
+        "   \"weight\":0.5}],"
+        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    ok("the reunion model loads", gia_model_load(&m, root));
+    ok("emergy computes", gia_emergy_at(&m, 1.0, em, NULL));
+
+    /* 10 units of flow at transformity 1. */
+    sun_empower = em[0];
+    close_to("the sun delivers 10", sun_empower, 10.0, 1e-6);
+    close_to("wind carries the whole", em[2], sun_empower, 1e-6);
+    close_to("rain carries the whole", em[3], sun_empower, 1e-6);
+
+    /* The headline. Both inflows to the river descend from one co-production at
+     * `atm`, so the sun's emergy arrives twice and must be counted once.
+     * Summing would give 20. */
+    close_to("the river gets the maximum, not the sum",
+             em[4], sun_empower, 1e-6);
+    ok("and specifically NOT double", em[4] < 1.5 * sun_empower);
+
+    gia_model_free(&m);
+    cJSON_Delete(root);
+}
+
+static void test_independent_inputs_still_sum(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     em[3];
+
+    printf("\n[33] independent inputs still sum — max is not a blanket rule\n");
+
+    /* Two sources with no shared ancestry. Their emergy is genuinely
+     * independent, so a process fed by both receives the sum. Applying a
+     * maximum here would discard real emergy. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,"
+        "   \"quality_input\":1.0},"
+        "  {\"id\":\"fuel\",\"type\":\"source\",\"value\":4.0,"
+        "   \"quality_input\":5.0},"
+        "  {\"id\":\"farm\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"sun\",\"target\":\"farm\",\"logic\":\"linear\","
+        "   \"weight\":1.0},"
+        "  {\"source\":\"fuel\",\"target\":\"farm\",\"logic\":\"linear\","
+        "   \"weight\":1.0}],"
+        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    ok("the two-source model loads", gia_model_load(&m, root));
+    ok("emergy computes", gia_emergy_at(&m, 1.0, em, NULL));
+
+    /* sun: 10 x 1 = 10.  fuel: 4 x 5 = 20.  Independent, so 30. */
+    close_to("the farm receives the sum of two independent inputs",
+             em[2], 30.0, 1e-6);
+    ok("not the maximum of them", em[2] > 25.0);
+
+    gia_model_free(&m);
+    cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -1582,6 +1678,8 @@ int main(void) {
     test_projection_full();
     test_projection_names_its_losses();
     test_projection_processing_node_params();
+    test_reunited_coproducts();
+    test_independent_inputs_still_sum();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

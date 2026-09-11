@@ -1733,10 +1733,109 @@ static void mark_back_edges(const gia_model *m, char *colour, bool *is_back,
     colour[at] = 2;                                   /* finished */
 }
 
+/* Which co-productions lie upstream of each component.
+ *
+ * `anc` is n x n: anc[i*n + j] is set when component j replicates and can reach
+ * component i. Two inflows to the same component whose origins share a set bit
+ * are carrying emergy that came from ONE co-production, so adding them would
+ * count it twice — Odum's fourth rule. Computed by relaxation, which converges
+ * in at most n passes over the acyclic part; back edges are excluded because
+ * they carry quantity without re-injecting emergy.
+ *
+ * Detected rather than declared: whether two inflows share a co-production is a
+ * property of the graph, and asking a modeller to mark it would make the
+ * accounting depend on their spotting it. */
+static void coproduct_ancestry(const gia_model *m, const bool *is_back,
+                               char *anc) {
+    int i, pass, n = m->n_nodes;
+
+    memset(anc, 0, (size_t)n * (size_t)n);
+    for (i = 0; i < m->n_edges; i++) {
+        int a = m->edges[i].from;
+        if (a < 0 || is_back[i]) continue;
+        if (m->edges[i].out_mode == GIA_OUT_REPLICATE)
+            anc[(size_t)a * (size_t)n + (size_t)a] = 1;   /* a replicates */
+    }
+    for (pass = 0; pass < n; pass++) {
+        int changed = 0;
+        for (i = 0; i < m->n_edges; i++) {
+            int a = m->edges[i].from, b = m->edges[i].to, j;
+            if (a < 0 || b < 0 || is_back[i]) continue;
+            for (j = 0; j < n; j++)
+                if (anc[(size_t)a * (size_t)n + (size_t)j] &&
+                    !anc[(size_t)b * (size_t)n + (size_t)j]) {
+                    anc[(size_t)b * (size_t)n + (size_t)j] = 1;
+                    changed = 1;
+                }
+        }
+        if (!changed) break;
+    }
+}
+
+/* Combine one component's inflows under Odum's fourth rule: maximum within a
+ * set sharing a co-production ancestor, sum across sets that do not.
+ *
+ * `mask` is n entries per contribution. Groups are merged transitively: an
+ * inflow bridging two existing groups joins them, because all three then trace
+ * to one co-production. */
+#define GIA_MAX_INFLOWS 64
+
+static double combine_inflows(int n, int count, const char *masks,
+                              const double *vals) {
+    double gval[GIA_MAX_INFLOWS];
+    char   gmask[GIA_MAX_INFLOWS * 64];
+    int    ng = 0, i, j, k, wide = (n <= 64) ? n : 64;
+    double total = 0.0;
+
+    for (i = 0; i < count && i < GIA_MAX_INFLOWS; i++) {
+        const char *m_i = masks + (size_t)i * (size_t)n;
+        int         hit = -1;
+
+        for (j = 0; j < ng; j++) {
+            for (k = 0; k < wide; k++)
+                if (m_i[k] && gmask[(size_t)j * 64 + (size_t)k]) break;
+            if (k < wide) { hit = j; break; }
+        }
+        if (hit < 0) {
+            if (ng >= GIA_MAX_INFLOWS) { total += vals[i]; continue; }
+            gval[ng] = vals[i];
+            for (k = 0; k < wide; k++) gmask[(size_t)ng * 64 + (size_t)k] = m_i[k];
+            ng++;
+            continue;
+        }
+        /* Same co-production: take the larger, do not add. */
+        if (vals[i] > gval[hit]) gval[hit] = vals[i];
+        for (k = 0; k < wide; k++)
+            if (m_i[k]) gmask[(size_t)hit * 64 + (size_t)k] = 1;
+
+        /* This inflow may have bridged two groups; merge any that now overlap. */
+        for (j = ng - 1; j >= 0; j--) {
+            if (j == hit) continue;
+            for (k = 0; k < wide; k++)
+                if (gmask[(size_t)j * 64 + (size_t)k] &&
+                    gmask[(size_t)hit * 64 + (size_t)k]) break;
+            if (k == wide) continue;
+            if (gval[j] > gval[hit]) gval[hit] = gval[j];
+            for (k = 0; k < wide; k++)
+                if (gmask[(size_t)j * 64 + (size_t)k])
+                    gmask[(size_t)hit * 64 + (size_t)k] = 1;
+            for (k = j; k < ng - 1; k++) {
+                gval[k] = gval[k + 1];
+                memcpy(gmask + (size_t)k * 64, gmask + (size_t)(k + 1) * 64, 64);
+            }
+            ng--;
+            if (hit > j) hit--;
+        }
+    }
+    for (j = 0; j < ng; j++) total += gval[j];
+    return total;
+}
+
 bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
     double *q = NULL, *flow = NULL, *em_in = NULL, *out_tot = NULL;
+    double *em_prev = NULL;
     bool   *is_back = NULL;
-    char   *colour = NULL;
+    char   *colour = NULL, *anc = NULL, *masks = NULL;
     int     i, pass, n;
     bool    ok = false;
 
@@ -1745,13 +1844,17 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
 
     q       = (double *)calloc((size_t)n, sizeof(double));
     em_in   = (double *)calloc((size_t)n, sizeof(double));
+    em_prev = (double *)calloc((size_t)n, sizeof(double));
     out_tot = (double *)calloc((size_t)n, sizeof(double));
     colour  = (char   *)calloc((size_t)n, sizeof(char));
+    anc     = (char   *)calloc((size_t)n * (size_t)n, sizeof(char));
+    masks   = (char   *)calloc((size_t)GIA_MAX_INFLOWS * (size_t)n, sizeof(char));
     flow    = (double *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
                                sizeof(double));
     is_back = (bool   *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
                                sizeof(bool));
-    if (!q || !em_in || !out_tot || !colour || !flow || !is_back) goto done;
+    if (!q || !em_in || !em_prev || !out_tot || !colour || !flow || !is_back ||
+        !anc || !masks) goto done;
 
     if (!gia_network_state(m, t, q, NULL)) goto done;
 
@@ -1768,34 +1871,53 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
         out_tot[a] += fabs(flow[i]);
     }
 
+    coproduct_ancestry(m, is_back, anc);
+
     /* Propagate from the sources. The acyclic part is at most n levels deep, so
      * n relaxation passes carry emergy all the way through it. */
     for (pass = 0; pass < n + 1; pass++) {
+        int b;
+
         for (i = 0; i < n; i++) em_in[i] = 0.0;
 
-        for (i = 0; i < m->n_edges; i++) {
-            const gia_edge *e = &m->edges[i];
-            int    a = e->from, b = e->to;
-            double f, carried;
+        /* Per component, not per edge: the fourth rule combines a component's
+         * inflows against each other, so they have to be gathered first. */
+        for (b = 0; b < n; b++) {
+            double vals[GIA_MAX_INFLOWS];
+            int    count = 0;
 
-            if (a < 0 || b < 0 || is_back[i]) continue;
-            f = fabs(flow[i]);
-            if (f <= 0.0) continue;
+            memset(masks, 0, (size_t)GIA_MAX_INFLOWS * (size_t)n);
 
-            if (!m->nodes[a].integrates && m->nodes[a].quality_input > 0.0) {
-                /* A boundary source injects quality at its declared rate. */
-                carried = f * m->nodes[a].quality_input;
-            } else if (e->out_mode == GIA_OUT_REPLICATE) {
-                /* Co-production: each product carries the WHOLE emergy of the
-                 * process, because each required all of it. */
-                carried = em_in[a];
-            } else {
-                /* Partition: a share of one kind of flow, so a share of the
-                 * emergy. */
-                carried = (out_tot[a] > 0.0) ? em_in[a] * (f / out_tot[a]) : 0.0;
+            for (i = 0; i < m->n_edges && count < GIA_MAX_INFLOWS; i++) {
+                const gia_edge *e = &m->edges[i];
+                int    a = e->from;
+                double f, carried;
+
+                if (a < 0 || e->to != b || is_back[i]) continue;
+                f = fabs(flow[i]);
+                if (f <= 0.0) continue;
+
+                if (!m->nodes[a].integrates && m->nodes[a].quality_input > 0.0) {
+                    /* A boundary source injects quality at its declared rate. */
+                    carried = f * m->nodes[a].quality_input;
+                } else if (e->out_mode == GIA_OUT_REPLICATE) {
+                    /* Co-production: each product carries the WHOLE emergy of
+                     * the process, because each required all of it. */
+                    carried = em_prev[a];
+                } else {
+                    /* Partition: a share of one kind of flow, so a share of the
+                     * emergy. */
+                    carried = (out_tot[a] > 0.0)
+                            ? em_prev[a] * (f / out_tot[a]) : 0.0;
+                }
+                vals[count] = carried;
+                memcpy(masks + (size_t)count * (size_t)n,
+                       anc + (size_t)a * (size_t)n, (size_t)n);
+                count++;
             }
-            em_in[b] += carried;
+            em_in[b] = combine_inflows(n, count, masks, vals);
         }
+        memcpy(em_prev, em_in, (size_t)n * sizeof(double));
     }
 
     /* A boundary source has no inflow, so its em_in is zero -- but its empower
@@ -1822,7 +1944,8 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
     ok = true;
 
 done:
-    free(q); free(flow); free(em_in); free(out_tot); free(colour); free(is_back);
+    free(q); free(flow); free(em_in); free(em_prev); free(out_tot);
+    free(colour); free(is_back); free(anc); free(masks);
     return ok;
 }
 
