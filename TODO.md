@@ -682,13 +682,24 @@ general-purpose ODE library. The wedge is:
 > mathematics: all inputs but the energy input fold into the conductance.
 
 - [x] ADR 0012 written.
-- [ ] Decide the tension ADR 0012 deliberately leaves open: whether the
-      pathway-level `interaction`, `limit`, `ratio` and `subtract` logics are
-      kept as the binary special cases, or removed as a breaking change.
-      Keeping both is the two-spellings drift ADR 0008 argued against. This
-      wants deciding BEFORE the module work starts, not after.
-- [ ] A schema for declaring a module and its role assignments.
+- [x] Decided (ADR 0012 decision 5): module laws LEAVE pathways. Pathways
+      carry Odum SecIII only — `linear`, `reversible`, `constant`. Seven laws
+      become modules: `interaction`, `limit`, `ratio`, `subtract`, `gain`,
+      `threshold`, `exchange`. Chosen over keeping both behind a shared
+      evaluator: in a young repository with no external users, one migration
+      now buys a permanent guarantee that the two forms cannot drift.
+- [ ] A schema for declaring a module and its role assignments (energy input
+      versus controls, and fan-out).
 - [ ] Module-hosted laws in the engine, with the n-ary fold and fan-out.
+- [ ] Migrate the test models and both `examples/giannantoni/` seeds to write
+      modules explicitly. NOT by having the loader rewrite edge laws into
+      hidden gate nodes: that is desugaring, and a bookkeeping node would count
+      toward ordinality, which is what decides whether emergence happens.
+- [ ] Remove the seven module laws from the pathway vocabulary once nothing
+      writes them.
+- [ ] Projection: translate GSSK edge-level `interaction`, `limit`,
+      `threshold`, `ratio` and `subtract` into gate components, and report
+      each as a translation in the coverage output.
 - [ ] Report the n-ary and processing-node findings as ONE finding in the
       coverage report; they are one limitation seen from two syntaxes.
 - [ ] More seed graphs under `examples/giannantoni/` — the vocabulary is
