@@ -362,6 +362,20 @@ emitted without them is a storage wearing the name. The projection drops it and
 says so, rather than producing a model that runs and is not the one anybody
 wrote.
 
+That first diagnosis is itself too shallow, and
+[ADR 0012](adr/0012-where-a-law-lives.md) corrects it. The difference is not
+where a `k` is written down: a GSSK processing node is a **hyperedge**. Its
+flow is a product over *every* incoming pathway, only the *first* input is
+consumed, and its output is partitioned over *every* outgoing pathway. This
+engine's pathway is a binary relation with at most one named control, so
+arity, input asymmetry and fan-out are all inexpressible — not the storage
+location of a parameter. That also means the n-ary blocker below is the **same
+problem seen from a second syntax**, not an independent one; the table counts
+them separately because the projection reads syntax.
+
+The table below therefore overstates how scattered the gap is. Four of the 24
+models are blocked by one thing.
+
 That rule matters more than the percentage. An earlier revision of the
 projection dropped node `params` silently and scored these same models at
 **97.2%** — a figure that was higher, and wrong.
