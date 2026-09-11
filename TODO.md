@@ -688,8 +688,19 @@ general-purpose ODE library. The wedge is:
       `threshold`, `exchange`. Chosen over keeping both behind a shared
       evaluator: in a young repository with no external users, one migration
       now buys a permanent guarantee that the two forms cannot drift.
-- [ ] A schema for declaring a module and its role assignments (energy input
-      versus controls, and fan-out).
+- [x] Module schema (ADR 0013): every pathway into a module declares a `role`,
+      and position is never consulted. Prompted by a demonstrated GSSK defect:
+      its processing nodes assign roles by edge ORDER, inconsistently across
+      node types, so swapping two lines in a model changes the answer — tenfold
+      for a `gain` node — with no error.
+      Two roles, `energy` (consumed) and `control` (read), cover interaction,
+      gain and switch; exchange has four leg roles. Fan-out is in proportion to
+      output pathway weight, which reproduces GSSK's even split for equal
+      weights.
+- [ ] Settle the one spelling of `role` in a document (ADR 0013 leaves it to
+      the loader, but it must be exactly one).
+- [ ] Test that reordering a module's pathways produces byte-identical output —
+      the property ADR 0013 exists for, asserted directly.
 - [ ] Module-hosted laws in the engine, with the n-ary fold and fan-out.
 - [ ] Migrate the test models and both `examples/giannantoni/` seeds to write
       modules explicitly. NOT by having the loader rewrite edge laws into
