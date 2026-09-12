@@ -245,6 +245,31 @@ typedef enum {
 
 const char *gia_logic_name(gia_logic l);
 
+/* ---- module roles (ADR 0013) ----
+ *
+ * A module is a hyperedge: Odum's work gate, amplifier, switch or cycling
+ * receptor, where the transformation happens inside the symbol rather than
+ * along a line (ADR 0012). Its inputs are not interchangeable — one supplies
+ * the energy and is used up, the others signal and are read — so each pathway
+ * entering a module says which it is.
+ *
+ * It says so by NAME. GSSK decides the same question by the ORDER its edges
+ * happen to appear in, inconsistently across node types, so that swapping two
+ * lines in a document silently changes which stock is drained and, for an
+ * amplifier, changes the answer tenfold. ADR 0013 records the reproduction.
+ * Position is never consulted here: the code that could let ordering matter
+ * does not exist.
+ *
+ * Two roles cover every processing module, because what differs between a work
+ * gate, an amplifier and a switch is the law, not the kinds of input it has. */
+typedef enum {
+    GIA_ROLE_NONE,     /* an ordinary pathway, not entering a module */
+    GIA_ROLE_ENERGY,   /* consumed: the module drains it                */
+    GIA_ROLE_CONTROL   /* read: the law depends on it, it is not drained */
+} gia_role;
+
+const char *gia_role_name(gia_role r);
+
 /* ---- forcing ----
  *
  * ADR 0006's vocabulary: one set of waveforms, attachable in two places. A
@@ -343,6 +368,10 @@ typedef struct {
                               * single carrier, so a model that names none
                               * behaves exactly as before. Borrowed from the
                               * cJSON tree.                                    */
+    double        mod_k;     /* module rate; meaningful when kind is a module */
+    double        mod_capacity;  /* C, for a cycling receptor                  */
+    double        mod_threshold; /* switching level, for a switch              */
+    bool          is_module; /* hosts a law over its neighbourhood (ADR 0012) */
     bool          integrates;/* false for source/constant: Q is held, not solved */
     bool          on_cycle;  /* filled in by gia_mark_cycles() */
 } gia_node;
@@ -360,6 +389,8 @@ typedef struct {
     int         cur_from;    /* currency leg paying, for exchange edges */
     int         cur_to;      /* currency leg receiving, for exchange edges */
     gia_output_mode out_mode;/* partition (split) or replicate (co-product) */
+    gia_role    role;        /* what this pathway is TO the module it enters,
+                              * ADR 0013. GIA_ROLE_NONE for ordinary pathways. */
     gia_forcing  forcing;    /* drives the RATE k; ADR 0006 edge attachment.
                               * Unlike the node attachment this is NOT
                               * absorbable: the flow becomes k(t)*Q, bilinear
@@ -380,6 +411,11 @@ typedef struct {
 } gia_model;
 
 const char *gia_node_kind_name(gia_node_kind k);
+
+/* True when this component hosts a law over its neighbourhood rather than
+ * merely holding a quantity. A module's flow is computed from ALL the pathways
+ * touching it at once, so those pathways carry no law of their own. */
+bool gia_node_is_module(const gia_model *m, int node_idx);
 
 /* Populate `m` from a parsed seed graph. `root` is borrowed and must outlive
  * `m`. Returns false if the document is not a usable graph. */
