@@ -16,6 +16,12 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Fixed
 
+- **Ordinality was decided by legs that carry nothing, and by modules that hold nothing.** [ADR 0014](adr/0014-ordinality-over-quantity-legs.md). Since module-hosted laws made a work gate's control an edge, the cycle scan walked it: a pure accumulator was reported at maximum ordinality, so the MOP step returned the seed unchanged when it had an open relationship to close. A module was also counted as a component, so one system scored 0.667 written as a pathway law and 0.75 written as a module. The scan now skips control legs and passes through modules without counting them — a transactor keeping goods and counter-flow apart — and `gia_generate` shares it instead of keeping its own copy, never choosing a module as the component to close or the hub to draw from.
+
+  **`gia_system_is_closed` asked the same wrong question at the boundary.** A gate metered by a constant made a system conserving to 1e-14 report open, and `--print` explained the zero by saying the constant "delivers quantity". A control moves nothing across the boundary; a source on an energy leg still does.
+
+  New: `gia_component_count`. The `--print` header reports modules separately from components.
+
 - **`gia_edge_flow` read a module pathway's flow from the pathway's own law.** A module's pathways carry no law, so that was the default — linear, weight 1 — and the emergy pass therefore carried transformity along a flow the solver never used. It now asks the module. Introduced with module-hosted laws and caught while adding the transactor.
 
 > The rest of this engine's history is in [odum_1972_conformance.md](odum_1972_conformance.md) and in `TODO.md` at the repository root, which were written alongside it; this is the first entry here because the changelog tracks the GSSK kernel's releases.

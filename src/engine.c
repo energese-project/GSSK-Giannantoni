@@ -1299,8 +1299,14 @@ bool gia_system_is_closed(const gia_model *m) {
     int i;
     if (!m) return true;
     for (i = 0; i < m->n_edges; i++) {
-        int a = m->edges[i].from;
+        const gia_edge *ed = &m->edges[i];
+        int a = ed->from;
         if (a < 0) continue;
+        /* ADR 0014: the boundary is crossed by quantity. A control read from a
+         * source or a constant moves nothing, and a module only passes on what
+         * its energy leg brought -- which is where the question is asked. */
+        if (ed->role == GIA_ROLE_CONTROL) continue;
+        if (m->nodes[a].is_module)        continue;
         if (!m->nodes[a].integrates) return false;  /* forced across a boundary */
     }
     return true;
@@ -2554,34 +2560,83 @@ done:
  * ================================================================== */
 
 /* Depth-first reachability from `at`, looking for `target`. */
-static bool reaches(const gia_model *m, int at, int target, bool *seen) {
+/* ADR 0014. A closed pathway is closed by legs that carry quantity, and a
+ * module is passed through but is not a component.
+ *
+ * A control is read and never consumed (ADR 0013), so it is never walked. Since
+ * module-hosted laws made controls into edges, walking them let a leg carrying
+ * nothing close a loop: a pure accumulator was reported at maximum ordinality
+ * and the MOP step declined to generate. */
+
+/* Whether quantity arriving at module `mod` on a leg of role `in` leaves along
+ * a leg of role `out`. Quantity passes through a module and does not change
+ * kind on the way: a transactor hands goods on as goods and counter-flow on as
+ * counter-flow, and never turns one into the other. Every other module passes
+ * its energy input to all of its outputs. */
+static bool module_passes(const gia_node *mod, gia_role in, gia_role out) {
+    if (mod->kind == GIA_NODE_EXCHANGE)
+        return (in == GIA_ROLE_GOODS_IN   && out == GIA_ROLE_GOODS_OUT) ||
+               (in == GIA_ROLE_COUNTER_IN && out == GIA_ROLE_COUNTER_OUT);
+    return in == GIA_ROLE_ENERGY;
+}
+
+/* A transactor can be entered twice on independent pathways -- once by goods,
+ * once by counter-flow -- so a module gets one visited slot per stream. A
+ * component needs only one. */
+static int visit_slot(const gia_model *m, int node, gia_role via) {
+    int stream = (m->nodes[node].is_module && via == GIA_ROLE_COUNTER_IN);
+    return node * 2 + stream;
+}
+
+static bool reaches(const gia_model *m, int at, gia_role via, int target,
+                    bool *seen) {
+    const gia_node *here = &m->nodes[at];
     int i;
     for (i = 0; i < m->n_edges; i++) {
         const gia_edge *ed = &m->edges[i];
+        int slot;
         if (ed->from != at || ed->to < 0) continue;
+        /* Read, not carried. This must come before the visited mark below:
+         * a control reaching a module first would otherwise mark it visited
+         * and block a real energy pathway arriving through it later. */
+        if (ed->role == GIA_ROLE_CONTROL) continue;
+        if (here->is_module && !module_passes(here, via, ed->role)) continue;
         if (ed->to == target) return true;
-        if (!seen[ed->to]) {
-            seen[ed->to] = true;
-            if (reaches(m, ed->to, target, seen)) return true;
+        slot = visit_slot(m, ed->to, ed->role);
+        if (!seen[slot]) {
+            seen[slot] = true;
+            if (reaches(m, ed->to, ed->role, target, seen)) return true;
         }
     }
     return false;
 }
 
-/* Shared by gia_mark_cycles and gia_generate so the latter can stay const. */
+/* Components, not nodes: a module holds nothing, so it is not one. */
+static int component_count(const gia_model *m) {
+    int i, n = 0;
+    for (i = 0; i < m->n_nodes; i++) if (!m->nodes[i].is_module) n++;
+    return n;
+}
+
+/* The one cycle scan. gia_mark_cycles, gia_ordinality and gia_generate all read
+ * it, so the ordinality that is reported and the one that decides emergence
+ * cannot disagree. A module's flag is always false. Returns how many components
+ * are on a closed pathway. */
 static int cycles_into(const gia_model *m, bool *out) {
-    int i, count = 0;
+    int   i, count = 0;
     bool *seen;
 
     if (!m || m->n_nodes <= 0) return 0;
-    seen = (bool *)malloc((size_t)m->n_nodes * sizeof(bool));
+    seen = (bool *)malloc((size_t)m->n_nodes * 2u * sizeof(bool));
     if (!seen) return 0;
 
     for (i = 0; i < m->n_nodes; i++) {
         int k;
-        for (k = 0; k < m->n_nodes; k++) seen[k] = false;
-        seen[i] = true;
-        out[i]  = reaches(m, i, i, seen);
+        out[i] = false;
+        if (m->nodes[i].is_module) continue;
+        for (k = 0; k < m->n_nodes * 2; k++) seen[k] = false;
+        seen[visit_slot(m, i, GIA_ROLE_NONE)] = true;
+        out[i] = reaches(m, i, GIA_ROLE_NONE, i, seen);
         if (out[i]) count++;
     }
     free(seen);
@@ -2601,16 +2656,23 @@ int gia_mark_cycles(gia_model *m) {
     return count;
 }
 
+int gia_component_count(const gia_model *m) {
+    return m ? component_count(m) : 0;
+}
+
 double gia_ordinality(gia_model *m) {
-    int count;
+    int count, n;
     if (!m || m->n_nodes <= 0) return 0.0;
     count = gia_mark_cycles(m);
-    return (double)count / (double)m->n_nodes;
+    n     = component_count(m);
+    return n > 0 ? (double)count / (double)n : 0.0;
 }
 
 bool gia_at_maximum_ordinality(gia_model *m) {
+    int n;
     if (!m || m->n_nodes <= 0) return false;
-    return gia_mark_cycles(m) == m->n_nodes;
+    n = component_count(m);
+    return n > 0 && gia_mark_cycles(m) == n;
 }
 
 /* ================================================================== *
@@ -2736,7 +2798,7 @@ cJSON *gia_generate(const gia_model *m) {
     int    i, open = -1, hub = -1, best_in = -1;
     double mean_w = 0.0, ordinality;
     char   rid[64];
-    int    suffix;
+    int    suffix, n_comp;
 
     if (!m || !m->root) return NULL;
 
@@ -2750,14 +2812,15 @@ cJSON *gia_generate(const gia_model *m) {
 
     on_cycle = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
     if (!on_cycle) return out;
-    cycles_into(m, on_cycle);
+    n_comp     = component_count(m);
+    ordinality = n_comp > 0 ? (double)cycles_into(m, on_cycle) / (double)n_comp
+                            : 0.0;
 
+    /* The open component must BE a component. A module's flag is always false,
+     * so without this it would be chosen as the thing to close. */
     for (i = 0; i < m->n_nodes; i++) {
-        if (!on_cycle[i]) { open = i; break; }
+        if (!m->nodes[i].is_module && !on_cycle[i]) { open = i; break; }
     }
-    ordinality = 0.0;
-    for (i = 0; i < m->n_nodes; i++) if (on_cycle[i]) ordinality += 1.0;
-    ordinality /= (double)m->n_nodes;
     free(on_cycle);
 
     /* Already at Maximum Ordinality: every component is on a closed pathway,
@@ -2765,14 +2828,16 @@ cJSON *gia_generate(const gia_model *m) {
      * is to change nothing. */
     if (open < 0) return out;
 
-    /* The regulator draws from the graph's convergence point -- the node the
-     * most flows arrive at -- and returns to the open component, closing it
-     * into a loop. */
+    /* The regulator draws from the graph's convergence point -- the component
+     * the most flows arrive at -- and returns to the open component, closing it
+     * into a loop. A control is not a flow and a module holds nothing to draw
+     * from, so neither is counted here (ADR 0014). */
     for (i = 0; i < m->n_nodes; i++) {
         int j, in_deg = 0;
-        if (i == open) continue;
+        if (i == open || m->nodes[i].is_module) continue;
         for (j = 0; j < m->n_edges; j++)
-            if (m->edges[j].to == i) in_deg++;
+            if (m->edges[j].to == i && m->edges[j].role != GIA_ROLE_CONTROL)
+                in_deg++;
         if (in_deg > best_in) { best_in = in_deg; hub = i; }
     }
     if (hub < 0) return out;
@@ -2806,8 +2871,9 @@ cJSON *gia_generate(const gia_model *m) {
      * also a primitive, so the output loads under GSSK_Init; "regulator", which
      * this used to emit, is in no vocabulary at all. */
     cJSON_AddStringToObject(nn, "type", "gain");
-    /* The new component enters as the (N+1)-th, so its ordinal rank is N. */
-    cJSON_AddNumberToObject(nn, "ordinality_rank", (double)m->n_nodes);
+    /* The new component enters as the (N+1)-th, so its ordinal rank is N --
+     * counted in components, since a module is not one. */
+    cJSON_AddNumberToObject(nn, "ordinality_rank", (double)n_comp);
     cJSON_AddStringToObject(nn, "emerged_from", m->nodes[open].id);
     cJSON_AddItemToArray(nodes, nn);
 

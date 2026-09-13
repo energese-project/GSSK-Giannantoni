@@ -546,8 +546,11 @@ double gia_conservation_residual_for(const gia_model *m, double t, int carrier);
  * demonstrated. */
 double gia_conservation_residual(const gia_model *m, double t);
 
-/* True when no pathway originates at a held (non-integrating) component, so
- * nothing enters or leaves across the boundary and the total must be conserved. */
+/* True when no QUANTITY enters from a held (non-integrating) component, so
+ * nothing crosses the boundary and the total must be conserved. A control read
+ * from a source or a constant moves nothing and leaves the system closed; a
+ * pathway leaving a module passes on only what the module's energy leg brought
+ * (ADR 0014). */
 bool gia_system_is_closed(const gia_model *m);
 
 /* ================================================================== *
@@ -636,10 +639,26 @@ double gia_emergy_excess(const gia_model *m, double t);
  * condition the generative step below works to satisfy.
  * ================================================================== */
 
-/* Set node.on_cycle for every node; returns how many are on a cycle. */
+/* Ordinality is over COMPONENTS on pathways that CARRY QUANTITY (ADR 0014).
+ *
+ *  - A control leg is read and never consumed, so it does not close a pathway.
+ *  - A module is passed through but is not a component: it holds nothing, so
+ *    it is out of both the count and the total, and its on_cycle stays false.
+ *    A transactor passes goods on as goods and counter-flow on as counter-flow.
+ *
+ * The consequence that matters: one system written with a law on a pathway and
+ * written as a module has the same ordinality, so where a law is drawn cannot
+ * decide whether emergence happens. */
+
+/* Set node.on_cycle for every node; returns how many COMPONENTS are on a
+ * closed pathway. A module's flag is always false. */
 int gia_mark_cycles(gia_model *m);
 
-/* Fraction of components on a cycle, in [0, 1]. Calls gia_mark_cycles(). */
+/* Number of components -- nodes that are not modules. */
+int gia_component_count(const gia_model *m);
+
+/* Fraction of components on a closed pathway, in [0, 1]. Calls
+ * gia_mark_cycles(). */
 double gia_ordinality(gia_model *m);
 
 /* True when every component is on a cycle. */
