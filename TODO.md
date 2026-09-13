@@ -749,6 +749,13 @@ general-purpose ODE library. The wedge is:
       step printing "closed the loop". The seed test cannot see it because the
       seed's open component happens to reach its hub. Needs an ADR on what the
       emergent quality closes; crux `mop-step-closes-nothing`.
+- [x] ADR 0015 written: the emergent quality closes every open component in
+      one step, adding only the missing direction(s) through E; never closes
+      or draws from a sink; decided by the model, not array order; E is a
+      component (`storage`), not a module. Prototyped against five models
+      before writing — all reach their fixed point in one step, where today
+      four never terminate.
+- [ ] Implement ADR 0015.
 - [ ] The emergent component `gia_generate` writes is a `gain` with no
       `module` block, joined by `ordinal_ascent` / `emergent_feedback_loop`
       pathways — the old spelling. Once pathway module laws are removed it
