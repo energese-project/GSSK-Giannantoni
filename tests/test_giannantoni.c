@@ -1921,6 +1921,217 @@ static void test_module_switch_events(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 40. Exchange as a module (ADR 0013 decision 5)
+ *
+ * The last module, and the one that settles leg discovery. As a pathway law an
+ * exchange needs its counter-flow legs named, because which component pays and
+ * which receives cannot be recovered from carrier identity alone. As a module
+ * it reads its whole neighbourhood, and the four legs say outright which is
+ * which.
+ * ------------------------------------------------------------------ */
+
+static cJSON *transactor_model(const char *legs) {
+    static char buf[1600];
+    snprintf(buf, sizeof(buf),
+        "{\"nodes\":["
+        "  {\"id\":\"goods_a\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":100.0},"
+        "  {\"id\":\"goods_b\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"cash_b\",\"type\":\"storage\",\"carrier\":\"money\","
+        "   \"current_level\":500.0},"
+        "  {\"id\":\"cash_a\",\"type\":\"storage\",\"carrier\":\"money\","
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"ex\",\"type\":\"exchange\","
+        "   \"module\":{\"k\":0.2,\"exchange_ratio\":0.25}}],"
+        " \"edges\":[%s],"
+        " \"simulation_params\":{\"t_val\":2.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}", legs);
+    return cJSON_Parse(buf);
+}
+
+#define L_GI "{\"source\":\"goods_a\",\"target\":\"ex\",\"role\":\"goods_in\"}"
+#define L_GO "{\"source\":\"ex\",\"target\":\"goods_b\",\"role\":\"goods_out\"}"
+#define L_CI "{\"source\":\"cash_b\",\"target\":\"ex\",\"role\":\"counter_in\"}"
+#define L_CO "{\"source\":\"ex\",\"target\":\"cash_a\",\"role\":\"counter_out\"}"
+
+static void test_transactor_module(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[5], psi = -1.0, moved, P = 0.25, t = 2.0;
+
+    printf("\n[40] transactor module: Eq (103) from four named legs\n");
+
+    root = transactor_model(L_GI "," L_GO "," L_CI "," L_CO);
+    if (!root) { ok("parse", false); return; }
+    ok("a transactor module loads", gia_model_load(&m, root));
+    ok("the transactor is a module", gia_node_is_module(&m, 4));
+
+    /* Linear in the goods leaving the seller, so unlike a work gate a
+     * transactor leaves the matrix constant — and the two calculi agree. */
+    ok("a transactor leaves the flow matrix constant",
+       gia_flow_matrix_is_constant(&m));
+
+    ok("solves", gia_network_state(&m, t, q, &psi));
+    close_to("psi is exactly zero", psi, 0.0, 0.0);
+
+    /* F_goods = k Q_goods_a, so goods_a decays exactly. */
+    close_to("goods_a(2) = 100 e^(-k t)", q[0], 100.0 * exp(-0.2 * t), 1e-7);
+    moved = 100.0 - q[0];
+    close_to("goods_b took what goods_a lost", q[1], moved, 1e-7);
+
+    /* Odum SecXV: currency moves the OTHER way, at F/P. */
+    close_to("cash reached the seller: moved / P", q[3], moved / P, 1e-6);
+    close_to("and the buyer paid exactly that", 500.0 - q[2], q[3], 1e-9);
+    close_to("J_goods / J_counter = P", moved / q[3], P, 1e-9);
+
+    /* Each carrier balances on its own. */
+    ok("two carriers", gia_carrier_count(&m) == 2);
+    close_to("goods conserved",
+             gia_conservation_residual_for(&m, t, gia_node_carrier(&m, 0)),
+             0.0, 1e-7);
+    close_to("money conserved",
+             gia_conservation_residual_for(&m, t, gia_node_carrier(&m, 2)),
+             0.0, 1e-6);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_transactor_order_invariance(void) {
+    const char *orders[2] = {
+        L_GI "," L_GO "," L_CI "," L_CO,
+        L_CO "," L_CI "," L_GO "," L_GI
+    };
+    const char *paths[2] = { "tests/results/gia_tx_a.csv",
+                             "tests/results/gia_tx_b.csv" };
+    char *body[2] = { NULL, NULL };
+    int   i;
+
+    printf("\n[41] four legs in any order give the same answer\n");
+
+    for (i = 0; i < 2; i++) {
+        cJSON     *root = transactor_model(orders[i]);
+        gia_model  m;
+        if (!root) { ok("parse", false); return; }
+        ok("loads in this leg order", gia_model_load(&m, root));
+        ok("trajectories written", gia_write_trajectories(&m, paths[i], 6));
+        body[i] = slurp_file(paths[i]);
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+    ok("the two leg orders are byte-identical",
+       body[0] && body[1] && !strcmp(body[0], body[1]));
+    free(body[0]); free(body[1]);
+}
+
+static void test_transactor_validation(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[42] a transactor states all four of its legs\n");
+
+    root = transactor_model(L_GI "," L_GO "," L_CI);          /* no counter_out */
+    if (root) { ok("a missing leg is rejected", !gia_model_load(&m, root));
+                cJSON_Delete(root); }
+
+    root = transactor_model(L_GI "," L_GO "," L_CI "," L_CO ","
+        "{\"source\":\"cash_b\",\"target\":\"ex\",\"role\":\"counter_in\"}");
+    if (root) { ok("a duplicated leg is rejected", !gia_model_load(&m, root));
+                cJSON_Delete(root); }
+
+    /* Paying yourself moves nothing. */
+    root = transactor_model(L_GI "," L_GO ","
+        "{\"source\":\"cash_b\",\"target\":\"ex\",\"role\":\"counter_in\"},"
+        "{\"source\":\"ex\",\"target\":\"cash_b\",\"role\":\"counter_out\"}");
+    if (root) { ok("a self-payment is rejected", !gia_model_load(&m, root));
+                cJSON_Delete(root); }
+
+    /* One leg pair moves one carrier: cash in, goods out is two exchanges. */
+    root = transactor_model(L_GI "," L_GO "," L_CI ","
+        "{\"source\":\"ex\",\"target\":\"goods_b\",\"role\":\"counter_out\"}");
+    if (root) { ok("a leg pair straddling two carriers is rejected",
+                   !gia_model_load(&m, root)); cJSON_Delete(root); }
+
+    /* An output role on an incoming pathway is a misplaced field. */
+    root = transactor_model(L_GI ","
+        "{\"source\":\"goods_b\",\"target\":\"ex\",\"role\":\"goods_out\"},"
+        L_CI "," L_CO);
+    if (root) { ok("an output role on an incoming pathway is rejected",
+                   !gia_model_load(&m, root)); cJSON_Delete(root); }
+}
+
+static void test_transactor_barter(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[5];
+
+    printf("\n[43] barter: a transactor need not involve money\n");
+
+    /* All four legs on one carrier. PR 3 established that goods for goods is a
+     * real process; making exchange a module must not quietly re-forbid it. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"grain_a\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":60.0},"
+        "  {\"id\":\"grain_b\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"sheep_b\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":40.0},"
+        "  {\"id\":\"sheep_a\",\"type\":\"storage\",\"carrier\":\"goods\","
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"mkt\",\"type\":\"exchange\","
+        "   \"module\":{\"k\":0.1,\"exchange_ratio\":3.0}}],"
+        " \"edges\":["
+        "  {\"source\":\"grain_a\",\"target\":\"mkt\",\"role\":\"goods_in\"},"
+        "  {\"source\":\"mkt\",\"target\":\"grain_b\",\"role\":\"goods_out\"},"
+        "  {\"source\":\"sheep_b\",\"target\":\"mkt\",\"role\":\"counter_in\"},"
+        "  {\"source\":\"mkt\",\"target\":\"sheep_a\",\"role\":\"counter_out\"}],"
+        " \"simulation_params\":{\"t_val\":2.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    ok("a single-carrier barter transactor loads", gia_model_load(&m, root));
+    ok("solves", gia_network_state(&m, 2.0, q, NULL));
+    close_to("grain per sheep = the exchange ratio",
+             (60.0 - q[0]) / q[3], 3.0, 1e-7);
+    close_to("goods conserved across the barter",
+             gia_conservation_residual(&m, 2.0), 0.0, 1e-6);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_module_emergy_uses_module_flow(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     em[4];
+
+    printf("\n[44] emergy carries a module's flow, not its pathway's default\n");
+
+    /* A module's pathways have no law of their own, so asking an edge for its
+     * flow returned the pathway DEFAULT — weight 1, linear — and the emergy
+     * pass carried transformity along that instead of along F. Chosen so the
+     * two differ: g = k*Qc = 0.6, F = 6, while the default would give 10. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,"
+        "   \"quality_input\":1.0},"
+        "  {\"id\":\"c\",\"type\":\"constant\",\"value\":2.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.3}},"
+        "  {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"sun\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\"},"
+        "  {\"source\":\"gate\",\"target\":\"out\",\"weight\":1.0}],"
+        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    ok("loads", gia_model_load(&m, root));
+    ok("emergy computes", gia_emergy_at(&m, 1.0, em, NULL));
+
+    /* F = k * Q_sun * Q_c = 0.3*10*2 = 6, at transformity 1. */
+    close_to("empower reaching the output is F x Tr, not the default flow",
+             em[3], 6.0, 1e-6);
+    ok("and it is not the pathway default of 10", fabs(em[3] - 10.0) > 1.0);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -1963,6 +2174,11 @@ int main(void) {
     test_module_gain_closed_form();
     test_module_validation();
     test_module_switch_events();
+    test_transactor_module();
+    test_transactor_order_invariance();
+    test_transactor_validation();
+    test_transactor_barter();
+    test_module_emergy_uses_module_flow();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

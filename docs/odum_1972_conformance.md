@@ -230,8 +230,34 @@ outgoing pathways in proportion to their weight, so equal weights give an even
 split. A surplus input to a cycling receptor is a **named error**, where GSSK
 silently discards it.
 
-`exchange` is deferred: its four leg roles interact with the carrier work and
-with ADR 0001's leg discovery, and it wants its own task.
+| `exchange` (§XV) | `goods_in`, `goods_out`, `counter_in`, `counter_out` | `F = k · Q_goods_in` one way, `F / P` the other |
+
+**The transactor is a module too, and it is where naming legs by role pays for
+itself.** Odum's §XV figure shows four pathways and they are not
+interchangeable: which component gives up goods, which receives them, which pays
+and which is paid. ADR 0001's kernel recovered those by edge order; ADR 0013
+rejects position, and carrier identity cannot stand in for it either — given a
+goods flow and two money stocks, which one is the payer is ownership, not
+carrier. So all four legs are named, and a transactor touched by any unnamed
+pathway is an error.
+
+Eq (103) falls out of the trajectory rather than being asserted: `J_goods` and
+`J_counter` counter-flow, their ratio is the price, and both carriers are
+conserved separately. A transactor is **linear in the goods it moves**, so
+unlike a work gate it leaves the flow matrix constant and `ψ` stays exactly
+zero for a constant price — the exact solution is the matrix exponential.
+Barter — all four legs on one carrier — remains legal; what is rejected is a
+single leg pair straddling two carriers, a duplicated leg, a missing leg, and a
+transactor paying itself.
+
+**A module holds no carrier**, because it is a hyperedge drawn as a symbol
+rather than a stock. It therefore contributes no carrier class and is exempt
+from the pairwise cross-carrier check on pathways; which of its legs must agree
+is instead the module's own rule. A transactor's two pairs each move one
+carrier. Every other module passes its energy input's carrier through to its
+outputs, while its *control* may be read from any carrier at all — a work gate
+whose rate is set by a price or a population is an ordinary model, and the
+pairwise check would have refused it.
 
 All nine GSSK primitive node types are accepted: `source` and `constant` are
 held rather than integrated (§II), a `sink` is never depleted (§V), and
@@ -301,11 +327,11 @@ topology and disagree about the algebra, which is the point.
 
 **Still absent.**
 
-1. **Leg discovery, money-stock gating, and a price resolved from a node**
-   (ADR 0001). Carriers now exist: a component declares what it holds,
-   conservation is checked per carrier, a pathway may not cross carriers, and
-   an `exchange` must couple two different ones with both currency legs on the
-   counter-carrier. What remains is the rest of the kernel's diamond.
+1. **Money-stock gating, and a price resolved from a node** (ADR 0001). Leg
+   discovery is done: a transactor names its four legs by role (see the module
+   table above), which is the part of the kernel's diamond that mattered most.
+   What remains is refusing a payment a money stock cannot fund, and reading a
+   price from a component so it can vary endogenously.
 
    An exchange is **not** required to couple two different carriers. Barter is
    a real process — grain for sheep, or one commodity traded between two
@@ -328,6 +354,8 @@ topology and disagree about the algebra, which is the point.
    is not recoverable from carrier identity alone — it needs the ownership the
    diamond's shape encodes. Guessing would be inventing semantics Odum's figure
    does not show, so the legs stay named and are validated by carrier instead.
+   As a module they are named by role rather than by counter-flow fields, which
+   is the same decision reached from the other direction.
 
    The change is worth stating plainly, because the old behaviour was not
    merely incomplete. `gia_conservation_residual` summed every integrating
