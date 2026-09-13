@@ -707,9 +707,23 @@ general-purpose ODE library. The wedge is:
       interaction, gain, switch and loop_limited; a switch module's crossing is
       located like a pathway threshold's. A surplus input to a cycling receptor
       is a named error, where GSSK silently discards it.
-- [ ] `exchange` as a module, with its four leg roles. Deferred from the
-      module work because the roles interact with carriers and with ADR 0001's
-      leg discovery.
+- [x] `exchange` as a module, with its four leg roles — `goods_in`,
+      `goods_out`, `counter_in`, `counter_out`, all named and all required.
+      Odum SecXV Eq (103) is recovered from the trajectory rather than
+      asserted: the two flows counter-flow and their ratio is the price. A
+      transactor is linear in the goods it moves, so the flow matrix stays
+      constant and psi is exactly zero — unlike a work gate. Barter stays
+      legal; a leg pair straddling two carriers does not.
+- [x] A module holds no carrier, so it contributes no carrier class and is
+      exempt from the pairwise cross-carrier check. Which legs must agree is
+      the module's own rule: a transactor's two pairs each move one carrier,
+      every other module hands its energy carrier to its outputs, and a
+      control may be read from any carrier — a work gate metered by a price
+      is an ordinary model and the pairwise check refused it.
+- [x] Fixed from the module-laws PR: `gia_edge_flow` computed a module
+      pathway's flow from the pathway's own law, which for a module pathway is
+      the default linear weight-1 — so the emergy pass carried transformity
+      along a flow the solver never used. It now asks the module.
 - [ ] Migrate the test models and both `examples/giannantoni/` seeds to write
       modules explicitly. NOT by having the loader rewrite edge laws into
       hidden gate nodes: that is desugaring, and a bookkeeping node would count

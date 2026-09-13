@@ -249,10 +249,21 @@ double gia_harmony_reduction_residual(const gia_harmony *h) {
 
 const char *gia_role_name(gia_role r) {
     switch (r) {
-        case GIA_ROLE_ENERGY:  return "energy";
-        case GIA_ROLE_CONTROL: return "control";
-        default:               return "none";
+        case GIA_ROLE_ENERGY:      return "energy";
+        case GIA_ROLE_CONTROL:     return "control";
+        case GIA_ROLE_GOODS_IN:    return "goods_in";
+        case GIA_ROLE_GOODS_OUT:   return "goods_out";
+        case GIA_ROLE_COUNTER_IN:  return "counter_in";
+        case GIA_ROLE_COUNTER_OUT: return "counter_out";
+        default:                   return "none";
     }
+}
+
+/* True for a role that names an OUTGOING leg. Every other role names an input,
+ * which is why a work gate's roles are all on incoming pathways and a
+ * transactor's are not. */
+static bool role_is_outgoing(gia_role r) {
+    return r == GIA_ROLE_GOODS_OUT || r == GIA_ROLE_COUNTER_OUT;
 }
 
 bool gia_node_is_module(const gia_model *m, int node_idx) {
@@ -727,6 +738,39 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
         bool   affine = false, drain;
 
         if (!nd->is_module) continue;
+
+        if (nd->kind == GIA_NODE_EXCHANGE) {
+            /* Odum 1972 SecXV Eq (103): J_goods = P J_counter, and currency
+             * moves opposite to the goods. The four legs are named, so which
+             * component pays and which receives is stated rather than inferred
+             * — the leg discovery ADR 0013 said module form makes possible.
+             *
+             * Linear in the goods leaving the seller, so a transactor leaves
+             * the flow matrix CONSTANT and psi exactly zero, unlike a work
+             * gate. */
+            int    gi = -1, go = -1, ci = -1, co = -1;
+            double k  = nd->mod_k;
+            double P  = (fabs(nd->mod_price) > GIA_EPS) ? nd->mod_price : 1.0;
+
+            for (j = 0; j < m->n_edges; j++) {
+                const gia_edge *e = &m->edges[j];
+                if (e->to   == i && e->role == GIA_ROLE_GOODS_IN)    gi = e->from;
+                if (e->from == i && e->role == GIA_ROLE_GOODS_OUT)   go = e->to;
+                if (e->to   == i && e->role == GIA_ROLE_COUNTER_IN)  ci = e->from;
+                if (e->from == i && e->role == GIA_ROLE_COUNTER_OUT) co = e->to;
+            }
+            if (gi < 0 || go < 0 || ci < 0 || co < 0) continue;
+
+            if (m->nodes[gi].integrates && m->nodes[gi].kind != GIA_NODE_SINK)
+                out->a[(size_t)gi*(size_t)dim+(size_t)gi] -= k;
+            if (m->nodes[go].integrates)
+                out->a[(size_t)go*(size_t)dim+(size_t)gi] += k;
+            if (m->nodes[ci].integrates && m->nodes[ci].kind != GIA_NODE_SINK)
+                out->a[(size_t)ci*(size_t)dim+(size_t)gi] -= k / P;
+            if (m->nodes[co].integrates)
+                out->a[(size_t)co*(size_t)dim+(size_t)gi] += k / P;
+            continue;
+        }
 
         for (j = 0; j < m->n_edges; j++) {
             const gia_edge *e = &m->edges[j];
@@ -1262,14 +1306,24 @@ bool gia_system_is_closed(const gia_model *m) {
     return true;
 }
 
+/* Carriers are held by components, and a module is not one -- it is a hyperedge
+ * drawn as a symbol, holding nothing. Counting its blank carrier would invent a
+ * third carrier class for a two-carrier transaction, and then a residual would
+ * be reported for a class no stock belongs to. */
+static bool node_holds_carrier(const gia_model *m, int i) {
+    return !m->nodes[i].is_module;
+}
+
 int gia_carrier_count(const gia_model *m) {
     int i, j, n = 0;
     if (!m) return 1;
     for (i = 0; i < m->n_nodes; i++) {
         const char *c = m->nodes[i].carrier ? m->nodes[i].carrier : "";
         int seen = 0;
+        if (!node_holds_carrier(m, i)) continue;
         for (j = 0; j < i; j++) {
             const char *d = m->nodes[j].carrier ? m->nodes[j].carrier : "";
+            if (!node_holds_carrier(m, j)) continue;
             if (!strcmp(c, d)) { seen = 1; break; }
         }
         if (!seen) n++;
@@ -1283,8 +1337,10 @@ const char *gia_carrier_name(const gia_model *m, int idx) {
     for (i = 0; i < m->n_nodes; i++) {
         const char *c = m->nodes[i].carrier ? m->nodes[i].carrier : "";
         int seen = 0;
+        if (!node_holds_carrier(m, i)) continue;
         for (j = 0; j < i; j++) {
             const char *d = m->nodes[j].carrier ? m->nodes[j].carrier : "";
+            if (!node_holds_carrier(m, j)) continue;
             if (!strcmp(c, d)) { seen = 1; break; }
         }
         if (seen) continue;
@@ -1298,6 +1354,7 @@ int gia_node_carrier(const gia_model *m, int node_idx) {
     int k, n;
     const char *c;
     if (!m || node_idx < 0 || node_idx >= m->n_nodes) return 0;
+    if (!node_holds_carrier(m, node_idx)) return -1;     /* holds nothing */
     c = m->nodes[node_idx].carrier ? m->nodes[node_idx].carrier : "";
     n = gia_carrier_count(m);
     for (k = 0; k < n; k++)
@@ -1588,6 +1645,7 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                     case GIA_NODE_GAIN:
                     case GIA_NODE_SWITCH:
                     case GIA_NODE_LOOP_LIMITED:
+                    case GIA_NODE_EXCHANGE:
                         break;
                     default:
                         fprintf(stderr,
@@ -1602,6 +1660,11 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                 nd->mod_k         = num_field(mj, "k", 1.0);
                 nd->mod_capacity  = num_field(mj, "capacity", 1.0);
                 nd->mod_threshold = num_field(mj, "threshold", 0.0);
+                /* Neutral name first, the money-specific one as an alias — the
+                 * same order PR 3 established, because naming it price is what
+                 * made an earlier revision rule out barter. */
+                nd->mod_price     = num_field(mj, "exchange_ratio",
+                                    num_field(mj, "price", 1.0));
             }
         }
         nd->carrier       = str_field(jn, "carrier", "");
@@ -1759,11 +1822,16 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                 const char *r = str_field(je, "role", NULL);
                 ed->role = GIA_ROLE_NONE;
                 if (r) {
-                    if      (!strcmp(r, "energy"))  ed->role = GIA_ROLE_ENERGY;
-                    else if (!strcmp(r, "control")) ed->role = GIA_ROLE_CONTROL;
+                    if      (!strcmp(r, "energy"))      ed->role = GIA_ROLE_ENERGY;
+                    else if (!strcmp(r, "control"))     ed->role = GIA_ROLE_CONTROL;
+                    else if (!strcmp(r, "goods_in"))    ed->role = GIA_ROLE_GOODS_IN;
+                    else if (!strcmp(r, "goods_out"))   ed->role = GIA_ROLE_GOODS_OUT;
+                    else if (!strcmp(r, "counter_in"))  ed->role = GIA_ROLE_COUNTER_IN;
+                    else if (!strcmp(r, "counter_out")) ed->role = GIA_ROLE_COUNTER_OUT;
                     else {
                         fprintf(stderr, "engine: edge %d: unknown role '%s' "
-                                        "(expected 'energy' or 'control')\n",
+                                        "(expected energy, control, goods_in, "
+                                        "goods_out, counter_in or counter_out)\n",
                                 i, r);
                         gia_model_free(m);
                         return false;
@@ -1803,6 +1871,13 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         const gia_edge *ed = &m->edges[i];
         if (ed->from < 0 || ed->to < 0) continue;
         if (ed->logic == GIA_LOGIC_EXCHANGE) continue;
+        /* A module has no carrier of its own -- it is a hyperedge, not a stock,
+         * so comparing a leg's carrier against the module's says nothing. Which
+         * of its legs must agree is the module's own business, checked per
+         * module below: a transactor's two pairs each move one carrier, while
+         * every other module matches its energy input to its outputs and leaves
+         * a control free, since a control is read and not consumed. */
+        if (m->nodes[ed->from].is_module || m->nodes[ed->to].is_module) continue;
         if (gia_node_carrier(m, ed->from) != gia_node_carrier(m, ed->to)) {
             fprintf(stderr,
                     "engine: edge %d ('%s' -> '%s'): carrier '%s' cannot flow "
@@ -1866,18 +1941,26 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         }
     }
 
-    /* A role only means something entering a module. On any other pathway it
-     * is a misplaced field, and silently ignoring it would let a modeller
-     * believe an input was marked when nothing read the mark. */
+    /* A role only means something on a pathway TOUCHING a module, and on the
+     * side its name implies: an input role must enter one, an output role must
+     * leave one. Anywhere else it is a misplaced field, and ignoring it
+     * silently would let a modeller believe a leg was marked when nothing read
+     * the mark. */
     for (i = 0; i < m->n_edges; i++) {
         const gia_edge *ed = &m->edges[i];
-        if (ed->role == GIA_ROLE_NONE || ed->to < 0) continue;
-        if (!m->nodes[ed->to].is_module) {
+        int  side;
+        bool ok_side;
+
+        if (ed->role == GIA_ROLE_NONE) continue;
+        side    = role_is_outgoing(ed->role) ? ed->from : ed->to;
+        ok_side = (side >= 0) && m->nodes[side].is_module;
+
+        if (!ok_side) {
             fprintf(stderr,
-                    "engine: edge %d: role '%s' on a pathway entering '%s', "
-                    "which is not a module — a role says what a pathway is to "
-                    "the module it enters (ADR 0013)\n",
-                    i, gia_role_name(ed->role), m->nodes[ed->to].id);
+                    "engine: edge %d: role '%s' must name a pathway %s a "
+                    "module, and this one does not (ADR 0013)\n",
+                    i, gia_role_name(ed->role),
+                    role_is_outgoing(ed->role) ? "leaving" : "entering");
             gia_model_free(m);
             return false;
         }
@@ -1891,6 +1974,62 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         int j, n_energy = 0, n_control = 0, n_out = 0, want_control = -1;
 
         if (!nd->is_module) continue;
+
+        if (nd->kind == GIA_NODE_EXCHANGE) {
+            int gi = -1, go = -1, ci = -1, co = -1, dup = 0;
+
+            for (j = 0; j < m->n_edges; j++) {
+                const gia_edge *ed = &m->edges[j];
+                int touches_in  = (ed->to   == i);
+                int touches_out = (ed->from == i);
+                if (!touches_in && !touches_out) continue;
+                if (ed->role == GIA_ROLE_NONE) {
+                    fprintf(stderr, "engine: edge %d touching transactor '%s' "
+                                    "declares no role; its four legs are named, "
+                                    "never ordered (ADR 0013)\n", j, nd->id);
+                    gia_model_free(m);
+                    return false;
+                }
+                switch (ed->role) {
+                    case GIA_ROLE_GOODS_IN:    if (gi >= 0) dup = 1; gi = ed->from; break;
+                    case GIA_ROLE_GOODS_OUT:   if (go >= 0) dup = 1; go = ed->to;   break;
+                    case GIA_ROLE_COUNTER_IN:  if (ci >= 0) dup = 1; ci = ed->from; break;
+                    case GIA_ROLE_COUNTER_OUT: if (co >= 0) dup = 1; co = ed->to;   break;
+                    default:
+                        fprintf(stderr, "engine: edge %d: role '%s' has no "
+                                        "meaning for a transactor; its legs are "
+                                        "goods_in, goods_out, counter_in and "
+                                        "counter_out\n",
+                                j, gia_role_name(ed->role));
+                        gia_model_free(m);
+                        return false;
+                }
+            }
+            if (dup || gi < 0 || go < 0 || ci < 0 || co < 0) {
+                fprintf(stderr, "engine: transactor '%s' needs exactly one each "
+                                "of goods_in, goods_out, counter_in and "
+                                "counter_out\n", nd->id);
+                gia_model_free(m);
+                return false;
+            }
+            if (ci == co) {
+                fprintf(stderr, "engine: transactor '%s' pays '%s' from itself, "
+                                "so nothing moves\n", nd->id, m->nodes[ci].id);
+                gia_model_free(m);
+                return false;
+            }
+            /* One leg pair moves one kind of thing. Barter — the goods and
+             * counter carriers being the same — stays permitted; what is not
+             * is a single pair straddling two carriers. */
+            if (gia_node_carrier(m, gi) != gia_node_carrier(m, go) ||
+                gia_node_carrier(m, ci) != gia_node_carrier(m, co)) {
+                fprintf(stderr, "engine: transactor '%s': each leg pair must "
+                                "move one carrier\n", nd->id);
+                gia_model_free(m);
+                return false;
+            }
+            continue;                    /* the checks below are for the rest */
+        }
 
         for (j = 0; j < m->n_edges; j++) {
             const gia_edge *ed = &m->edges[j];
@@ -1940,6 +2079,31 @@ bool gia_model_load(gia_model *m, cJSON *root) {
             gia_model_free(m);
             return false;
         }
+
+        /* What a module passes through keeps its carrier. The energy leg is
+         * what it consumes and the outputs are what it delivers, so those must
+         * agree; the control is only read, and a work gate whose rate is set by
+         * a price or a population is a perfectly ordinary model. */
+        {
+            int cin = -1;
+            for (j = 0; j < m->n_edges; j++)
+                if (m->edges[j].to == i && m->edges[j].role == GIA_ROLE_ENERGY)
+                    cin = gia_node_carrier(m, m->edges[j].from);
+            for (j = 0; j < m->n_edges; j++) {
+                if (m->edges[j].from != i) continue;
+                if (gia_node_carrier(m, m->edges[j].to) == cin) continue;
+                fprintf(stderr,
+                        "engine: module '%s' takes carrier '%s' and delivers "
+                        "carrier '%s' to '%s'; a module passes its input "
+                        "through, it does not convert one carrier into "
+                        "another (Odum 1972 SecXV is the transactor's job)\n",
+                        nd->id, gia_carrier_name(m, cin),
+                        gia_carrier_name(m, gia_node_carrier(m, m->edges[j].to)),
+                        m->nodes[m->edges[j].to].id);
+                gia_model_free(m);
+                return false;
+            }
+        }
     }
 
     jparams = cJSON_GetObjectItemCaseSensitive(root, "simulation_params");
@@ -1969,10 +2133,77 @@ void gia_model_free(gia_model *m) {
  * 8b. Emergy and transformity — the second accounting
  * ================================================================== */
 
+/* The flow a module drives, at the operating point. A module's pathways carry
+ * no law of their own, so asking an edge for its flow would give the pathway's
+ * default rather than the module's — which is what the emergy pass would
+ * otherwise carry transformity along. */
+static double module_flow(const gia_model *m, int ni, const double *q) {
+    const gia_node *nd = &m->nodes[ni];
+    int    j, ae = -1, ctrl = -1, gi = -1;
+    double g;
+
+    for (j = 0; j < m->n_edges; j++) {
+        const gia_edge *e = &m->edges[j];
+        if (e->to == ni && e->role == GIA_ROLE_ENERGY)   ae   = e->from;
+        if (e->to == ni && e->role == GIA_ROLE_CONTROL)  ctrl = e->from;
+        if (e->to == ni && e->role == GIA_ROLE_GOODS_IN) gi   = e->from;
+    }
+    switch (nd->kind) {
+        case GIA_NODE_INTERACTION:
+            if (ae < 0) return 0.0;
+            g = nd->mod_k;
+            for (j = 0; j < m->n_edges; j++) {
+                const gia_edge *e = &m->edges[j];
+                if (e->to == ni && e->role == GIA_ROLE_CONTROL && e->from >= 0)
+                    g *= q[e->from];
+            }
+            return g * q[ae];
+        case GIA_NODE_LOOP_LIMITED: {
+            double C;
+            if (ae < 0) return 0.0;
+            C = (nd->mod_capacity > GIA_EPS) ? nd->mod_capacity : 1.0;
+            return nd->mod_k * q[ae] * C / (C + q[ae]);
+        }
+        case GIA_NODE_GAIN:
+            return (ctrl >= 0) ? nd->mod_k * q[ctrl] : 0.0;
+        case GIA_NODE_SWITCH:
+            if (ctrl < 0) return 0.0;
+            return (q[ctrl] > nd->mod_threshold) ? nd->mod_k : 0.0;
+        case GIA_NODE_EXCHANGE:
+            return (gi >= 0) ? nd->mod_k * q[gi] : 0.0;
+        default:
+            return 0.0;
+    }
+}
+
 double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q,
                      double t) {
     double qa, qc;
     if (!m || !e || e->from < 0 || e->to < 0 || !q) return 0.0;
+
+    /* A pathway touching a module carries the module's flow, not its own. An
+     * input that is only READ carries none: a control is not a flow. */
+    if (m->nodes[e->to].is_module) {
+        if (e->role == GIA_ROLE_CONTROL) return 0.0;
+        if (e->role == GIA_ROLE_COUNTER_IN)
+            return module_flow(m, e->to, q) /
+                   ((fabs(m->nodes[e->to].mod_price) > GIA_EPS)
+                        ? m->nodes[e->to].mod_price : 1.0);
+        return module_flow(m, e->to, q);
+    }
+    if (m->nodes[e->from].is_module) {
+        int    ni = e->from, j;
+        double W = 0.0, F = module_flow(m, ni, q);
+        if (m->nodes[ni].kind == GIA_NODE_EXCHANGE)
+            return (e->role == GIA_ROLE_COUNTER_OUT)
+                 ? F / ((fabs(m->nodes[ni].mod_price) > GIA_EPS)
+                            ? m->nodes[ni].mod_price : 1.0)
+                 : F;
+        for (j = 0; j < m->n_edges; j++)
+            if (m->edges[j].from == ni && m->edges[j].to >= 0)
+                W += fabs(m->edges[j].weight);
+        return (W > 0.0) ? F * fabs(e->weight) / W : 0.0;
+    }
     qa = q[e->from];
     /* `q` holds the solved components; a held driven component's q never moves,
      * so its instantaneous value has to come from the waveform. Without this

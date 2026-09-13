@@ -8,6 +8,18 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The Giannantoni engine's transactor: Odum's §XV exchange as a module with four named legs.** [ADR 0013](adr/0013-module-roles-not-position.md) decision 5.
+
+  `goods_in`, `goods_out`, `counter_in` and `counter_out` are all named and all required; a transactor touched by an unnamed pathway is an error. Position could not serve here and neither could carrier identity — given a goods flow and two money stocks, which one is the payer is ownership, not carrier. Eq (103) is recovered from the trajectory instead of asserted: the two flows counter-flow and their ratio is the price. Because a transactor is linear in the goods it moves, the flow matrix stays constant and `ψ` is exactly zero, unlike a work gate. Barter — all four legs on one carrier — stays legal; a single leg pair straddling two carriers does not.
+
+  **A module holds no carrier**, being a hyperedge drawn as a symbol rather than a stock, so it contributes no carrier class and is exempt from the pairwise cross-carrier check on pathways. Which of its legs must agree is the module's own rule, which also lifts a restriction that was never intended: a work gate metered by a price or a population is an ordinary model, and the pairwise check refused it.
+
+### Fixed
+
+- **`gia_edge_flow` read a module pathway's flow from the pathway's own law.** A module's pathways carry no law, so that was the default — linear, weight 1 — and the emergy pass therefore carried transformity along a flow the solver never used. It now asks the module. Introduced with module-hosted laws and caught while adding the transactor.
+
+> The rest of this engine's history is in [odum_1972_conformance.md](odum_1972_conformance.md) and in `TODO.md` at the repository root, which were written alongside it; this is the first entry here because the changelog tracks the GSSK kernel's releases.
+
 ---
 
 ## [5.3.0] — 2026-09-05

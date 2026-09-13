@@ -263,9 +263,20 @@ const char *gia_logic_name(gia_logic l);
  * Two roles cover every processing module, because what differs between a work
  * gate, an amplifier and a switch is the law, not the kinds of input it has. */
 typedef enum {
-    GIA_ROLE_NONE,     /* an ordinary pathway, not entering a module */
+    GIA_ROLE_NONE,     /* an ordinary pathway, not touching a module    */
     GIA_ROLE_ENERGY,   /* consumed: the module drains it                */
-    GIA_ROLE_CONTROL   /* read: the law depends on it, it is not drained */
+    GIA_ROLE_CONTROL,  /* read: the law depends on it, it is not drained */
+
+    /* A transactor couples two flows rather than consuming one and reading
+     * another, so it has its own four legs (ADR 0013 decision 5). Naming them
+     * is what settles leg discovery: which component pays and which receives is
+     * not recoverable from carrier identity alone, which is why the carrier
+     * work declined to infer it — a role simply says so. Two are incoming and
+     * two outgoing, unlike every other module, whose roles are all inputs. */
+    GIA_ROLE_GOODS_IN,     /* incoming: the goods leaving the seller     */
+    GIA_ROLE_GOODS_OUT,    /* outgoing: the goods reaching the buyer     */
+    GIA_ROLE_COUNTER_IN,   /* incoming: the payment leaving the buyer    */
+    GIA_ROLE_COUNTER_OUT   /* outgoing: the payment reaching the seller  */
 } gia_role;
 
 const char *gia_role_name(gia_role r);
@@ -371,6 +382,7 @@ typedef struct {
     double        mod_k;     /* module rate; meaningful when kind is a module */
     double        mod_capacity;  /* C, for a cycling receptor                  */
     double        mod_threshold; /* switching level, for a switch              */
+    double        mod_price;   /* P, for a transactor: goods per unit counter  */
     bool          is_module; /* hosts a law over its neighbourhood (ADR 0012) */
     bool          integrates;/* false for source/constant: Q is held, not solved */
     bool          on_cycle;  /* filled in by gia_mark_cycles() */
@@ -494,13 +506,21 @@ int gia_count_events(const gia_model *m, double t);
  * not `exchange` is therefore rejected at load rather than quietly moving
  * quantity between incommensurable stocks. */
 
-/* Number of distinct carriers in the model; at least 1. */
+/* Modules are excluded from all three of these: a module is a hyperedge drawn
+ * as a symbol and holds no quantity, so it names no carrier and contributes no
+ * carrier class. Which of its legs must agree on a carrier is the module's own
+ * rule -- a transactor's two pairs each move one carrier, and every other
+ * module hands its energy input's carrier to its outputs while its control,
+ * being read rather than consumed, may come from any carrier at all. */
+
+/* Number of distinct carriers held by components; at least 1. */
 int gia_carrier_count(const gia_model *m);
 
 /* Name of carrier `idx`; "" for the implicit single carrier. */
 const char *gia_carrier_name(const gia_model *m, int idx);
 
-/* Index of the carrier a component holds. */
+/* Index of the carrier a component holds, or -1 for a module, which holds
+ * none. */
 int gia_node_carrier(const gia_model *m, int node_idx);
 
 /* Conservation residual for ONE carrier over [0, t]. */
