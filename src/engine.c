@@ -247,6 +247,19 @@ double gia_harmony_reduction_residual(const gia_harmony *h) {
  * 4b. The network: flow matrix and matrix exponential
  * ================================================================== */
 
+const char *gia_role_name(gia_role r) {
+    switch (r) {
+        case GIA_ROLE_ENERGY:  return "energy";
+        case GIA_ROLE_CONTROL: return "control";
+        default:               return "none";
+    }
+}
+
+bool gia_node_is_module(const gia_model *m, int node_idx) {
+    if (!m || node_idx < 0 || node_idx >= m->n_nodes) return false;
+    return m->nodes[node_idx].is_module;
+}
+
 const char *gia_logic_name(gia_logic l) {
     switch (l) {
         case GIA_LOGIC_LINEAR:      return "linear";
@@ -564,6 +577,11 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
 
         if (a < 0 || b < 0) continue;
 
+        /* A pathway touching a module carries no law of its own: the module's
+         * law reads all of them together, so they are handled in the module
+         * pass below. Leaving them here would count the flow twice. */
+        if (m->nodes[a].is_module || m->nodes[b].is_module) continue;
+
         /* ADR 0006 edge attachment: the waveform drives the RATE. Evaluated at
          * t rather than carried as state, because k(t)*Q is bilinear and there
          * is no augmentation that makes it linear again. */
@@ -691,6 +709,102 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
             if (fill_b)  add_origin_term(m, out, dim, b, b, -g);
         }
     }
+
+    /* ---- modules (ADR 0012) ----
+     *
+     * A module's flow is computed from every pathway touching it at once, and
+     * the pathways say by NAME which is the energy input and which are the
+     * controls (ADR 0013). Nothing here consults the order of the edge array,
+     * which is the property the whole design exists for.
+     *
+     * The flow passes THROUGH: the energy origin is drained, the outgoing
+     * pathways are filled, and the module's own row stays empty because a work
+     * gate is not a stock. */
+    for (i = 0; i < n; i++) {
+        const gia_node *nd = &m->nodes[i];
+        int    j, ae = -1, ctrl = -1;
+        double g = 0.0, W = 0.0, konst = 0.0;
+        bool   affine = false, drain;
+
+        if (!nd->is_module) continue;
+
+        for (j = 0; j < m->n_edges; j++) {
+            const gia_edge *e = &m->edges[j];
+            if (e->to == i && e->role == GIA_ROLE_ENERGY)  ae   = e->from;
+            if (e->to == i && e->role == GIA_ROLE_CONTROL) ctrl = e->from;
+            if (e->from == i) W += fabs(e->weight);
+        }
+        if (ae < 0 || W <= 0.0) continue;
+
+        switch (nd->kind) {
+            case GIA_NODE_INTERACTION: {
+                /* F = k Q_energy * prod(Q_control). Every control folds into
+                 * the conductance, which is the n-ary case of the same move the
+                 * binary work gate already used (ADR 0012). */
+                g = nd->mod_k;
+                for (j = 0; j < m->n_edges; j++) {
+                    const gia_edge *e = &m->edges[j];
+                    if (e->to == i && e->role == GIA_ROLE_CONTROL &&
+                        e->from >= 0 && q)
+                        g *= q[e->from];
+                }
+                break;
+            }
+            case GIA_NODE_LOOP_LIMITED: {
+                double qe = q ? q[ae] : 0.0;
+                double C  = (nd->mod_capacity > GIA_EPS) ? nd->mod_capacity : 1.0;
+                g = nd->mod_k * C / (C + qe);
+                break;
+            }
+            case GIA_NODE_GAIN:
+                /* Odum SecIX: the control sets the rate, the energy input
+                 * supplies the power and is what gets drained. The term
+                 * therefore sits in the CONTROL's column. */
+                if (ctrl < 0) continue;
+                break;
+            case GIA_NODE_SWITCH:
+                /* Odum SecXI: a fixed rate while the sensor is above the
+                 * threshold. Affine, so it lands in the augmented column. */
+                if (ctrl < 0 || !q) continue;
+                if (q[ctrl] <= nd->mod_threshold) continue;
+                affine = true;
+                konst  = nd->mod_k;
+                break;
+            default:
+                continue;
+        }
+
+        drain = m->nodes[ae].integrates && m->nodes[ae].kind != GIA_NODE_SINK;
+
+        /* Drained once, from the energy input. */
+        if (drain) {
+            if (affine)
+                out->a[(size_t)ae*(size_t)dim+(size_t)(dim-1)] -= konst;
+            else if (nd->kind == GIA_NODE_GAIN)
+                out->a[(size_t)ae*(size_t)dim+(size_t)ctrl]     -= nd->mod_k;
+            else
+                out->a[(size_t)ae*(size_t)dim+(size_t)ae]       -= g;
+        }
+
+        /* Filled per outgoing pathway, in proportion to its weight
+         * (ADR 0013 decision 4). Equal weights give an even split. */
+        for (j = 0; j < m->n_edges; j++) {
+            const gia_edge *e = &m->edges[j];
+            double share;
+            int    b2;
+            if (e->from != i || e->to < 0) continue;
+            b2 = e->to;
+            if (!m->nodes[b2].integrates) continue;
+            share = fabs(e->weight) / W;
+
+            if (affine)
+                out->a[(size_t)b2*(size_t)dim+(size_t)(dim-1)] += konst * share;
+            else if (nd->kind == GIA_NODE_GAIN)
+                out->a[(size_t)b2*(size_t)dim+(size_t)ctrl]     += nd->mod_k * share;
+            else
+                out->a[(size_t)b2*(size_t)dim+(size_t)ae]       += g * share;
+        }
+    }
     return true;
 }
 
@@ -702,12 +816,27 @@ bool gia_flow_matrix_is_constant(const gia_model *m) {
          * absorbed. A driven node VALUE can be, which is why the node
          * attachment leaves this true -- see the note above. */
         if (m->edges[i].forcing.kind != GIA_FORCE_NONE) return false;
+        (void)0;
         switch (m->edges[i].logic) {
             case GIA_LOGIC_INTERACTION:  /* folds a control into the conductance */
             case GIA_LOGIC_LIMIT:        /* conductance depends on the origin    */
             case GIA_LOGIC_RATIO:        /* conductance depends on the divisor   */
             case GIA_LOGIC_THRESHOLD:    /* regime flips at a crossing           */
             case GIA_LOGIC_SUBTRACT:     /* clamp flips at a crossing            */
+                return false;
+            default:
+                break;
+        }
+    }
+    /* A module whose law reads the state varies the matrix exactly as its
+     * pathway-level counterpart does. A work gate folds controls into the
+     * conductance, a cycling receptor saturates, a switch flips regime. */
+    for (i = 0; i < m->n_nodes; i++) {
+        if (!m->nodes[i].is_module) continue;
+        switch (m->nodes[i].kind) {
+            case GIA_NODE_INTERACTION:
+            case GIA_NODE_LOOP_LIMITED:
+            case GIA_NODE_SWITCH:
                 return false;
             default:
                 break;
@@ -736,7 +865,23 @@ static bool has_switching(const gia_model *m) {
     for (i = 0; i < m->n_edges; i++)
         if (m->edges[i].logic == GIA_LOGIC_THRESHOLD ||
             m->edges[i].logic == GIA_LOGIC_SUBTRACT) return true;
+    for (i = 0; i < m->n_nodes; i++)
+        if (m->nodes[i].is_module && m->nodes[i].kind == GIA_NODE_SWITCH)
+            return true;
     return false;
+}
+
+/* Signed distance to a switch module's boundary: > 0 while it is conducting.
+ * Its sensor is the control input, found by ROLE — the same rule the law uses,
+ * so the crossing located is the one the law acts on. */
+static double module_gap(const gia_model *m, int ni, const double *q) {
+    int j;
+    for (j = 0; j < m->n_edges; j++) {
+        const gia_edge *e = &m->edges[j];
+        if (e->to == ni && e->role == GIA_ROLE_CONTROL && e->from >= 0)
+            return q[e->from] - m->nodes[ni].mod_threshold;
+    }
+    return 1.0;
 }
 
 /* One smooth advance: Q(t+h) = exp(A h) Q(t), with A frozen at `q`.
@@ -904,6 +1049,44 @@ static double locate_event(const gia_model *m, const double *q0, double span,
             if ((gmid > 0.0) == (glo > 0.0)) {
                 lo = mid; glo = gmid;
                 if (side == -1) ghi *= 0.5;         /* Illinois: halve the stale end */
+                side = -1;
+            } else {
+                hi = mid; ghi = gmid;
+                if (side == +1) glo *= 0.5;
+                side = +1;
+            }
+        }
+        if (hi < earliest) earliest = hi;
+    }
+
+    /* The same search over switch modules. Their boundary is the sensor
+     * crossing its threshold, and it is located rather than stepped over, for
+     * the same reason a pathway threshold is: there is no smooth alpha across
+     * it, so persistence of form holds on each side and not through it. */
+    for (i = 0; i < m->n_nodes; i++) {
+        double lo, hi, glo, ghi, mid, gmid;
+        int    it, side = 0;
+
+        if (!m->nodes[i].is_module || m->nodes[i].kind != GIA_NODE_SWITCH)
+            continue;
+
+        glo = module_gap(m, i, q0);
+        if (!advance(m, q0, earliest, work)) continue;
+        ghi = module_gap(m, i, work);
+        if ((glo > 0.0) == (ghi > 0.0)) continue;
+
+        lo = 0.0; hi = earliest;
+        for (it = 0; it < 64; it++) {
+            double denom = (ghi - glo);
+            if (fabs(denom) < 1e-300) break;
+            mid = lo - glo * (hi - lo) / denom;
+            if (!(mid > lo && mid < hi)) mid = 0.5 * (lo + hi);
+            if (!advance(m, q0, mid, work)) break;
+            gmid = module_gap(m, i, work);
+            if (fabs(gmid) < 1e-14 || (hi - lo) < 1e-12) { hi = mid; break; }
+            if ((gmid > 0.0) == (glo > 0.0)) {
+                lo = mid; glo = gmid;
+                if (side == -1) ghi *= 0.5;
                 side = -1;
             } else {
                 hi = mid; ghi = gmid;
@@ -1392,6 +1575,35 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         }
         phi_for_node(nd, jn);
         nd->quality_input = num_field(jn, "quality_input", 0.0);
+        {   /* A module is OPT-IN: declaring a `module` block makes this
+             * component host its law, rather than the pathways around it. Being
+             * a work gate by type is not enough, because models written before
+             * ADR 0012 put the law on the pathway and must keep working until
+             * they are migrated. */
+            const cJSON *mj = cJSON_GetObjectItemCaseSensitive(jn, "module");
+            nd->is_module = false;
+            if (cJSON_IsObject(mj)) {
+                switch (nd->kind) {
+                    case GIA_NODE_INTERACTION:
+                    case GIA_NODE_GAIN:
+                    case GIA_NODE_SWITCH:
+                    case GIA_NODE_LOOP_LIMITED:
+                        break;
+                    default:
+                        fprintf(stderr,
+                                "engine: node %d ('%s'): type '%s' hosts no "
+                                "law, so it cannot carry a `module` block "
+                                "(ADR 0012)\n", i, nd->id ? nd->id : "?",
+                                gia_node_kind_name(nd->kind));
+                        gia_model_free(m);
+                        return false;
+                }
+                nd->is_module     = true;
+                nd->mod_k         = num_field(mj, "k", 1.0);
+                nd->mod_capacity  = num_field(mj, "capacity", 1.0);
+                nd->mod_threshold = num_field(mj, "threshold", 0.0);
+            }
+        }
         nd->carrier       = str_field(jn, "carrier", "");
         {   /* ADR 0006: the waveform is attached to the element, not held in a
              * model-root block keyed by id -- so a reader of the nodes array
@@ -1542,6 +1754,23 @@ bool gia_model_load(gia_model *m, cJSON *root) {
             }
             ed->control   = find_node(m, str_field(je, "control_node", NULL));
 
+            {   /* ADR 0013: a pathway entering a module says what it is TO
+                 * that module, by name. One spelling, `role`. */
+                const char *r = str_field(je, "role", NULL);
+                ed->role = GIA_ROLE_NONE;
+                if (r) {
+                    if      (!strcmp(r, "energy"))  ed->role = GIA_ROLE_ENERGY;
+                    else if (!strcmp(r, "control")) ed->role = GIA_ROLE_CONTROL;
+                    else {
+                        fprintf(stderr, "engine: edge %d: unknown role '%s' "
+                                        "(expected 'energy' or 'control')\n",
+                                i, r);
+                        gia_model_free(m);
+                        return false;
+                    }
+                }
+            }
+
             lg = str_field(je, "logic", ed->flow_type);
             if (!logic_of(lg, &ed->logic)) {
                 fprintf(stderr, "engine: edge %d: unknown pathway law '%s'\n",
@@ -1632,6 +1861,82 @@ bool gia_model_load(gia_model *m, cJSON *root) {
             fprintf(stderr, "engine: edge %d: both counter-flow legs are '%s', "
                             "so the exchange pays itself and moves nothing\n",
                     i, m->nodes[ed->cur_from].id);
+            gia_model_free(m);
+            return false;
+        }
+    }
+
+    /* A role only means something entering a module. On any other pathway it
+     * is a misplaced field, and silently ignoring it would let a modeller
+     * believe an input was marked when nothing read the mark. */
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *ed = &m->edges[i];
+        if (ed->role == GIA_ROLE_NONE || ed->to < 0) continue;
+        if (!m->nodes[ed->to].is_module) {
+            fprintf(stderr,
+                    "engine: edge %d: role '%s' on a pathway entering '%s', "
+                    "which is not a module — a role says what a pathway is to "
+                    "the module it enters (ADR 0013)\n",
+                    i, gia_role_name(ed->role), m->nodes[ed->to].id);
+            gia_model_free(m);
+            return false;
+        }
+    }
+
+    /* Each module states the roles it requires (ADR 0013). Anything else is an
+     * error naming the module — never a silent default, and never a fallback to
+     * position. */
+    for (i = 0; i < m->n_nodes; i++) {
+        const gia_node *nd = &m->nodes[i];
+        int j, n_energy = 0, n_control = 0, n_out = 0, want_control = -1;
+
+        if (!nd->is_module) continue;
+
+        for (j = 0; j < m->n_edges; j++) {
+            const gia_edge *ed = &m->edges[j];
+            if (ed->to == i) {
+                if (ed->role == GIA_ROLE_NONE) {
+                    fprintf(stderr,
+                            "engine: edge %d entering module '%s' declares no "
+                            "role; a module's inputs are named, never ordered "
+                            "(ADR 0013)\n", j, nd->id);
+                    gia_model_free(m);
+                    return false;
+                }
+                if (ed->role == GIA_ROLE_ENERGY)  n_energy++;
+                if (ed->role == GIA_ROLE_CONTROL) n_control++;
+            }
+            if (ed->from == i) n_out++;
+        }
+
+        switch (nd->kind) {
+            case GIA_NODE_INTERACTION:  want_control = -1; break;  /* any */
+            case GIA_NODE_GAIN:         want_control =  1; break;
+            case GIA_NODE_SWITCH:       want_control =  1; break;
+            case GIA_NODE_LOOP_LIMITED: want_control =  0; break;
+            default: break;
+        }
+
+        if (n_energy != 1) {
+            fprintf(stderr, "engine: module '%s' (%s) needs exactly one energy "
+                            "input, the one it consumes; it has %d\n",
+                    nd->id, gia_node_kind_name(nd->kind), n_energy);
+            gia_model_free(m);
+            return false;
+        }
+        if (want_control >= 0 && n_control != want_control) {
+            /* A cycling receptor with a surplus input is the case GSSK
+             * silently discards. Named here instead. */
+            fprintf(stderr, "engine: module '%s' (%s) needs exactly %d control "
+                            "input%s; it has %d\n",
+                    nd->id, gia_node_kind_name(nd->kind), want_control,
+                    want_control == 1 ? "" : "s", n_control);
+            gia_model_free(m);
+            return false;
+        }
+        if (n_out < 1) {
+            fprintf(stderr, "engine: module '%s' has no outgoing pathway, so "
+                            "its output goes nowhere\n", nd->id);
             gia_model_free(m);
             return false;
         }

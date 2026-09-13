@@ -697,11 +697,19 @@ general-purpose ODE library. The wedge is:
       gain and switch; exchange has four leg roles. Fan-out is in proportion to
       output pathway weight, which reproduces GSSK's even split for equal
       weights.
-- [ ] Settle the one spelling of `role` in a document (ADR 0013 leaves it to
-      the loader, but it must be exactly one).
-- [ ] Test that reordering a module's pathways produces byte-identical output —
-      the property ADR 0013 exists for, asserted directly.
-- [ ] Module-hosted laws in the engine, with the n-ary fold and fan-out.
+- [x] The one spelling of `role` is a `role` field on the pathway, taking
+      "energy" or "control".
+- [x] Reordering a module's pathways produces byte-identical output — the
+      property ADR 0013 exists for, asserted over three orderings, and verified
+      to FAIL when the energy input is chosen positionally as GSSK chooses it.
+- [x] Module-hosted laws in the engine, with the n-ary fold and fan-out.
+      Opt-in via a `module` block, so pre-ADR-0012 models keep working.
+      interaction, gain, switch and loop_limited; a switch module's crossing is
+      located like a pathway threshold's. A surplus input to a cycling receptor
+      is a named error, where GSSK silently discards it.
+- [ ] `exchange` as a module, with its four leg roles. Deferred from the
+      module work because the roles interact with carriers and with ADR 0001's
+      leg discovery.
 - [ ] Migrate the test models and both `examples/giannantoni/` seeds to write
       modules explicitly. NOT by having the loader rewrite edge laws into
       hidden gate nodes: that is desugaring, and a bookkeeping node would count

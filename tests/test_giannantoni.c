@@ -1644,6 +1644,283 @@ static void test_independent_inputs_still_sum(void) {
     cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 34. Module-hosted laws (ADR 0012), with inputs named by role (ADR 0013)
+ *
+ * The headline is [34]: the same model, its pathways listed in three different
+ * orders, must produce byte-identical output. GSSK fails that test — swapping
+ * two lines changes which stock it drains, and for an amplifier changes the
+ * answer tenfold — which is why roles exist here.
+ * ------------------------------------------------------------------ */
+
+/* A work gate: energy from `grass`, control from `sun`, output to `cow`.
+ * `edges` is supplied by the caller so the same model can be written with its
+ * pathways in any order. */
+static cJSON *gate_model(const char *edges) {
+    static char buf[1400];
+    snprintf(buf, sizeof(buf),
+        "{\"nodes\":["
+        "  {\"id\":\"grass\",\"type\":\"storage\",\"current_level\":100.0},"
+        "  {\"id\":\"sun\",\"type\":\"constant\",\"value\":2.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.01}},"
+        "  {\"id\":\"cow\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":[%s],"
+        " \"simulation_params\":{\"t_val\":2.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}", edges);
+    return cJSON_Parse(buf);
+}
+
+#define E_ENERGY "{\"source\":\"grass\",\"target\":\"gate\",\"role\":\"energy\"}"
+#define E_CTRL   "{\"source\":\"sun\",\"target\":\"gate\",\"role\":\"control\"}"
+#define E_OUT    "{\"source\":\"gate\",\"target\":\"cow\",\"weight\":1.0}"
+
+static char *slurp_file(const char *path) {
+    FILE *f = fopen(path, "rb");
+    long  n;
+    char *b;
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END); n = ftell(f); rewind(f);
+    b = (char *)malloc((size_t)n + 1);
+    if (!b) { fclose(f); return NULL; }
+    if (fread(b, 1, (size_t)n, f) != (size_t)n) { free(b); fclose(f); return NULL; }
+    b[n] = '\0';
+    fclose(f);
+    return b;
+}
+
+static void test_module_order_invariance(void) {
+    const char *orders[3] = {
+        E_ENERGY "," E_CTRL "," E_OUT,
+        E_CTRL "," E_ENERGY "," E_OUT,
+        E_OUT "," E_CTRL "," E_ENERGY
+    };
+    const char *paths[3] = {
+        "tests/results/gia_order_a.csv",
+        "tests/results/gia_order_b.csv",
+        "tests/results/gia_order_c.csv"
+    };
+    char *body[3] = { NULL, NULL, NULL };
+    int   i;
+
+    printf("\n[34] the order of pathways cannot change a result\n");
+
+    for (i = 0; i < 3; i++) {
+        cJSON     *root = gate_model(orders[i]);
+        gia_model  m;
+        if (!root) { ok("parse", false); return; }
+        ok("model loads with its pathways in this order",
+           gia_model_load(&m, root));
+        ok("trajectories written", gia_write_trajectories(&m, paths[i], 8));
+        body[i] = slurp_file(paths[i]);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+
+    /* The property ADR 0013 exists for. Not "close" — identical. */
+    ok("order A and order B are byte-identical",
+       body[0] && body[1] && !strcmp(body[0], body[1]));
+    ok("order A and order C are byte-identical",
+       body[0] && body[2] && !strcmp(body[0], body[2]));
+
+    for (i = 0; i < 3; i++) free(body[i]);
+}
+
+static void test_module_gate_closed_form(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[4], g = 0.01 * 2.0, t = 2.0;
+
+    printf("\n[35] work gate: F = k Q_energy * prod(controls)\n");
+
+    root = gate_model(E_ENERGY "," E_CTRL "," E_OUT);
+    if (!root) { ok("parse", false); return; }
+    ok("loads", gia_model_load(&m, root));
+    ok("the gate is a module", gia_node_is_module(&m, 2));
+    ok("a work gate makes the matrix state-dependent",
+       !gia_flow_matrix_is_constant(&m));
+
+    ok("solves", gia_network_state(&m, t, q, NULL));
+    /* The control is held, so g = k*Q_sun is stationary and grass decays
+     * exactly: grass(t) = 100 e^(-g t), and cow takes what grass loses. */
+    close_to("grass(2) = 100 e^(-k*Qsun*t)", q[0], 100.0 * exp(-g * t), 1e-6);
+    close_to("cow(2) = what grass lost", q[3], 100.0 - q[0], 1e-6);
+    close_to("the gate itself holds nothing: flow passes through",
+             q[2], 0.0, 1e-12);
+    close_to("the closed system is conserved",
+             gia_conservation_residual(&m, t), 0.0, 1e-6);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_module_nary_and_fanout(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[6], g, t = 1.0;
+
+    printf("\n[36] n-ary controls, and fan-out in proportion to weight\n");
+
+    /* Two controls — the case a binary pathway law cannot express at all —
+     * and two outputs weighted 3:1. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":100.0},"
+        "  {\"id\":\"b\",\"type\":\"constant\",\"value\":2.0},"
+        "  {\"id\":\"c\",\"type\":\"constant\",\"value\":3.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.05}},"
+        "  {\"id\":\"out1\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"out2\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"b\",\"target\":\"gate\",\"role\":\"control\"},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\"},"
+        "  {\"source\":\"gate\",\"target\":\"out1\",\"weight\":3.0},"
+        "  {\"source\":\"gate\",\"target\":\"out2\",\"weight\":1.0}],"
+        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    ok("a two-control gate loads", gia_model_load(&m, root));
+    ok("solves", gia_network_state(&m, t, q, NULL));
+
+    /* Every control folds into the conductance: g = k * Qb * Qc. */
+    g = 0.05 * 2.0 * 3.0;
+    close_to("a(1) = 100 e^(-k Qb Qc t)", q[0], 100.0 * exp(-g * t), 1e-6);
+    close_to("the two outputs take what a lost",
+             q[4] + q[5], 100.0 - q[0], 1e-6);
+    close_to("split 3:1 by pathway weight", q[4] / q[5], 3.0, 1e-9);
+    close_to("conserved", gia_conservation_residual(&m, t), 0.0, 1e-6);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_module_gain_closed_form(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[4], k = 0.05, S = 10.0, t = 3.0;
+
+    printf("\n[37] amplifier: the control sets the rate, the energy is drained\n");
+
+    /* Odum SecIX. The control is held, so F = k*S is constant and both
+     * trajectories are exactly linear — and the stock that empties is the
+     * ENERGY input, which is the thing GSSK gets wrong by position. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"signal\",\"type\":\"constant\",\"value\":10.0},"
+        "  {\"id\":\"power\",\"type\":\"storage\",\"current_level\":100.0},"
+        "  {\"id\":\"amp\",\"type\":\"gain\",\"module\":{\"k\":0.05}},"
+        "  {\"id\":\"load\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"signal\",\"target\":\"amp\",\"role\":\"control\"},"
+        "  {\"source\":\"power\",\"target\":\"amp\",\"role\":\"energy\"},"
+        "  {\"source\":\"amp\",\"target\":\"load\",\"weight\":1.0}],"
+        " \"simulation_params\":{\"t_val\":3.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    ok("loads", gia_model_load(&m, root));
+    ok("solves", gia_network_state(&m, t, q, NULL));
+
+    close_to("load(3) = k*S*t",        q[3], k * S * t, 1e-6);
+    close_to("power(3) = 100 - k*S*t", q[1], 100.0 - k * S * t, 1e-6);
+    close_to("the signal is read, never drained", q[0], 10.0, 1e-12);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_module_validation(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[38] a module states the roles it requires\n");
+
+    /* No role at all: the case GSSK answers by position. */
+    root = gate_model("{\"source\":\"grass\",\"target\":\"gate\"},"
+                      E_CTRL "," E_OUT);
+    if (root) {
+        ok("an input with no role is rejected", !gia_model_load(&m, root));
+        cJSON_Delete(root);
+    }
+    /* Two energy inputs: which one is consumed would have to be guessed. */
+    root = gate_model(E_ENERGY ","
+                      "{\"source\":\"sun\",\"target\":\"gate\",\"role\":\"energy\"},"
+                      E_OUT);
+    if (root) {
+        ok("two energy inputs are rejected", !gia_model_load(&m, root));
+        cJSON_Delete(root);
+    }
+    /* A role on a pathway entering no module is a misplaced field. */
+    root = cJSON_Parse(
+        "{\"nodes\":[{\"id\":\"a\",\"type\":\"storage\",\"current_level\":1.0},"
+        "           {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\","
+        "            \"weight\":1.0,\"role\":\"energy\"}]}");
+    if (root) {
+        ok("a role entering a non-module is rejected",
+           !gia_model_load(&m, root));
+        cJSON_Delete(root);
+    }
+    /* A cycling receptor with a surplus input. GSSK silently discards it. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"extra\",\"type\":\"constant\",\"value\":1.0},"
+        "  {\"id\":\"rec\",\"type\":\"loop_limited\","
+        "   \"module\":{\"k\":0.5,\"capacity\":5.0}},"
+        "  {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"rec\",\"role\":\"energy\"},"
+        "  {\"source\":\"extra\",\"target\":\"rec\",\"role\":\"control\"},"
+        "  {\"source\":\"rec\",\"target\":\"out\",\"weight\":1.0}]}");
+    if (root) {
+        ok("a surplus input is named, not silently discarded as GSSK does",
+           !gia_model_load(&m, root));
+        cJSON_Delete(root);
+    }
+    /* A module block on a type that hosts no law. */
+    root = cJSON_Parse(
+        "{\"nodes\":[{\"id\":\"s\",\"type\":\"storage\",\"current_level\":1.0,"
+        "            \"module\":{\"k\":1.0}}],\"edges\":[]}");
+    if (root) {
+        ok("a module block on a storage is rejected",
+           !gia_model_load(&m, root));
+        cJSON_Delete(root);
+    }
+}
+
+static void test_module_switch_events(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[4];
+    int        ev;
+
+    printf("\n[39] a switch module's crossing is located, not stepped over\n");
+
+    /* The sensor is the tank being drained, so the switch shuts itself off at
+     * the threshold. Without event location the flow would run past it. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"tank\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"sw\",\"type\":\"switch\","
+        "   \"module\":{\"k\":2.0,\"threshold\":6.0}},"
+        "  {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"tank\",\"target\":\"sw\",\"role\":\"energy\"},"
+        "  {\"source\":\"tank\",\"target\":\"sw\",\"role\":\"control\"},"
+        "  {\"source\":\"sw\",\"target\":\"out\",\"weight\":1.0}],"
+        " \"simulation_params\":{\"t_val\":4.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    ok("a switch module loads", gia_model_load(&m, root));
+    ok("it makes the matrix non-constant", !gia_flow_matrix_is_constant(&m));
+
+    ok("solves before the crossing", gia_network_state(&m, 1.0, q, NULL));
+    close_to("tank(1) = 10 - 2", q[0], 8.0, 1e-6);
+
+    ok("solves past the crossing", gia_network_state(&m, 4.0, q, NULL));
+    ev = gia_count_events(&m, 4.0);
+    printf("      events located over [0,4]: %d\n", ev);
+    ok("a crossing was located", ev >= 1);
+    close_to("the tank is held at the threshold, not driven through it",
+             q[0], 6.0, 1e-4);
+    close_to("conserved across the event", q[0] + q[2], 10.0, 1e-6);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -1680,6 +1957,12 @@ int main(void) {
     test_projection_processing_node_params();
     test_reunited_coproducts();
     test_independent_inputs_still_sum();
+    test_module_order_invariance();
+    test_module_gate_closed_form();
+    test_module_nary_and_fanout();
+    test_module_gain_closed_form();
+    test_module_validation();
+    test_module_switch_events();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

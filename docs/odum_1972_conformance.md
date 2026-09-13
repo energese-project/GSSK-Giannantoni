@@ -202,6 +202,37 @@ approximated away.
 | Fig 2.6e subtracting (ADR 0008) | `subtract` | ✅ clamped, clamp is an event |
 | fixed rate | `constant` | ✅ affine, via the augmented column |
 
+**Module-hosted laws are implemented** (ADR 0012), alongside the pathway laws
+rather than replacing them — migrating the models and removing the seven
+pathway laws are separate steps, so nothing breaks at once. A component becomes
+a module by declaring a `module` block, which keeps it opt-in: being a work gate
+by type is not enough, because models written before ADR 0012 put the law on the
+pathway and still work.
+
+Each pathway entering a module declares `role`: `"energy"` for the input that is
+consumed, `"control"` for one that is read. **Position is never consulted**, and
+there is a test asserting the property directly — the same model with its
+pathways listed in three different orders produces byte-identical output. That
+test was verified to fail when the energy input is chosen positionally, the way
+GSSK chooses it.
+
+| module | roles required | law |
+|---|---|---|
+| `interaction` (§X) | 1 energy, any controls | `F = k · Q_energy · Π Q_control` |
+| `gain` (§IX) | 1 energy, 1 control | `F = k · Q_control`, drawn from energy |
+| `switch` (§XI) | 1 energy, 1 control | fixed rate while the sensor is above threshold; the crossing is located |
+| `loop_limited` (§XIII) | 1 energy, 0 controls | `F = k · Q · C / (C + Q)` |
+
+A work gate now takes **any number of controls**, which no binary pathway law
+could express: every control folds into the conductance, so `g = k · Π Q_control`
+and the matrix machinery is unchanged. Output is divided among a module's
+outgoing pathways in proportion to their weight, so equal weights give an even
+split. A surplus input to a cycling receptor is a **named error**, where GSSK
+silently discards it.
+
+`exchange` is deferred: its four leg roles interact with the carrier work and
+with ADR 0001's leg discovery, and it wants its own task.
+
 All nine GSSK primitive node types are accepted: `source` and `constant` are
 held rather than integrated (§II), a `sink` is never depleted (§V), and
 `storage`, `interaction`, `gain`, `loop_limited`, `switch` and `exchange`
