@@ -724,6 +724,16 @@ general-purpose ODE library. The wedge is:
       pathway's flow from the pathway's own law, which for a module pathway is
       the default linear weight-1 — so the emergy pass carried transformity
       along a flow the solver never used. It now asks the module.
+- [x] ADR 0014 written: ordinality counts components on pathways that carry
+      quantity. Found while starting the migration below — since controls
+      became edges, the cycle scan walks them, so a pure accumulator was
+      reported at maximum ordinality and the MOP step declined to generate; a
+      control read from a constant made a conserving system report open; and
+      one system scored 0.667 as a pathway law but 0.75 as a module.
+- [ ] Implement ADR 0014: skip control legs, pass through modules without
+      counting them, one cycle scan shared by `gia_ordinality` and
+      `gia_generate`, closedness asked the same way. Asserts invariance under
+      re-spelling. Blocks the migration below.
 - [ ] Migrate the test models and both `examples/giannantoni/` seeds to write
       modules explicitly. NOT by having the loader rewrite edge laws into
       hidden gate nodes: that is desugaring, and a bookkeeping node would count
