@@ -2132,6 +2132,258 @@ static void test_module_emergy_uses_module_flow(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 45-50. Ordinality over pathways that carry quantity (ADR 0014)
+ *
+ * Ordinality decides whether emergence happens. Since module-hosted laws made
+ * a control into an edge, the cycle scan walked it, and a module was counted
+ * as a component although it holds nothing. Each model here is one of the
+ * ADR's reproductions.
+ * ------------------------------------------------------------------ */
+
+static bool load_json(gia_model *m, cJSON **root, const char *json) {
+    *root = cJSON_Parse(json);
+    if (!*root) return false;
+    if (!gia_model_load(m, *root)) { cJSON_Delete(*root); *root = NULL; return false; }
+    return true;
+}
+
+/* The module is listed FIRST on purpose: its on_cycle flag is always false, so
+ * a scan that forgot a module is not a component would pick it as the open
+ * component to close. */
+static const char *ACCUMULATOR =
+    "{\"nodes\":["
+    "  {\"id\":\"g\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+    "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5.0},"
+    "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
+    " \"edges\":["
+    "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
+    "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\"},"
+    "  {\"source\":\"g\",\"target\":\"a\",\"weight\":1.0},"
+    "  {\"source\":\"g\",\"target\":\"b\",\"weight\":1.0}],"
+    " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+    "                       \"generative_mode\":true}}";
+
+static void test_control_does_not_close_a_pathway(void) {
+    cJSON     *root, *out, *nodes, *added;
+    gia_model  m;
+    double     q[3];
+
+    printf("\n[45] a control leg does not close a pathway\n");
+    if (!load_json(&m, &root, ACCUMULATOR)) { ok("loads", false); return; }
+
+    /* b receives from the gate and only meters it. Nothing b holds leaves. */
+    ok("solves", gia_network_state(&m, 1.0, q, NULL));
+    ok("b only accumulates", q[2] > 2.0);
+
+    ok("two components: a module is not one", gia_component_count(&m) == 2);
+    close_to("ordinality is 1/2, not 1", gia_ordinality(&m), 0.5, 1e-12);
+    ok("below maximum ordinality", !gia_at_maximum_ordinality(&m));
+    ok("a is on a closed pathway, through the gate", m.nodes[1].on_cycle);
+    ok("b is not: its only way back is a control", !m.nodes[2].on_cycle);
+    ok("the module's own flag stays false", !m.nodes[0].on_cycle);
+
+    /* So the MOP step has an open relationship to close -- and closes b. */
+    out = gia_generate(&m);
+    ok("generate evolves the graph", out && !cJSON_Compare(root, out, 1));
+    nodes = out ? cJSON_GetObjectItemCaseSensitive(out, "nodes") : NULL;
+    added = nodes ? cJSON_GetArrayItem(nodes, cJSON_GetArraySize(nodes) - 1) : NULL;
+    {
+        const cJSON *from = added ? cJSON_GetObjectItemCaseSensitive(added, "emerged_from") : NULL;
+        const cJSON *rank = added ? cJSON_GetObjectItemCaseSensitive(added, "ordinality_rank") : NULL;
+        ok("the component closed is b, never the module",
+           cJSON_IsString(from) && !strcmp(from->valuestring, "b"));
+        ok("the emergent component's rank counts components",
+           cJSON_IsNumber(rank) && rank->valuedouble == 2.0);
+    }
+    cJSON_Delete(out);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_module_is_passed_through(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[46] a closed pathway may run through a module\n");
+    /* a -> g -> b -> a: the loop is material, and runs through the gate. */
+    if (!load_json(&m, &root,
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5.0},"
+        "  {\"id\":\"g\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
+        "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\"},"
+        "  {\"source\":\"g\",\"target\":\"b\",\"weight\":1.0},"
+        "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.05}],"
+        " \"simulation_params\":{\"t_val\":1.0}}")) { ok("loads", false); return; }
+    close_to("every component is on the loop", gia_ordinality(&m), 1.0, 1e-12);
+    ok("at maximum ordinality", gia_at_maximum_ordinality(&m));
+    ok("but the module is still not counted as on it", !m.nodes[1].on_cycle);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_control_does_not_open_the_boundary(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[47] a control read across the boundary moves nothing\n");
+    if (!load_json(&m, &root,
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5.0},"
+        "  {\"id\":\"g\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0},"
+        "  {\"id\":\"c\",\"type\":\"constant\",\"value\":2.0}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
+        "  {\"source\":\"c\",\"target\":\"g\",\"role\":\"control\"},"
+        "  {\"source\":\"g\",\"target\":\"b\",\"weight\":1.0},"
+        "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.05}],"
+        " \"simulation_params\":{\"t_val\":1.0}}")) { ok("loads", false); return; }
+    ok("a gate metered by a constant leaves the system closed",
+       gia_system_is_closed(&m));
+    close_to("and it does conserve", gia_conservation_residual(&m, 1.0),
+             0.0, 1e-12);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* Not an over-correction: a source on the ENERGY leg does move quantity
+     * across the boundary, and the system is open. */
+    if (!load_json(&m, &root,
+        "{\"nodes\":["
+        "  {\"id\":\"s\",\"type\":\"source\",\"value\":2.0},"
+        "  {\"id\":\"g\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
+        " \"edges\":["
+        "  {\"source\":\"s\",\"target\":\"g\",\"role\":\"energy\"},"
+        "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\"},"
+        "  {\"source\":\"g\",\"target\":\"b\",\"weight\":1.0}],"
+        " \"simulation_params\":{\"t_val\":1.0}}")) { ok("loads", false); return; }
+    ok("a source on the energy leg still opens the system",
+       !gia_system_is_closed(&m));
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_ordinality_invariant_under_respelling(void) {
+    /* One system: a <-> b is a closed loop, and a source feeds a work gate
+     * metered by a that delivers into a. Only a and b are on a closed pathway.
+     * Before ADR 0014 the module spelling scored 0.75; skipping controls alone
+     * would score 0.50. */
+    const char *as_pathway =
+        "{\"nodes\":["
+        "  {\"id\":\"src\",\"type\":\"source\",\"value\":2.0},"
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5.0},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
+        " \"edges\":["
+        "  {\"source\":\"src\",\"target\":\"a\",\"logic\":\"interaction\","
+        "   \"weight\":0.1,\"control_node\":\"a\"},"
+        "  {\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.3},"
+        "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2}],"
+        " \"simulation_params\":{\"t_val\":1.0}}";
+    const char *as_module =
+        "{\"nodes\":["
+        "  {\"id\":\"src\",\"type\":\"source\",\"value\":2.0},"
+        "  {\"id\":\"g\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5.0},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
+        " \"edges\":["
+        "  {\"source\":\"src\",\"target\":\"g\",\"role\":\"energy\"},"
+        "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"control\"},"
+        "  {\"source\":\"g\",\"target\":\"a\",\"weight\":1.0},"
+        "  {\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.3},"
+        "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2}],"
+        " \"simulation_params\":{\"t_val\":1.0}}";
+    cJSON     *rp, *rm;
+    gia_model  mp, mm;
+    double     qp[3], qm[4];
+
+    printf("\n[48] where a law is drawn does not change ordinality\n");
+    if (!load_json(&mp, &rp, as_pathway)) { ok("pathway spelling loads", false); return; }
+    if (!load_json(&mm, &rm, as_module))  { ok("module spelling loads", false);
+                                            gia_model_free(&mp); cJSON_Delete(rp); return; }
+
+    /* They are the same system, so establish that first. */
+    ok("pathway spelling solves", gia_network_state(&mp, 1.0, qp, NULL));
+    ok("module spelling solves",  gia_network_state(&mm, 1.0, qm, NULL));
+    close_to("same trajectory: a", qm[2], qp[1], 1e-9);
+    close_to("same trajectory: b", qm[3], qp[2], 1e-9);
+
+    close_to("pathway spelling: 2/3", gia_ordinality(&mp), 2.0 / 3.0, 1e-12);
+    close_to("module spelling: the same 2/3", gia_ordinality(&mm), 2.0 / 3.0, 1e-12);
+    ok("the same closedness",
+       gia_system_is_closed(&mp) == gia_system_is_closed(&mm));
+    ok("the same maximum-ordinality verdict",
+       gia_at_maximum_ordinality(&mp) == gia_at_maximum_ordinality(&mm));
+
+    gia_model_free(&mp); cJSON_Delete(rp);
+    gia_model_free(&mm); cJSON_Delete(rm);
+}
+
+static void test_transactor_does_not_change_kind(void) {
+    cJSON     *root;
+    gia_model  m;
+    int        i;
+    bool       any = false;
+
+    printf("\n[49] a transactor passes goods as goods and money as money\n");
+
+    /* The only loop in this graph switches carrier twice:
+     *
+     *   gB --goods_in--> ex2 --counter_out--> mA --counter_in--> ex1 --goods_out--> gB
+     *
+     * Read pairwise, as quantity, every stream dead-ends: gZ -> ex1 -> gB ->
+     * ex2 -> gX, and mY -> ex2 -> mA -> ex1 -> mW. Nothing that enters as goods
+     * ever returns as goods. Letting a path cross streams would put gB and mA
+     * "on a cycle" that moves no single quantity around it. */
+    if (!load_json(&m, &root,
+        "{\"nodes\":["
+        "  {\"id\":\"gZ\",\"type\":\"storage\",\"carrier\":\"goods\",\"current_level\":9.0},"
+        "  {\"id\":\"gB\",\"type\":\"storage\",\"carrier\":\"goods\",\"current_level\":9.0},"
+        "  {\"id\":\"gX\",\"type\":\"storage\",\"carrier\":\"goods\",\"current_level\":0.0},"
+        "  {\"id\":\"mY\",\"type\":\"storage\",\"carrier\":\"money\",\"current_level\":9.0},"
+        "  {\"id\":\"mA\",\"type\":\"storage\",\"carrier\":\"money\",\"current_level\":9.0},"
+        "  {\"id\":\"mW\",\"type\":\"storage\",\"carrier\":\"money\",\"current_level\":0.0},"
+        "  {\"id\":\"ex1\",\"type\":\"exchange\",\"module\":{\"k\":0.1,\"exchange_ratio\":1.0}},"
+        "  {\"id\":\"ex2\",\"type\":\"exchange\",\"module\":{\"k\":0.1,\"exchange_ratio\":1.0}}],"
+        " \"edges\":["
+        "  {\"source\":\"gZ\",\"target\":\"ex1\",\"role\":\"goods_in\"},"
+        "  {\"source\":\"ex1\",\"target\":\"gB\",\"role\":\"goods_out\"},"
+        "  {\"source\":\"mA\",\"target\":\"ex1\",\"role\":\"counter_in\"},"
+        "  {\"source\":\"ex1\",\"target\":\"mW\",\"role\":\"counter_out\"},"
+        "  {\"source\":\"gB\",\"target\":\"ex2\",\"role\":\"goods_in\"},"
+        "  {\"source\":\"ex2\",\"target\":\"gX\",\"role\":\"goods_out\"},"
+        "  {\"source\":\"mY\",\"target\":\"ex2\",\"role\":\"counter_in\"},"
+        "  {\"source\":\"ex2\",\"target\":\"mA\",\"role\":\"counter_out\"}],"
+        " \"simulation_params\":{\"t_val\":1.0}}")) { ok("loads", false); return; }
+
+    ok("six components, two modules", gia_component_count(&m) == 6);
+    close_to("no component is on a closed pathway", gia_ordinality(&m), 0.0, 0.0);
+    gia_mark_cycles(&m);
+    for (i = 0; i < m.n_nodes; i++) any = any || m.nodes[i].on_cycle;
+    ok("including gB and mA, which only a stream-crossing path would join", !any);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* And a genuine goods loop through a transactor still counts. */
+    if (!load_json(&m, &root,
+        "{\"nodes\":["
+        "  {\"id\":\"ga\",\"type\":\"storage\",\"carrier\":\"goods\",\"current_level\":9.0},"
+        "  {\"id\":\"gb\",\"type\":\"storage\",\"carrier\":\"goods\",\"current_level\":0.0},"
+        "  {\"id\":\"mb\",\"type\":\"storage\",\"carrier\":\"money\",\"current_level\":9.0},"
+        "  {\"id\":\"ma\",\"type\":\"storage\",\"carrier\":\"money\",\"current_level\":0.0},"
+        "  {\"id\":\"ex\",\"type\":\"exchange\",\"module\":{\"k\":0.1,\"exchange_ratio\":1.0}}],"
+        " \"edges\":["
+        "  {\"source\":\"ga\",\"target\":\"ex\",\"role\":\"goods_in\"},"
+        "  {\"source\":\"ex\",\"target\":\"gb\",\"role\":\"goods_out\"},"
+        "  {\"source\":\"mb\",\"target\":\"ex\",\"role\":\"counter_in\"},"
+        "  {\"source\":\"ex\",\"target\":\"ma\",\"role\":\"counter_out\"},"
+        "  {\"source\":\"gb\",\"target\":\"ga\",\"logic\":\"linear\",\"weight\":0.1}],"
+        " \"simulation_params\":{\"t_val\":1.0}}")) { ok("loads", false); return; }
+    close_to("the goods loop closes through the transactor; money does not",
+             gia_ordinality(&m), 0.5, 1e-12);
+    ok("ga on it", m.nodes[0].on_cycle);
+    ok("ma not", !m.nodes[3].on_cycle);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -2179,6 +2431,11 @@ int main(void) {
     test_transactor_validation();
     test_transactor_barter();
     test_module_emergy_uses_module_flow();
+    test_control_does_not_close_a_pathway();
+    test_module_is_passed_through();
+    test_control_does_not_open_the_boundary();
+    test_ordinality_invariant_under_respelling();
+    test_transactor_does_not_change_kind();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

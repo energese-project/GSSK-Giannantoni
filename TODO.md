@@ -730,10 +730,30 @@ general-purpose ODE library. The wedge is:
       reported at maximum ordinality and the MOP step declined to generate; a
       control read from a constant made a conserving system report open; and
       one system scored 0.667 as a pathway law but 0.75 as a module.
-- [ ] Implement ADR 0014: skip control legs, pass through modules without
+- [x] Implement ADR 0014: skip control legs, pass through modules without
       counting them, one cycle scan shared by `gia_ordinality` and
       `gia_generate`, closedness asked the same way. Asserts invariance under
-      re-spelling. Blocks the migration below.
+      re-spelling. A transactor is passed through stream by stream — goods as
+      goods, counter-flow as counter-flow — which the ADR implied but did not
+      spell out. Each guard verified to fail its test when removed.
+- [ ] Decide whether a module has a row in the MOP harmony matrix. ADR 0014
+      settles that a module is not a component, but the harmony matrix is
+      still sized from every node, and the report labels that size
+      "components N". No seed has a module yet, so no output contradicts
+      itself today; the migration below will make it visible.
+- [ ] **The MOP ordinal step can move a system away from maximum ordinality,
+      forever.** Pre-existing. `gia_generate` wires the emergent component
+      hub -> E -> open, which closes `open` only if `open` already reaches the
+      hub. For a dead end it closes nothing and adds E as a new open
+      component: `a <-> b, a -> c` goes 0.667 -> 0.500 -> 0.400 -> ..., each
+      step printing "closed the loop". The seed test cannot see it because the
+      seed's open component happens to reach its hub. Needs an ADR on what the
+      emergent quality closes; crux `mop-step-closes-nothing`.
+- [ ] The emergent component `gia_generate` writes is a `gain` with no
+      `module` block, joined by `ordinal_ascent` / `emergent_feedback_loop`
+      pathways — the old spelling. Once pathway module laws are removed it
+      must be emitted as a module, and what it closes re-checked under
+      ADR 0014, since its return leg would then be a control.
 - [ ] Migrate the test models and both `examples/giannantoni/` seeds to write
       modules explicitly. NOT by having the loader rewrite edge laws into
       hidden gate nodes: that is desugaring, and a bookkeeping node would count

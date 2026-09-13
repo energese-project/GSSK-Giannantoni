@@ -1,6 +1,6 @@
 # ADR 0014 — Ordinality counts components on pathways that carry quantity
 
-- **Status**: proposed
+- **Status**: accepted
 - **Date**: 2026-09-13
 - **Task**: `adr-0014-ordinality-over-quantity`
 - **Supersedes**: nothing

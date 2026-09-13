@@ -127,7 +127,11 @@ static void report_model(gia_model *m) {
     printf(" GIANNANTONI GENERATIVE FRAMEWORK\n");
     printf("%s\n", RULE);
     printf("  system            %s\n", m->system_name);
-    printf("  components        %d\n", m->n_nodes);
+    /* Modules are counted apart: a module holds nothing, so it is not a
+     * component and does not enter ordinality (ADR 0014). */
+    printf("  components        %d\n", gia_component_count(m));
+    if (gia_component_count(m) != m->n_nodes)
+        printf("  modules           %d\n", m->n_nodes - gia_component_count(m));
     printf("  relationships     %d\n", m->n_edges);
     printf("  horizon t_val     %g\n", m->t_end);
     printf("  derivative order  %d\n", m->order);
