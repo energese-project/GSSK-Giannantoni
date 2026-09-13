@@ -18,7 +18,7 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 - **`gia_edge_flow` read a module pathway's flow from the pathway's own law.** A module's pathways carry no law, so that was the default — linear, weight 1 — and the emergy pass therefore carried transformity along a flow the solver never used. It now asks the module. Introduced with module-hosted laws and caught while adding the transactor.
 
-> The rest of this engine's history is in [docs/odum_1972_conformance.md](odum_1972_conformance.md) and [TODO.md](../TODO.md), which were written alongside it; this is the first entry here because the changelog tracks the GSSK kernel's releases.
+> The rest of this engine's history is in [odum_1972_conformance.md](odum_1972_conformance.md) and in `TODO.md` at the repository root, which were written alongside it; this is the first entry here because the changelog tracks the GSSK kernel's releases.
 
 ---
 
