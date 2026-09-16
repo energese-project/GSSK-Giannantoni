@@ -270,6 +270,18 @@ buys is the one the module migration needs: one system written with a law on a
 pathway and written as a module has the same ordinality, the same closedness,
 and so the same generative verdict.
 
+**The generative step keeps its promise to raise ordinality**
+([ADR 0015](adr/0015-what-the-emergent-quality-closes.md)). It wired a single
+return from a hub to the first open component, which closes nothing when that
+component is a dead end, so in four of five measured models ordinality fell on
+every step and the step never stopped. The emergent quality now closes every
+open component at once, adding only the direction each is missing, and the
+engine rescans before saying so. It never closes a sink — Odum §V's heat sink
+is where used energy leaves, and drawing on it would recycle it — so a model
+with a heat sink reaches a stated fixed point below maximum. Whether Odum's
+boundary, sources and sinks, should count toward ordinality at all is left
+open.
+
 All nine GSSK primitive node types are accepted: `source` and `constant` are
 held rather than integrated (§II), a `sink` is never depleted (§V), and
 `storage`, `interaction`, `gain`, `loop_limited`, `switch` and `exchange`

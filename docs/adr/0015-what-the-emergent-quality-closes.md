@@ -1,6 +1,6 @@
 # ADR 0015 — What the emergent quality closes
 
-- **Status**: proposed
+- **Status**: accepted
 - **Date**: 2026-09-13
 - **Task**: `mop-step-closes-nothing`
 - **Supersedes**: nothing
@@ -104,9 +104,15 @@ A prototype of that terminates on every model above, and gets two things wrong:
 4. **The step is decided by the model, not its serialisation.** The open
    components are a set, not the first one found. Hub ties are broken by id. The
    legs the step adds are written out in id order. The same model with its nodes
-   or edges reordered evolves to **byte-identical** output. The prototype already
-   added the same set of legs in both orders of Reproduction 2 and differed only
-   in the order it wrote them, which is what the last requirement removes.
+   or edges reordered **appends a byte-identical component and legs**. The rest
+   of the output is the seed, copied in the order it was given, so two orderings
+   of a seed still serialise differently there — the claim is about what the
+   step adds, which is the only part it decides. The prototype already added the
+   same set of legs in both orders of Reproduction 2 and differed only in the
+   order it wrote them, which is what the last requirement removes.
+
+   *Corrected on implementation.* As first merged this decision said the whole
+   output was byte-identical, which cannot hold for a copy of a reordered seed.
 
 5. **The emergent quality is a component, not a module.** Under ADR 0014 a
    module is not counted toward ordinality and its control closes nothing. An `E`
@@ -148,14 +154,17 @@ A prototype of that terminates on every model above, and gets two things wrong:
 
 ## Consequences
 
-- The seed still has one open component and gains the same two legs. Its
-  `output.json` still differs from before, because `E`'s type becomes `storage`
-  and `emerged_from` becomes an array.
+- The seed still has one open component and gains the same two legs, with the
+  same weights. Its `output.json` still differs from before: `E`'s type becomes
+  `storage`, `emerged_from` becomes an array, and — so the output does not call a
+  storage a gain — its id becomes `emergent_quality_N` and its label
+  "Emergent Quality".
 - `examples/giannantoni/closed_loop.json` is a hand-written evolved graph whose
   emergent component is a `gain`. It still loads, and its ordinality is
   unchanged. Rewriting it belongs to the model migration, which now depends on
   this ADR.
 - Tests: each model in Reproduction 1 reaches its fixed point in one step, and a
   second step is functional. Ordinality never decreases across a step. Both
-  node orders give byte-identical output. No sink appears on any emergent leg.
+  node orders append byte-identical components and legs. No sink appears on any
+  emergent leg.
   Test [45], which reads `emerged_from` as a string, changes with decision 5.
