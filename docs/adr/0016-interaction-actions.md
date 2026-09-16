@@ -15,18 +15,20 @@ ADR 0012 decision 5 moves seven laws off pathways and onto modules:
 Its migration note counts the models that use each one, including one each for
 `ratio` and `subtract`. Once nothing writes the pathway forms, they are removed.
 
-Five of the seven have a module to move to. The loader accepts a `module` block
-on exactly these node kinds:
+Five of the seven can be written as a module today. The loader accepts a
+`module` block on `interaction`, `gain`, `switch`, `loop_limited` and `exchange`,
+and none of those can express a divisor or a subtracting action. The mapping
+this ADR decides is the last column:
 
-| pathway law | module |
-|---|---|
-| `interaction` | `interaction` |
-| `gain` | `gain` |
-| `threshold` | `switch` |
-| `limit` | `loop_limited` |
-| `exchange` | `exchange` |
-| `ratio` | — |
-| `subtract` | — |
+| pathway law | module today | after this ADR |
+|---|---|---|
+| `interaction` | `interaction` | `interaction`, `action: multiply` (the default) |
+| `gain` | `gain` | unchanged |
+| `threshold` | `switch` | unchanged |
+| `limit` | `loop_limited` | unchanged |
+| `exchange` | `exchange` | unchanged |
+| `ratio` | *none* | `interaction`, `action: divide` |
+| `subtract` | *none* | `interaction`, `action: subtract` |
 
 Neither ADR 0012 nor ADR 0013 says how `ratio` and `subtract` are written as
 modules. ADR 0013 names roles for interaction, gain, switch and loop_limited,
@@ -37,14 +39,28 @@ Odum's arithmetic actions out of the language altogether.
 
 ### What Odum draws
 
-ADR 0008 already records the figure. *Modeling for All Scales* Fig. 2.6 shows
-**one** interaction glyph computing several ways: (a) a product of two inputs,
-(c) a product of three, (d) a divisor action, (e) a subtracting action. "The
-overloading is deliberate: one shape keeps the diagram legible while the
-arithmetic inside it varies."
+*Modeling for All Scales* Fig. 2.6, captioned "Uses of the interaction
+symbol", draws **one** glyph five ways: (a) product interaction, (b)
+transformity position, (c) three product inputs, (d) divisor action, (e)
+subtracting action. Panels (d) and (e) sit under the heading "Other Kinds of
+Interactions". ADR 0008 recorded the same figure: "The overloading is
+deliberate: one shape keeps the diagram legible while the arithmetic inside it
+varies."
 
 `ratio` is (d), and `subtract` is (e). They are not separate symbols. They are
-what the work gate computes.
+what the interaction symbol computes, and the figure says which way round:
+
+- (d) "Left input divided by the control action"
+- (e) "Control subtracts from the left input"
+
+Odum's definition of the symbol fixes which input is the left one: "The flows
+to an interaction are drawn to the symbol from left to right in order of their
+transformity, the lowest quality one connecting to the notched left margin."
+Panel (b) labels the two: the "Low Transformity Input" enters the notch, and
+the "High Transformity, Control" enters from above. So in ADR 0013's roles the
+notched left input is `energy` and the upper one is `control`. The formulas
+below follow the captions: energy divided by control, and control subtracted
+from energy.
 
 ### Why the pathway spellings are separate today
 
@@ -131,6 +147,19 @@ ambiguity, only for these two.
   migration PR decides it and says what it chose.
 - **Actions beyond Fig. 2.6.** `min`, `max` and other combinations are not
   added. The table is the figure.
+- **Whether the control input is consumed.** Odum defines an interaction as
+  joining "two or more flows that are different and both required for a
+  process", and Fig. 2.6(a) labels both inputs "Use of Ingredient". ADR 0013
+  instead made the control read and never consumed, which was GSSK's behaviour
+  rather than a reading of the figure. The engine currently gives a product the
+  transformity of its energy input alone. Panel (b) shows a low-transformity
+  input and a high-transformity control giving *moderate*-transformity products.
+  That question reaches ADR 0013's roles, ADR 0014's cycle scan and the emergy
+  pass, so it is its own decision, not this one's. This ADR keeps ADR 0013's
+  roles as they stand. Whatever that decision settles for `multiply` applies to
+  `divide` and `subtract` unchanged.
+- **The used-energy flow to the heat sink.** Every panel of Fig. 2.6 draws one,
+  and no module writes it today.
 - **The projection from GSSK.** GSSK keeps `ratio` and `subtract` as edge logic
   types. Translating them into interaction modules with an action is the
   projection's job, and the coverage report states it.
