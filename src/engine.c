@@ -2792,13 +2792,63 @@ static void set_string(cJSON *obj, const char *key, const char *value) {
     }
 }
 
+/* Whether quantity can travel from `from` to `to` over legs that carry it --
+ * the same walk the cycle scan uses (ADR 0014). */
+static bool path_exists(const gia_model *m, int from, int to) {
+    bool *seen = (bool *)calloc((size_t)m->n_nodes * 2u, sizeof(bool));
+    bool  r;
+    if (!seen) return false;
+    seen[visit_slot(m, from, GIA_ROLE_NONE)] = true;
+    r = reaches(m, from, GIA_ROLE_NONE, to, seen);
+    free(seen);
+    return r;
+}
+
+static void add_emergent_leg(cJSON *edges, const char *from, const char *to,
+                             const char *label, double weight) {
+    cJSON *ne = cJSON_CreateObject();
+    if (!ne) return;
+    cJSON_AddStringToObject(ne, "source", from);
+    cJSON_AddStringToObject(ne, "target", to);
+    cJSON_AddStringToObject(ne, "flow_type", label);
+    cJSON_AddNumberToObject(ne, "weight", weight);
+    cJSON_AddItemToArray(edges, ne);
+}
+
+/* qsort context: node ids, so the emitted legs are in id order and the output
+ * is a function of the model rather than of how its file was ordered. */
+static const gia_model *sort_model;
+static int by_id(const void *x, const void *y) {
+    return strcmp(sort_model->nodes[*(const int *)x].id,
+                  sort_model->nodes[*(const int *)y].id);
+}
+
+/* ADR 0015. Below maximum ordinality the step grows one component, the
+ * emergent quality E, and closes EVERY open component through it by adding
+ * only the direction that is missing:
+ *
+ *   hub cannot reach o  ->  E -> o      (and hub -> E)
+ *   o cannot reach hub  ->  o -> E      (and E -> hub)
+ *
+ * so each o ends on hub -> E -> o ~> hub or o -> E -> hub ~> o. The previous
+ * rule wired hub -> E -> open only, which closes nothing when `open` is a dead
+ * end: ordinality fell on every step and the step never stopped, while printing
+ * that it had closed the loop.
+ *
+ * A sink is never closed and never the hub -- closing it would draw on energy
+ * already used (Odum 1972 SecV) -- so a model whose only open component is a
+ * sink stops below maximum, at a fixed point it names. */
 cJSON *gia_generate(const gia_model *m) {
-    cJSON *out, *nodes, *edges, *nn, *ne;
-    bool  *on_cycle;
-    int    i, open = -1, hub = -1, best_in = -1;
-    double mean_w = 0.0, ordinality;
-    char   rid[64];
-    int    suffix, n_comp;
+    cJSON  *out, *nodes, *edges, *nn, *from;
+    bool   *on_cycle = NULL, *need_in = NULL, *need_out = NULL;
+    int    *open_ids = NULL;
+    int     i, j, hub = -1, best_in = -1, n_open = 0, n_sink_open = 0, n_comp;
+    int     suffix;
+    double  mean_w = 0.0, ordinality, evolved;
+    char    rid[64];
+    bool    to_e = false, from_e = false, confirmed = false;
+    cJSON  *seed_copy;
+    gia_model check;
 
     if (!m || !m->root) return NULL;
 
@@ -2807,102 +2857,163 @@ cJSON *gia_generate(const gia_model *m) {
      * correctly report a functional run. */
     out = cJSON_Duplicate(m->root, 1);
     if (!out) return NULL;
-
     if (!m->generative) return out;
 
     on_cycle = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
-    if (!on_cycle) return out;
+    need_in  = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
+    need_out = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
+    open_ids = (int  *)calloc((size_t)m->n_nodes, sizeof(int));
+    if (!on_cycle || !need_in || !need_out || !open_ids) goto done;
+
     n_comp     = component_count(m);
     ordinality = n_comp > 0 ? (double)cycles_into(m, on_cycle) / (double)n_comp
                             : 0.0;
 
-    /* The open component must BE a component. A module's flag is always false,
-     * so without this it would be chosen as the thing to close. */
+    /* The hub is the component the most flows arrive at. A control is not a
+     * flow, a module holds nothing, and a sink holds only what is spent, so
+     * none of them is a hub. Ties go to the lower id, never to array order. */
     for (i = 0; i < m->n_nodes; i++) {
-        if (!m->nodes[i].is_module && !on_cycle[i]) { open = i; break; }
-    }
-    free(on_cycle);
-
-    /* Already at Maximum Ordinality: every component is on a closed pathway,
-     * there is no open relationship left to close, and the correct behaviour
-     * is to change nothing. */
-    if (open < 0) return out;
-
-    /* The regulator draws from the graph's convergence point -- the component
-     * the most flows arrive at -- and returns to the open component, closing it
-     * into a loop. A control is not a flow and a module holds nothing to draw
-     * from, so neither is counted here (ADR 0014). */
-    for (i = 0; i < m->n_nodes; i++) {
-        int j, in_deg = 0;
-        if (i == open || m->nodes[i].is_module) continue;
+        int in_deg = 0;
+        if (m->nodes[i].is_module || m->nodes[i].kind == GIA_NODE_SINK) continue;
         for (j = 0; j < m->n_edges; j++)
             if (m->edges[j].to == i && m->edges[j].role != GIA_ROLE_CONTROL)
                 in_deg++;
-        if (in_deg > best_in) { best_in = in_deg; hub = i; }
+        if (in_deg > best_in ||
+            (in_deg == best_in && strcmp(m->nodes[i].id, m->nodes[hub].id) < 0)) {
+            best_in = in_deg;
+            hub     = i;
+        }
     }
-    if (hub < 0) return out;
+
+    /* The open components are a set, not the first one found. */
+    for (i = 0; i < m->n_nodes; i++) {
+        if (m->nodes[i].is_module || on_cycle[i]) continue;
+        if (m->nodes[i].kind == GIA_NODE_SINK) { n_sink_open++; continue; }
+        if (i == hub) continue;
+        open_ids[n_open++] = i;
+    }
+
+    if (hub < 0 || (n_open == 0 && on_cycle[hub])) {
+        /* Nothing that may be closed is open. */
+        if (n_sink_open > 0)
+            printf("  MOP ordinal step: at a fixed point below maximum "
+                   "ordinality (%.3f).\n"
+                   "  The only open component%s a sink, which is never "
+                   "closed: that would\n"
+                   "  draw on energy already used (Odum 1972 SecV).\n",
+                   ordinality, n_sink_open == 1 ? " is" : "s are");
+        goto done;
+    }
+
+    sort_model = m;
+    qsort(open_ids, (size_t)n_open, sizeof(int), by_id);
+    for (i = 0; i < n_open; i++) {
+        int o = open_ids[i];
+        need_in[o]  = !path_exists(m, hub, o);          /* E -> o   */
+        need_out[o] = !path_exists(m, o, hub);          /* o -> E   */
+        to_e   = to_e   || need_in[o];
+        from_e = from_e || need_out[o];
+    }
+    if (n_open == 0) to_e = from_e = true;           /* the hub alone is open */
 
     for (i = 0; i < m->n_edges; i++) mean_w += m->edges[i].weight;
     mean_w = (m->n_edges > 0) ? mean_w / (double)m->n_edges : 1.0;
 
     nodes = cJSON_GetObjectItemCaseSensitive(out, "nodes");
     edges = cJSON_GetObjectItemCaseSensitive(out, "edges");
-    if (!cJSON_IsArray(nodes)) return out;
+    if (!cJSON_IsArray(nodes)) goto done;
     if (!cJSON_IsArray(edges)) {
         edges = cJSON_AddArrayToObject(out, "edges");
-        if (!edges) return out;
+        if (!edges) goto done;
     }
 
     suffix = 1;
-    snprintf(rid, sizeof(rid), "emergent_gain_%d", suffix);
+    snprintf(rid, sizeof(rid), "emergent_quality_%d", suffix);
     while (id_taken(nodes, rid) && suffix < 1000) {
         suffix++;
-        snprintf(rid, sizeof(rid), "emergent_gain_%d", suffix);
+        snprintf(rid, sizeof(rid), "emergent_quality_%d", suffix);
     }
 
+    /* A component, not a module (ADR 0015 decision 5): under ADR 0014 a module
+     * is not counted toward ordinality and its control closes nothing, so an
+     * emergent quality written as one could raise nothing. `storage` also
+     * loads under GSSK_Init. */
     nn = cJSON_CreateObject();
-    if (!nn) return out;
+    if (!nn) goto done;
     cJSON_AddStringToObject(nn, "id", rid);
-    cJSON_AddStringToObject(nn, "label", "Emergent Capture Amplifier");
-    /* Odum 1972 SecIX. A component sits off every closed pathway when nothing
-     * returns to it, and what closes that loop in Odum is not a flow back into
-     * the source but a control flow that amplifies capture -- the autocatalytic
-     * feedback of the Maximum Power Principle, which MOP succeeds. `gain` is
-     * also a primitive, so the output loads under GSSK_Init; "regulator", which
-     * this used to emit, is in no vocabulary at all. */
-    cJSON_AddStringToObject(nn, "type", "gain");
+    cJSON_AddStringToObject(nn, "label", "Emergent Quality");
+    cJSON_AddStringToObject(nn, "type", "storage");
     /* The new component enters as the (N+1)-th, so its ordinal rank is N --
      * counted in components, since a module is not one. */
     cJSON_AddNumberToObject(nn, "ordinality_rank", (double)n_comp);
-    cJSON_AddStringToObject(nn, "emerged_from", m->nodes[open].id);
+    from = cJSON_AddArrayToObject(nn, "emerged_from");
+    if (from) {
+        if (n_open == 0)
+            cJSON_AddItemToArray(from, cJSON_CreateString(m->nodes[hub].id));
+        for (i = 0; i < n_open; i++)
+            cJSON_AddItemToArray(from,
+                                 cJSON_CreateString(m->nodes[open_ids[i]].id));
+    }
     cJSON_AddItemToArray(nodes, nn);
 
-    ne = cJSON_CreateObject();
-    if (ne) {
-        cJSON_AddStringToObject(ne, "source", m->nodes[hub].id);
-        cJSON_AddStringToObject(ne, "target", rid);
-        cJSON_AddStringToObject(ne, "flow_type", "ordinal_ascent");
-        cJSON_AddNumberToObject(ne, "weight", mean_w);
-        cJSON_AddItemToArray(edges, ne);
+    /* Legs in a fixed order: the hub's pair, then each open component in id
+     * order. Further from Maximum Ordinality, a stronger corrective return. */
+    if (to_e)   add_emergent_leg(edges, m->nodes[hub].id, rid,
+                                 "ordinal_ascent", mean_w);
+    if (from_e) add_emergent_leg(edges, rid, m->nodes[hub].id,
+                                 "emergent_feedback_loop", 1.0 - ordinality);
+    for (i = 0; i < n_open; i++) {
+        const char *oid = m->nodes[open_ids[i]].id;
+        if (need_in[open_ids[i]])
+            add_emergent_leg(edges, rid, oid, "emergent_feedback_loop",
+                             1.0 - ordinality);
+        if (need_out[open_ids[i]])
+            add_emergent_leg(edges, oid, rid, "ordinal_ascent", mean_w);
     }
-
-    ne = cJSON_CreateObject();
-    if (ne) {
-        cJSON_AddStringToObject(ne, "source", rid);
-        cJSON_AddStringToObject(ne, "target", m->nodes[open].id);
-        cJSON_AddStringToObject(ne, "flow_type", "emergent_feedback_loop");
-        /* Further from Maximum Ordinality, a stronger corrective return. */
-        cJSON_AddNumberToObject(ne, "weight", 1.0 - ordinality);
-        cJSON_AddItemToArray(edges, ne);
-    }
-
     set_string(out, "system_name",
                "Evolved Self-Organizing Graph (Post-MOP Ordinal Step)");
 
-    printf("  MOP ordinal step: '%s' was not on a closed pathway.\n",
-           m->nodes[open].id);
-    printf("  Spawned '%s'; closed the loop via '%s' -> '%s' -> '%s'.\n",
-           rid, m->nodes[hub].id, rid, m->nodes[open].id);
+    /* Claim closure only after checking it (decision 6). Every component the
+     * step set out to close, and the emergent quality itself, must now be on a
+     * closed pathway, and ordinality must not have fallen. */
+    if (gia_model_load(&check, out)) {
+        int k;
+        evolved   = gia_ordinality(&check);
+        confirmed = evolved >= ordinality;
+        for (k = 0; k < check.n_nodes && confirmed; k++) {
+            const gia_node *nd = &check.nodes[k];
+            if (nd->is_module || nd->kind == GIA_NODE_SINK) continue;
+            if (!nd->on_cycle) confirmed = false;
+        }
+        gia_model_free(&check);
+    } else {
+        evolved = ordinality;
+    }
+
+    if (!confirmed) {
+        seed_copy = cJSON_Duplicate(m->root, 1);
+        if (seed_copy) {
+            cJSON_Delete(out);
+            out = seed_copy;
+        }
+        printf("  MOP ordinal step: declined. The graph it built did not put "
+               "every open\n"
+               "  component on a closed pathway, so the seed is returned "
+               "unchanged.\n");
+        goto done;
+    }
+
+    printf("  MOP ordinal step: %d open component%s, closed through '%s' "
+           "(hub '%s').\n", n_open == 0 ? 1 : n_open,
+           (n_open == 0 || n_open == 1) ? "" : "s", rid, m->nodes[hub].id);
+    printf("  Ordinality %.3f -> %.3f, confirmed by rescanning the evolved "
+           "graph.\n", ordinality, evolved);
+
+done:
+    free(on_cycle);
+    free(need_in);
+    free(need_out);
+    free(open_ids);
     return out;
 }
 

@@ -2191,8 +2191,10 @@ static void test_control_does_not_close_a_pathway(void) {
     {
         const cJSON *from = added ? cJSON_GetObjectItemCaseSensitive(added, "emerged_from") : NULL;
         const cJSON *rank = added ? cJSON_GetObjectItemCaseSensitive(added, "ordinality_rank") : NULL;
+        /* An array since ADR 0015: one step may close several components. */
         ok("the component closed is b, never the module",
-           cJSON_IsString(from) && !strcmp(from->valuestring, "b"));
+           cJSON_IsArray(from) && cJSON_GetArraySize(from) == 1 &&
+           !strcmp(cJSON_GetArrayItem(from, 0)->valuestring, "b"));
         ok("the emergent component's rank counts components",
            cJSON_IsNumber(rank) && rank->valuedouble == 2.0);
     }
@@ -2384,6 +2386,234 @@ static void test_transactor_does_not_change_kind(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 50-53. What the emergent quality closes (ADR 0015)
+ *
+ * The step promised to raise ordinality and did not: it wired hub -> E -> open,
+ * which closes nothing when `open` is a dead end, so ordinality fell on every
+ * step and the step never stopped. Each model here is one the ADR measured.
+ * ------------------------------------------------------------------ */
+
+#define GEN_SIM "\"simulation_params\":{\"t_val\":1.0,\"generative_mode\":true}}"
+
+static const char *DEAD_END =
+    "{\"nodes\":[{\"id\":\"c\",\"type\":\"storage\"},"
+    "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5},"
+    "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2}],"
+    " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.3},"
+    "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2},"
+    "  {\"source\":\"a\",\"target\":\"c\",\"logic\":\"linear\",\"weight\":0.1}]," GEN_SIM;
+
+/* Runs one step, reloads what it produced, and reports the evolved ordinality.
+ * Returns the evolved graph (caller frees) so callers can inspect it. */
+static cJSON *step_once(const char *json, double *before, double *after,
+                        bool *second_is_functional) {
+    cJSON     *root, *out, *out2;
+    gia_model  m, ev;
+    int        saved;
+
+    *before = *after = -1.0;
+    *second_is_functional = false;
+    if (!load_json(&m, &root, json)) return NULL;
+    *before = gia_ordinality(&m);
+
+    fflush(stdout); saved = dup(1);
+    { FILE *f = freopen("/dev/null", "w", stdout); (void)f; }
+    out = gia_generate(&m);
+    fflush(stdout); dup2(saved, 1); close(saved);
+
+    if (out && gia_model_load(&ev, out)) {
+        *after = gia_ordinality(&ev);
+        fflush(stdout); saved = dup(1);
+        { FILE *f = freopen("/dev/null", "w", stdout); (void)f; }
+        out2 = gia_generate(&ev);
+        fflush(stdout); dup2(saved, 1); close(saved);
+        *second_is_functional =
+            out2 && gia_validate_mode(out, out2) == GIA_MODE_FUNCTIONAL;
+        cJSON_Delete(out2);
+        gia_model_free(&ev);
+    }
+    gia_model_free(&m); cJSON_Delete(root);
+    return out;
+}
+
+static void test_emergent_quality_closes(void) {
+    static const struct { const char *name; const char *json; double want; } cases[] = {
+        { "dead end a<->b, a->c", NULL, 1.0 },
+        { "isolated a<->b, c",
+          "{\"nodes\":[{\"id\":\"c\",\"type\":\"storage\",\"current_level\":1},"
+          "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5},"
+          "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2}],"
+          " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.3},"
+          "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2}]," GEN_SIM, 1.0 },
+        { "chain s->x->y->z",
+          "{\"nodes\":[{\"id\":\"s\",\"type\":\"source\",\"value\":2},"
+          "  {\"id\":\"x\",\"type\":\"storage\"},{\"id\":\"y\",\"type\":\"storage\"},"
+          "  {\"id\":\"z\",\"type\":\"storage\"}],"
+          " \"edges\":[{\"source\":\"s\",\"target\":\"x\",\"logic\":\"linear\",\"weight\":0.3},"
+          "  {\"source\":\"x\",\"target\":\"y\",\"logic\":\"linear\",\"weight\":0.2},"
+          "  {\"source\":\"y\",\"target\":\"z\",\"logic\":\"linear\",\"weight\":0.1}]," GEN_SIM, 1.0 },
+        { "a lone component",
+          "{\"nodes\":[{\"id\":\"x\",\"type\":\"storage\",\"current_level\":1}],"
+          " \"edges\":[]," GEN_SIM, 1.0 },
+        { "accumulator behind a module", NULL, 1.0 },
+    };
+    size_t k;
+
+    printf("\n[50] one step reaches the fixed point, and never lowers ordinality\n");
+    for (k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+        const char *json = cases[k].json;
+        double before, after;
+        bool   fixed;
+        cJSON *out;
+        char   label[96];
+
+        if (k == 0) json = DEAD_END;
+        if (k == 4) json = ACCUMULATOR;
+        out = step_once(json, &before, &after, &fixed);
+        snprintf(label, sizeof label, "%s: loads and evolves", cases[k].name);
+        ok(label, out != NULL && after >= 0.0);
+        snprintf(label, sizeof label, "%s: ordinality does not fall", cases[k].name);
+        ok(label, after >= before);
+        snprintf(label, sizeof label, "%s: maximum in one step", cases[k].name);
+        close_to(label, after, cases[k].want, 1e-12);
+        snprintf(label, sizeof label, "%s: a second step changes nothing", cases[k].name);
+        ok(label, fixed);
+        cJSON_Delete(out);
+    }
+}
+
+static void test_sink_is_never_closed(void) {
+    double before, after;
+    bool   fixed;
+    cJSON *out;
+    const cJSON *e, *edges_out;
+    bool   touches = false;
+
+    printf("\n[51] a sink is never closed and never drawn from\n");
+
+    /* Only the sink is open: a stated fixed point below maximum. */
+    out = step_once(
+        "{\"nodes\":[{\"id\":\"a\",\"type\":\"storage\",\"current_level\":5},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.3},"
+        "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2},"
+        "  {\"source\":\"a\",\"target\":\"heat\",\"logic\":\"linear\",\"weight\":0.1}]," GEN_SIM,
+        &before, &after, &fixed);
+    close_to("heat sink alone: ordinality stays 2/3", after, 2.0 / 3.0, 1e-12);
+    ok("heat sink alone: the step changes nothing", fixed && before == after);
+    ok("the evolved graph IS the seed: nothing was added",
+       out && cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(out, "nodes")) == 3);
+    cJSON_Delete(out);
+
+    /* A sink alongside a real dead end: the dead end is closed, the sink not. */
+    out = step_once(
+        "{\"nodes\":[{\"id\":\"a\",\"type\":\"storage\",\"current_level\":5},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2},"
+        "  {\"id\":\"c\",\"type\":\"storage\"},{\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.3},"
+        "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2},"
+        "  {\"source\":\"a\",\"target\":\"c\",\"logic\":\"linear\",\"weight\":0.1},"
+        "  {\"source\":\"a\",\"target\":\"heat\",\"logic\":\"linear\",\"weight\":0.1}]," GEN_SIM,
+        &before, &after, &fixed);
+    close_to("with a dead end too: every component but the sink closes (4/5)",
+             after, 0.8, 1e-12);
+    ok("and that is a fixed point", fixed);
+    edges_out = out ? cJSON_GetObjectItemCaseSensitive(out, "edges") : NULL;
+    cJSON_ArrayForEach(e, edges_out) {
+        const cJSON *s = cJSON_GetObjectItemCaseSensitive(e, "source");
+        const cJSON *t = cJSON_GetObjectItemCaseSensitive(e, "target");
+        const cJSON *ft = cJSON_GetObjectItemCaseSensitive(e, "flow_type");
+        if (!cJSON_IsString(ft)) continue;               /* seed pathways */
+        if ((cJSON_IsString(s) && !strcmp(s->valuestring, "heat")) ||
+            (cJSON_IsString(t) && !strcmp(t->valuestring, "heat")))
+            touches = true;
+    }
+    ok("no emergent leg touches the sink", !touches);
+    cJSON_Delete(out);
+}
+
+/* What the step appends, serialised: the emergent component and every leg
+ * beyond the seed's own. */
+static char *appended(const cJSON *out, int seed_edges) {
+    const cJSON *nodes = cJSON_GetObjectItemCaseSensitive(out, "nodes");
+    const cJSON *edges = cJSON_GetObjectItemCaseSensitive(out, "edges");
+    cJSON *bag = cJSON_CreateArray();
+    char  *txt;
+    int    i, n = cJSON_GetArraySize(edges);
+    cJSON_AddItemToArray(bag, cJSON_Duplicate(
+        cJSON_GetArrayItem(nodes, cJSON_GetArraySize(nodes) - 1), 1));
+    for (i = seed_edges; i < n; i++)
+        cJSON_AddItemToArray(bag, cJSON_Duplicate(cJSON_GetArrayItem(edges, i), 1));
+    txt = cJSON_PrintUnformatted(bag);
+    cJSON_Delete(bag);
+    return txt;
+}
+
+static void test_emergence_is_order_invariant(void) {
+    /* A dead end c AND an unconnected d, with the nodes listed two ways.
+     * Before ADR 0015 the step closed c from hub a in one order and d from hub
+     * b in the other. */
+    const char *orders[2] = {
+        "{\"nodes\":[{\"id\":\"c\",\"type\":\"storage\"},{\"id\":\"d\",\"type\":\"storage\"},"
+        "  {\"id\":\"a\",\"type\":\"storage\"},{\"id\":\"b\",\"type\":\"storage\"}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\"},"
+        "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\"},"
+        "  {\"source\":\"a\",\"target\":\"c\",\"logic\":\"linear\"}]," GEN_SIM,
+        "{\"nodes\":[{\"id\":\"b\",\"type\":\"storage\"},{\"id\":\"a\",\"type\":\"storage\"},"
+        "  {\"id\":\"d\",\"type\":\"storage\"},{\"id\":\"c\",\"type\":\"storage\"}],"
+        " \"edges\":[{\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\"},"
+        "  {\"source\":\"a\",\"target\":\"c\",\"logic\":\"linear\"},"
+        "  {\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\"}]," GEN_SIM
+    };
+    char  *txt[2] = { NULL, NULL };
+    int    i;
+
+    printf("\n[52] what the step adds is decided by the model, not its file\n");
+    for (i = 0; i < 2; i++) {
+        double before, after;
+        bool   fixed;
+        cJSON *out = step_once(orders[i], &before, &after, &fixed);
+        ok("this order evolves to maximum", out && after == 1.0);
+        if (out) txt[i] = appended(out, 3);
+        cJSON_Delete(out);
+    }
+    ok("the component and legs appended are byte-identical",
+       txt[0] && txt[1] && !strcmp(txt[0], txt[1]));
+    free(txt[0]); free(txt[1]);
+}
+
+static void test_emergent_quality_is_a_component(void) {
+    double before, after;
+    bool   fixed;
+    cJSON *out;
+    const cJSON *nodes, *e_node, *type, *from;
+
+    printf("\n[53] the emergent quality is a component, and names what it closed\n");
+    out = step_once("{\"nodes\":[{\"id\":\"d\",\"type\":\"storage\"},{\"id\":\"c\",\"type\":\"storage\"},"
+        "  {\"id\":\"a\",\"type\":\"storage\"},{\"id\":\"b\",\"type\":\"storage\"}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\"},"
+        "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\"},"
+        "  {\"source\":\"a\",\"target\":\"c\",\"logic\":\"linear\"}]," GEN_SIM, &before, &after, &fixed);
+    nodes  = out ? cJSON_GetObjectItemCaseSensitive(out, "nodes") : NULL;
+    e_node = nodes ? cJSON_GetArrayItem(nodes, cJSON_GetArraySize(nodes) - 1) : NULL;
+    type   = e_node ? cJSON_GetObjectItemCaseSensitive(e_node, "type") : NULL;
+    from   = e_node ? cJSON_GetObjectItemCaseSensitive(e_node, "emerged_from") : NULL;
+
+    /* A module would not count toward the ordinality it exists to raise. */
+    ok("typed storage, not gain", cJSON_IsString(type) && !strcmp(type->valuestring, "storage"));
+    ok("carries no module block",
+       e_node && !cJSON_GetObjectItemCaseSensitive(e_node, "module"));
+    ok("emerged_from lists both closed components",
+       cJSON_IsArray(from) && cJSON_GetArraySize(from) == 2);
+    ok("in id order",
+       cJSON_IsArray(from) && cJSON_GetArraySize(from) == 2 &&
+       !strcmp(cJSON_GetArrayItem(from, 0)->valuestring, "c") &&
+       !strcmp(cJSON_GetArrayItem(from, 1)->valuestring, "d"));
+    cJSON_Delete(out);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -2436,6 +2666,10 @@ int main(void) {
     test_control_does_not_open_the_boundary();
     test_ordinality_invariant_under_respelling();
     test_transactor_does_not_change_kind();
+    test_emergent_quality_closes();
+    test_sink_is_never_closed();
+    test_emergence_is_order_invariant();
+    test_emergent_quality_is_a_component();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

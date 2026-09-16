@@ -16,6 +16,12 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Fixed
 
+- **The MOP ordinal step could move a system away from maximum ordinality, and never stop.** [ADR 0015](adr/0015-what-the-emergent-quality-closes.md). It wired `hub → E → open`, which closes `open` only if `open` already reaches the hub; for a dead end it closed nothing and added `E` as a new open component, so `a ⇄ b, a → c` went 0.667 → 0.500 → 0.400 → … while printing "closed the loop". Four of five measured models never terminated. It also chose what to close by array order.
+
+  The emergent quality now closes every open component in one step, adding only the missing direction(s) through `E`, so one step reaches the fixed point and a second changes nothing. A sink is never closed or drawn from — that would draw on energy already used — so a model whose only open component is a heat sink stops below maximum and says why. Hub ties are broken by id and legs emitted in id order, so a reordered model appends byte-identical output. Closure is printed only after the evolved graph is reloaded and rescanned; otherwise the seed is returned unchanged.
+
+  **Output format:** the emergent component is a `storage` (it was a `gain`, which since ADRs 0012–0013 is a module and could close nothing under ADR 0014), `emerged_from` is an array, and its id and label are `emergent_quality_N` and "Emergent Quality".
+
 - **Ordinality was decided by legs that carry nothing, and by modules that hold nothing.** [ADR 0014](adr/0014-ordinality-over-quantity-legs.md). Since module-hosted laws made a work gate's control an edge, the cycle scan walked it: a pure accumulator was reported at maximum ordinality, so the MOP step returned the seed unchanged when it had an open relationship to close. A module was also counted as a component, so one system scored 0.667 written as a pathway law and 0.75 written as a module. The scan now skips control legs and passes through modules without counting them — a transactor keeping goods and counter-flow apart — and `gia_generate` shares it instead of keeping its own copy, never choosing a module as the component to close or the hub to draw from.
 
   **`gia_system_is_closed` asked the same wrong question at the boundary.** A gate metered by a constant made a system conserving to 1e-14 report open, and `--print` explained the zero by saying the constant "delivers quantity". A control moves nothing across the boundary; a source on an energy leg still does.

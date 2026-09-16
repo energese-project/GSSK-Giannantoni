@@ -741,7 +741,7 @@ general-purpose ODE library. The wedge is:
       still sized from every node, and the report labels that size
       "components N". No seed has a module yet, so no output contradicts
       itself today; the migration below will make it visible.
-- [ ] **The MOP ordinal step can move a system away from maximum ordinality,
+- [x] **The MOP ordinal step can move a system away from maximum ordinality,
       forever.** Pre-existing. `gia_generate` wires the emergent component
       hub -> E -> open, which closes `open` only if `open` already reaches the
       hub. For a dead end it closes nothing and adds E as a new open
@@ -755,12 +755,18 @@ general-purpose ODE library. The wedge is:
       component (`storage`), not a module. Prototyped against five models
       before writing — all reach their fixed point in one step, where today
       four never terminate.
-- [ ] Implement ADR 0015.
-- [ ] The emergent component `gia_generate` writes is a `gain` with no
-      `module` block, joined by `ordinal_ascent` / `emergent_feedback_loop`
-      pathways — the old spelling. Once pathway module laws are removed it
-      must be emitted as a module, and what it closes re-checked under
-      ADR 0014, since its return leg would then be a control.
+- [x] Implement ADR 0015. Dead end, isolated, chain, lone component and a
+      module-hosted accumulator each reach maximum in one step; a heat sink
+      stops at 2/3 and says why. Reordering a model appends byte-identical
+      output — which corrected the ADR, whose first wording claimed the whole
+      output was identical. Every guard mutation-verified, including the
+      rescan, which is observable on its own: without it a broken rule lowers
+      ordinality; with it the step declines.
+- [x] The emergent component `gia_generate` writes was a `gain` with no
+      `module` block. ADR 0015 decided it is a component, not a module —
+      as a module it could close nothing under ADR 0014 — so it is now
+      emitted as `storage`, and its `ordinal_ascent` / `emergent_feedback_loop`
+      legs load as SecIII `linear`, which survives the pathway-law removal.
 - [ ] Migrate the test models and both `examples/giannantoni/` seeds to write
       modules explicitly. NOT by having the loader rewrite edge laws into
       hidden gate nodes: that is desugaring, and a bookkeeping node would count

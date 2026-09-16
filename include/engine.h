@@ -696,8 +696,16 @@ void gia_print_trajectories(const gia_model *m, int steps);
  *
  * Returns a NEW graph the caller owns and must cJSON_Delete(). When the seed
  * is already at Maximum Ordinality, or generative mode is off, the returned
- * graph compares equal to the input and the run is functional. Otherwise a
- * regulator is spawned to close an open pathway, raising ordinality.
+ * graph compares equal to the input and the run is functional.
+ *
+ * Otherwise (ADR 0015) one emergent quality -- a component typed `storage`,
+ * never a module -- closes EVERY open component at once, adding only the
+ * direction each is missing, so one step reaches the fixed point and a second
+ * changes nothing. A sink is never closed or drawn from, so a model whose only
+ * open component is a sink is returned unchanged below maximum. Hub ties break
+ * by id and added legs are emitted in id order, so reordering a model appends
+ * byte-identical output. The result is rescanned before closure is claimed; if
+ * the rescan disagrees the seed is returned unchanged.
  * ================================================================== */
 
 cJSON *gia_generate(const gia_model *m);
