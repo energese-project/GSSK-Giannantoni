@@ -150,14 +150,19 @@ ambiguity, only for these two.
 - **Whether the control input is consumed.** Odum defines an interaction as
   joining "two or more flows that are different and both required for a
   process", and Fig. 2.6(a) labels both inputs "Use of Ingredient". ADR 0013
-  instead made the control read and never consumed, which was GSSK's behaviour
-  rather than a reading of the figure. The engine currently gives a product the
-  transformity of its energy input alone. Panel (b) shows a low-transformity
-  input and a high-transformity control giving *moderate*-transformity products.
-  That question reaches ADR 0013's roles, ADR 0014's cycle scan and the emergy
-  pass, so it is its own decision, not this one's. This ADR keeps ADR 0013's
-  roles as they stand. Whatever that decision settles for `multiply` applies to
-  `divide` and `subtract` unchanged.
+  instead made the control read and never consumed, attributing that to Odum's
+  §IX–§XIII. The engine currently gives a product the transformity of its
+  energy input alone. Panel (b) shows a low-transformity input and a
+  high-transformity control giving *moderate*-transformity products. That
+  question reaches ADR 0013's roles, ADR 0014's cycle scan and the emergy pass,
+  so it is its own decision, not this one's; it is taken up in
+  [ADR 0017](0017-what-a-control-input-is.md). This ADR keeps ADR 0013's roles as
+  they stand. Whatever that decision settles for `multiply` applies to `divide`
+  and `subtract` unchanged.
+
+  *Corrected by ADR 0017.* This entry first said ADR 0013's rule "was GSSK's
+  behaviour rather than a reading of the figure". ADR 0013 in fact attributed it
+  to Odum; ADR 0017 shows the 1972 text does not support that reading.
 - **The used-energy flow to the heat sink.** Every panel of Fig. 2.6 draws one,
   and no module writes it today.
 - **The projection from GSSK.** GSSK keeps `ratio` and `subtract` as edge logic
