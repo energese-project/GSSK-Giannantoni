@@ -1,0 +1,78 @@
+name: Guix reproducibility spike
+
+# Rebuilds the WASM kernel on x86_64 from spike/guix/ and checks it against the
+# hashes recorded from an aarch64 build. Same bytes from a different machine
+# architecture is the claim an archived, re-runnable kernel rests on.
+#
+# Unlike the Apple-container run that produced spike/guix/wasm.sha256, the
+# daemon here runs WITH build isolation (chroot), so `guix build --check` works.
+
+on:
+  pull_request:
+    branches: [ main, 'feat/**', 'fix/**', 'docs/**' ]
+    paths: [ 'spike/guix/**', '.github/workflows/guix-spike.yml' ]
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Guix 1.5.0 (binary tarball)
+        run: |
+          set -eu
+          cd /tmp
+          curl -fsSLO https://ftp.gnu.org/gnu/guix/guix-binary-1.5.0.x86_64-linux.tar.xz
+          sudo tar --warning=no-timestamp -xf guix-binary-1.5.0.x86_64-linux.tar.xz
+          sudo mv var/guix /var/ && sudo mv gnu /
+          sudo groupadd --system guixbuild
+          for i in $(seq -w 1 10); do
+            sudo useradd -g guixbuild -G guixbuild -d /var/empty -s "$(command -v nologin)" \
+              -c "Guix build user $i" --system "guixbuilder$i"
+          done
+          G=/var/guix/profiles/per-user/root/current-guix
+          sudo "$G/bin/guix" archive --authorize < "$G/share/guix/ci.guix.gnu.org.pub"
+          sudo "$G/bin/guix" archive --authorize < "$G/share/guix/bordeaux.guix.gnu.org.pub"
+          sudo sh -c "$G/bin/guix-daemon --build-users-group=guixbuild > /tmp/guix-daemon.log 2>&1 &"
+          echo "$G/bin" >> "$GITHUB_PATH"
+          # Ubuntu 24.04 restricts unprivileged user namespaces; the daemon is
+          # root, but `guix time-machine` builds as the caller.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Build via time-machine (pinned channels)
+        run: |
+          guix time-machine -C spike/guix/channels.scm -- \
+            build --fallback -f spike/guix/gssk.scm | tee /tmp/out-path
+          P=$(tail -1 /tmp/out-path)
+          (cd "$P/share/gssk" && sha256sum gssk.wasm gssk-cli.wasm) | tee /tmp/wasm.sha256
+
+      - name: Same bytes as the aarch64 build?
+        run: |
+          if diff spike/guix/wasm.sha256 /tmp/wasm.sha256; then
+            echo "IDENTICAL across aarch64 and x86_64"
+          else
+            echo "::error::x86_64 WASM differs from the aarch64 build"; exit 1
+          fi
+
+      - name: guix build --check (rebuild each package, compare bits)
+        run: |
+          GSSK_GUIX_ALL=1 guix time-machine -C spike/guix/channels.scm -- \
+            build --check --keep-failed -f spike/guix/gssk.scm
+
+      - name: Pack an image and run the regression suite under Docker
+        run: |
+          T=$(guix time-machine -C spike/guix/channels.scm -- \
+                pack -f docker --entry-point=bin/bash -S /bin=bin -S /share=share \
+                wasm3 bash coreutils diffutils -e "(load \"$PWD/spike/guix/gssk.scm\")" | tail -1)
+          sha256sum "$T"
+          docker load -i "$T" | tee /tmp/load.txt
+          IMG=$(sed -n 's/^Loaded image: //p' /tmp/load.txt)
+          docker run --rm -v "$PWD:/work" "$IMG" -c '
+            cd /work; R=/work/r; mkdir -p $R; ok=0; bad=0
+            for m in examples/*.json; do n=$(basename $m .json)
+              [ -f tests/expected/$n.csv ] || continue
+              wasm3 --dir . /share/gssk/gssk-cli.wasm $m r/$n.csv >/dev/null 2>&1
+              if cmp -s r/$n.csv tests/expected/$n.csv; then ok=$((ok+1)); else bad=$((bad+1)); echo "DIFF $n"; fi
+            done
+            echo "byte-identical=$ok differing=$bad"; [ $bad -eq 0 ]'
