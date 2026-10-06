@@ -38,9 +38,10 @@ guix time-machine -C spike/guix/channels.scm -- build -f spike/guix/gssk.scm   #
 | `guix pack` image rebuilt from scratch | identical tarball |
 | Same image converted to OCI twice with skopeo | identical manifest and layer digests; outer tar differs by timestamps only |
 | Image under Apple `container`: regression suite | **23/23 byte-identical** |
-| aarch64 vs x86_64 WASM bytes | CI on this PR |
-| `guix build --check` with build isolation | CI on this PR |
-| Image under Docker | CI on this PR |
+| aarch64 (Apple container) vs x86_64 (GitHub Actions) WASM bytes | **identical** |
+| `guix build --check` with build isolation, all three packages (x86_64) | **pass**: each rebuilt bit-identical |
+| Guix-packed image under Docker (x86_64): regression suite | **23/23 byte-identical**; Docker loads the Guix pack directly |
+| Starting from Ubuntu's Guix 1.4.0, `time-machine` to the pinned 1.5.0 | works; whole CI job 34 minutes |
 | Dashboard (TypeScript) on Guix's Node 22: `npm ci`, `tsc`, `vite build` | pass |
 | Dashboard tests on Node 22 with `--experimental-strip-types` | 215/218; the 3 failures read `.github/ISSUE_TEMPLATE/add-program.yml`, which the GSSK-Dashboard copy lacks. Not a Node problem |
 
@@ -66,7 +67,8 @@ The kernel needs only four host imports (`clock_time_get`, `fd_close`, `fd_seek`
 4. **One unexplained hash.** The first hash of the builtins package, taken immediately
    after a failed `--check` attempt under `--disable-chroot`, differed from the next six,
    which all agree. The GSSK WASM linked from it was identical either way. The isolated
-   `--check` in CI is the proper test.
+   `--check` in CI passed for all three packages, so the outlier is most likely an artefact
+   of the failed non-isolated `--check`, but that is inferred, not shown.
 5. **Runtimes differ in archive format, not image format.** `guix pack -f docker` writes
    a Docker archive; Apple's `container image load` accepts only OCI layout. `skopeo`
    (in Guix) converts, keeping the digests. Docker loads the Guix pack directly.
@@ -75,8 +77,12 @@ The kernel needs only four host imports (`clock_time_get`, `fd_close`, `fd_seek`
    environment's `C_INCLUDE_PATH` must be unset. `gssk.scm` does both.
 7. **Standalone compiler-rt builds are deprecated upstream.** LLVM warns they will become
    an error. A future LLVM bump should take compiler-rt from Guix's monorepo source.
-8. **A substitute server can stall.** One `cmake-minimal` download hung for an hour.
-   `--fallback` (build from source on failure) belongs in every scripted build.
+8. **GNU's infrastructure is a single point of failure for *installing* Guix.** One
+   `cmake-minimal` substitute download stalled for an hour, and on 2026-10-06
+   `ftp.gnu.org` and its mirror redirector were unreachable for the whole session, so
+   CI installs Guix from Ubuntu's archive instead. Guix's own git and substitute servers
+   stayed up. `--fallback` belongs in every scripted build, and the archive should hold
+   the Guix installer and the pack image, not only point at where to download them.
 
 ## Recommendation
 
