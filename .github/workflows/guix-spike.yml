@@ -19,26 +19,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Guix 1.5.0 (binary tarball)
+      - name: Install Guix from Ubuntu's archive
+        # Ubuntu ships Guix 1.4.0. time-machine below moves to the pinned 1.5.0
+        # commit, so this also tests that an OLDER Guix reproduces the pin.
+        # (Installing from ftp.gnu.org was tried first; it was unreachable.)
         run: |
-          set -eu
-          cd /tmp
-          curl -fsSLO https://ftp.gnu.org/gnu/guix/guix-binary-1.5.0.x86_64-linux.tar.xz
-          sudo tar --warning=no-timestamp -xf guix-binary-1.5.0.x86_64-linux.tar.xz
-          sudo mv var/guix /var/ && sudo mv gnu /
-          sudo groupadd --system guixbuild
-          for i in $(seq -w 1 10); do
-            sudo useradd -g guixbuild -G guixbuild -d /var/empty -s "$(command -v nologin)" \
-              -c "Guix build user $i" --system "guixbuilder$i"
+          sudo apt-get update -q
+          sudo apt-get install -y -q guix
+          guix --version | head -1
+          for k in /usr/share/guix/ci.guix.gnu.org.pub /usr/share/guix/bordeaux.guix.gnu.org.pub; do
+            [ -f "$k" ] && sudo guix archive --authorize < "$k" || true
           done
-          G=/var/guix/profiles/per-user/root/current-guix
-          sudo "$G/bin/guix" archive --authorize < "$G/share/guix/ci.guix.gnu.org.pub"
-          sudo "$G/bin/guix" archive --authorize < "$G/share/guix/bordeaux.guix.gnu.org.pub"
-          sudo sh -c "$G/bin/guix-daemon --build-users-group=guixbuild > /tmp/guix-daemon.log 2>&1 &"
-          echo "$G/bin" >> "$GITHUB_PATH"
-          # Ubuntu 24.04 restricts unprivileged user namespaces; the daemon is
-          # root, but `guix time-machine` builds as the caller.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          systemctl is-active guix-daemon || sudo systemctl start guix-daemon
 
       - name: Build via time-machine (pinned channels)
         run: |
