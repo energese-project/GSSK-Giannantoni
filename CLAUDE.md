@@ -31,14 +31,15 @@ Apple clang, so `make all` locally has never once run real GCC. Use the
 containerised toolchains:
 
 ```
-make ci-local          # real GCC + Linux clang + WASM
-make test-linux        # real GCC only (Ubuntu 24.04, matches CI)
-make wasm-container    # Emscripten without a local emcc
-make demo              # the demo + plot, without a local matplotlib
+make ci-local              # real GCC + Linux clang
+make test-linux            # real GCC only (Ubuntu 24.04, matches CI)
+make test-wasm-container   # WASM suites with Node from a container
+make demo                  # the demo + plot, without a local matplotlib
 ```
 
-These need the Apple `container` CLI. `make wasm-container` in particular
-removes any excuse for an unverified export list.
+These need the Apple `container` CLI. `make wasm` itself does not: the pinned
+WASI SDK runs natively on macOS, and `tests/wasm/loader.test.mjs` checks every
+declared export reached the artefact, so an unverified export list has no excuse.
 
 `make demo` is containerised for a different reason than the other three: it is
 not about compiler parity but about matplotlib. `python/plot_demo.py` needs it,
@@ -81,7 +82,7 @@ Why a worktree rather than `git checkout -b`: the container mounts the checkout 
 worktree gets its own `lib/`, `bin/` and `dist/`. Switching branches inside one checkout invalidates
 that state and forces a rebuild, and a long `make test` run in one branch will read object files
 built from another. Separate directories keep concurrent tasks genuinely independent — and because
-`make ci-local` and `make wasm-container` leave Linux artefacts in `lib/`, a stray container build
+`make ci-local` leaves Linux artefacts in `lib/`, a stray container build
 cannot poison a checkout that another task is mid-test in.
 
 If work is already sitting uncommitted in the primary checkout, move it rather than committing it

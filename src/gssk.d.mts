@@ -1,3 +1,7 @@
+// Types for gssk.mjs, the ES module loader for gssk.wasm.
+// Function members are the kernel's exports, prefixed with `_` as the
+// Emscripten build had them, so existing callers keep their names.
+
 export interface GSSKModule {
   _GSSK_Init(jsonPtr: number, outInstPtr: number): number;
   _GSSK_GetErrorDescription(kernelPtr: number): number;
@@ -268,12 +272,28 @@ export interface GSSKModule {
   /** Node index of memberIdx within this composite; SIZE_MAX (2^32-1 in wasm32) if OOB. */
   _GSSK_GetCompositeMemberIndex(kernelPtr: number, compositeIdx: number, memberIdx: number): number;
 
+  /** Write str as NUL-terminated UTF-8 in at most maxBytes bytes, terminator included. */
   stringToUTF8(str: string, outPtr: number, maxBytes: number): void;
+  /** The NUL-terminated UTF-8 string at ptr; '' for a null pointer. */
   UTF8ToString(ptr: number): string;
+  /** UTF-8 length of str, without the terminator. */
   lengthBytesUTF8(str: string): number;
-  HEAPU8: Uint8Array;
-  HEAPF64: Float64Array;
+
+  /** Views over linear memory, rebuilt whenever memory grows. Read them fresh after any call that may allocate. */
+  readonly HEAPU8: Uint8Array;
+  readonly HEAPU32: Uint32Array;
+  readonly HEAPF64: Float64Array;
+  readonly memory: WebAssembly.Memory;
 }
 
-declare function createGSSK(): Promise<GSSKModule>;
+export interface GSSKOptions {
+  /** The kernel. Defaults to gssk.wasm beside gssk.mjs. */
+  wasm?: URL | string | BufferSource | Response | WebAssembly.Module;
+  /** Receives the kernel's stdout, one line per call. Default: console.log. */
+  print?: (line: string) => void;
+  /** Receives the kernel's stderr, one line per call. Default: console.error. */
+  printErr?: (line: string) => void;
+}
+
+declare function createGSSK(options?: GSSKOptions): Promise<GSSKModule>;
 export default createGSSK;

@@ -54,3 +54,4 @@ __pycache__/
 # Reference papers are cited, not redistributed: several are Elsevier or
 # Academic Press and this repository is public.
 docs/*.pdf
+tools/
