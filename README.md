@@ -34,7 +34,7 @@ time,biomass,environment
 === Household model (4-carrier ecological-economy) ===
 time,salary,bank_account,super_fund,...
 0.0000,1.000000,5000.000000,50000.000000,...
-... (241 data rows, 24 columns)
+... (241 data rows, 25 columns)
 ```
 
 The decay model follows Q(t) = 100·exp(−0.05·t). The household model has 23 state nodes across money, energy, material, and information carriers.

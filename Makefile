@@ -59,16 +59,14 @@ TARGET_SIM = $(BIN_DIR)/giannantoni_sim
 CONTAINER_BIN    := container
 CONTAINER_PLATFORM := linux/amd64
 IMAGE_LINUX      := gssk-linux
-IMAGE_DEMO       := gssk-demo
 UBUNTU_VERSION   := 24.04
 CWORKDIR         := /work
 CRUN              = $(CONTAINER_BIN) run --rm --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR)
 
-.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-wasm test-carrier-api test-edge-flows test-schema check-version test-python demo demo-python plot-demo directories dist \
+.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-wasm test-carrier-api test-edge-flows test-schema check-version demo directories dist \
         shared asan test-asan coverage-build coverage-report coverage-check \
         fuzz-build fuzz-run test-valgrind bench bench-check bench-gen \
         container-start container-image container-image-linux \
-        container-image-demo demo-native \
         wasm wasi-sdk wasm-toolchain test-wasm-container test-linux test-linux-clang shell-linux ci-local
 
 all: directories $(TARGET_LIB) $(TARGET_CLI) $(TARGET_COMPARE) $(TARGET_SIM)
@@ -241,34 +239,10 @@ test: all check-version test-schema
 		else echo "FAILED (an annotated variant has drifted from the model it documents)"; exit 1; fi; \
 	done
 
-test-python: shared
-	@echo "Running Python binding tests..."
-	@python3 python/test_gssk.py -v
-
-demo-python: shared
-	@echo "=== Python binding demo ==="
-	@python3 python/demo.py
-
-# Quick demo — run two models, print CSV output, and generate PNG plot.
-#
-# This runs in a container (see Containerfile.demo) because the plotting step
-# needs matplotlib, and a bare macOS python3 does not have it — the target used
-# to fail with "ERROR: matplotlib is required for plot-demo". The image carries
-# a uv-managed interpreter and a pinned matplotlib, so `make demo` works with
-# nothing installed on the host but the `container` CLI.
-#
-# `make clean` first because the bind mount is shared with the host: without it
-# the Linux build inside would link against macOS objects left in lib/.
-demo: container-image-demo
-	@$(MAKE) clean
-	$(CRUN) $(IMAGE_DEMO) make demo-native
-	@echo ""
-	@echo "──────────────────────────────────────────────"
-	@echo "Tree now holds Linux artefacts; run 'make clean && make all' to restore native."
-
-# The demo proper. Run directly if you have matplotlib on the host; otherwise
-# `make demo` runs exactly this inside the container.
-demo-native: all
+# Quick demo — run two models and print the head of each CSV. Pure C: the
+# Python plotting step went with the python/ tree, which this fork does not
+# carry, and with it the reason this ran in a container.
+demo: all
 	@echo "=== Decay model (exponential decay, RK4) ==="
 	@$(TARGET_CLI) examples/decay_model.json /tmp/gssk_demo_decay.csv
 	@head -6 /tmp/gssk_demo_decay.csv
@@ -277,14 +251,6 @@ demo-native: all
 	@$(TARGET_CLI) examples/household_model.json /tmp/gssk_demo_household.csv
 	@head -3 /tmp/gssk_demo_household.csv
 	@echo "... ($$(( $$(wc -l < /tmp/gssk_demo_household.csv) - 1 )) data rows, $$(head -1 /tmp/gssk_demo_household.csv | tr ',' '\n' | wc -l | tr -d ' ') columns)"
-	@echo ""
-	@python3 python/plot_demo.py
-
-# Standalone plot target — regenerates CSVs then plots
-plot-demo: all
-	@$(TARGET_CLI) examples/decay_model.json /tmp/gssk_demo_decay.csv > /dev/null 2>&1
-	@$(TARGET_CLI) examples/household_model.json /tmp/gssk_demo_household.csv > /dev/null 2>&1
-	@python3 python/plot_demo.py
 
 test-update: all
 	@echo "Updating Expected Test Outputs..."
@@ -586,7 +552,7 @@ clean:
 	rm -rf $(BIN_DIR) $(LIB_DIR) $(DIST_DIR) tests/results coverage/
 
 # ──────────────────────────────────────────────────────────────
-# Shared library (required by Python ctypes binding)
+# Shared library (for FFI consumers)
 # ──────────────────────────────────────────────────────────────
 TARGET_SO = $(LIB_DIR)/libgssk.so
 
@@ -888,24 +854,28 @@ container-image-linux: container-start
 		--platform $(CONTAINER_PLATFORM) \
 		--build-arg UBUNTU_VERSION=$(UBUNTU_VERSION) .
 
-# Build the demo image (uv-managed Python + pinned matplotlib, plus the C
-# toolchain, so `make demo` needs nothing on the host)
-container-image-demo: container-start
-	$(CONTAINER_BIN) build -f Containerfile.demo -t $(IMAGE_DEMO) \
-		--platform $(CONTAINER_PLATFORM) \
-		--build-arg UBUNTU_VERSION=$(UBUNTU_VERSION) .
-
-# Build both build-toolchain images (the demo image is built on demand by
-# `make demo`, which is not part of the CI-parity set)
+# The build-toolchain image
 container-image: container-image-linux
 
-# Full native build + both test suites under real GCC with -Werror.
+# The suites CI's build-native job runs, plus test-advanced, which the
+# pre-push checks require and deploy.yml does not run. One list for both
+# compilers: the two recipes used to spell theirs out separately, and drifted --
+# gcc missed seven suites CI had gained, clang ran two. Add a suite here when
+# you add its step to deploy.yml.
+CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
+           test-reversible test-interaction-nary test-stage-times \
+           test-unknown-keys test-deactivation test-node-type-enum \
+           test-carrier-api test-edge-flows test-price-node test-ratio \
+           test-delivered-work test-price-dynamics test-net-energy \
+           test-gnp-loop test-giannantoni check-version test-schema
+
+# Full native build + CI's suites under real GCC with -Werror.
 test-linux: container-image-linux
-	$(CRUN) $(IMAGE_LINUX) sh -c 'make clean && make CC=gcc all && make CC=gcc test && make CC=gcc test-advanced && make CC=gcc test-node-types && make CC=gcc test-unknown-keys && make CC=gcc test-deactivation && make CC=gcc test-stage-times && make CC=gcc test-forcing && make CC=gcc test-carrier-api && make CC=gcc test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy && make CC=gcc test-interaction-nary test-gnp-loop'
+	$(CRUN) $(IMAGE_LINUX) sh -c 'make clean && make CC=gcc all && make CC=gcc $(CI_TESTS)'
 
 # Same under Linux clang, the other half of CI's build-native matrix.
 test-linux-clang: container-image-linux
-	$(CRUN) $(IMAGE_LINUX) sh -c 'make clean && make CC=clang all && make CC=clang test && make CC=clang test-advanced'
+	$(CRUN) $(IMAGE_LINUX) sh -c 'make clean && make CC=clang all && make CC=clang $(CI_TESTS)'
 
 # Everything CI would catch that macOS cannot: both Linux compilers.
 # Leaves the tree holding Linux objects — run `make clean && make all` after.
@@ -917,51 +887,3 @@ ci-local: test-linux test-linux-clang
 # Interactive shells for debugging a container build
 shell-linux: container-image-linux
 	$(CONTAINER_BIN) run --rm -it --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR) $(IMAGE_LINUX) bash
-
-# ──────────────────────────────────────────────────────────────
-# Documents (LaTeX)
-#
-# Sources live in doco/. latexmk is pointed at doco/build/ via -outdir so
-# every transient file (.aux, .bbl, .fls, …) stays out of the source tree;
-# doco/.gitignore covers that directory. Requires a TeX distribution —
-# these targets are not part of `make all` and never gate a code change.
-# ──────────────────────────────────────────────────────────────
-DOCO_DIR   = doco
-DOCO_BUILD = $(DOCO_DIR)/build
-# -cd does not compose with a relative -outdir here (output lands beside the
-# source), so the recipes cd explicitly and keep -outdir relative to that.
-LATEXMK    = latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build
-
-# Report wherever the PDF actually landed. A stock latexmk honours -outdir and
-# writes to doco/build/; a wrapper that drops caller flags (this machine has a
-# container-backed latexmk shim that passes only the filename through) writes
-# beside the source instead. Both locations are gitignored.
-report_pdf = ls -1 $(DOCO_BUILD)/$(1).pdf $(DOCO_DIR)/$(1).pdf 2>/dev/null | head -1 | sed 's/^/→ /'
-
-.PHONY: doco whitepaper article conformance doco-clean
-
-# Build all documents
-doco: whitepaper article conformance
-
-whitepaper:
-	@command -v latexmk >/dev/null 2>&1 || { echo "latexmk not found — install a TeX distribution (e.g. MacTeX, TeX Live)"; exit 1; }
-	cd $(DOCO_DIR) && $(LATEXMK) whitepaper.tex
-	@$(call report_pdf,whitepaper)
-
-article:
-	@command -v latexmk >/dev/null 2>&1 || { echo "latexmk not found — install a TeX distribution (e.g. MacTeX, TeX Live)"; exit 1; }
-	cd $(DOCO_DIR) && $(LATEXMK) article.tex
-	@$(call report_pdf,article)
-
-# Companion to ADR 0009 — where IFRS/AASB recognition and Odum's method diverge.
-conformance:
-	@command -v latexmk >/dev/null 2>&1 || { echo "latexmk not found — install a TeX distribution (e.g. MacTeX, TeX Live)"; exit 1; }
-	cd $(DOCO_DIR) && $(LATEXMK) conformance.tex
-	@$(call report_pdf,conformance)
-
-# Remove LaTeX build output only; leaves sources untouched.
-doco-clean:
-	rm -rf $(DOCO_BUILD)
-	rm -f $(DOCO_DIR)/*.aux $(DOCO_DIR)/*.bbl $(DOCO_DIR)/*.blg \
-	      $(DOCO_DIR)/*.fdb_latexmk $(DOCO_DIR)/*.fls $(DOCO_DIR)/*.log \
-	      $(DOCO_DIR)/*.out $(DOCO_DIR)/*.toc $(DOCO_DIR)/*.pdf

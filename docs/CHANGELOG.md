@@ -6,6 +6,14 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Removed
+
+- **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
+
+### Fixed
+
+- **`make test-linux` and `make test-linux-clang` run what CI runs.** Each spelled out its own suite list, and both had drifted: gcc was missing `test-limit-logic`, `test-reversible`, `test-node-type-enum`, `test-edge-flows`, `test-giannantoni`, `check-version` and `test-schema`; clang ran only `test` and `test-advanced`. They now share one list, `CI_TESTS`, so `make ci-local` is evidence of what it claims.
+
 ### Changed — breaking for JavaScript consumers
 
 - **The WASM build no longer uses Emscripten.** The kernel is compiled by clang for `wasm32-wasip1` against wasi-libc, from the pinned WASI SDK (`make wasm` fetches it into `tools/` and checks its SHA-256, natively on macOS and Linux). **`dist/gssk.js` is now a hand-written, dependency-free ES module** in place of Emscripten's generated factory, and `package.json` declares `"type": "module"`. File names are unchanged.
