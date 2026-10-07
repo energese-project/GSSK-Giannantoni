@@ -34,6 +34,7 @@ containerised toolchains:
 make ci-local              # real GCC + Linux clang
 make test-linux            # real GCC only (Ubuntu 24.04, matches CI)
 make test-wasm-container   # WASM suites with Node from a container
+make dev                   # dev page on :5173, Node + gssk.wasm from the pinned Guix
 make demo                  # the demo + plot, without a local matplotlib
 ```
 
