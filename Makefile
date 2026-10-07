@@ -813,6 +813,63 @@ $(WASI_SDK)/bin/clang:
 	rm tools/wasi-sdk.tar.gz
 
 # ──────────────────────────────────────────────────────────────
+# Local development, in Guix
+#
+# `make dev` serves dev/ — a page that runs any example model through
+# dist/gssk.js in the browser — with Vite, inside a long-lived container that
+# hosts Guix (guix/Containerfile.guix-host). Node comes from the pinned Guix
+# (guix/channels.scm + guix/dev.scm), and gssk.wasm from the release recipe
+# (guix/gssk.scm), so the page runs the bytes a release would ship. The host
+# needs only the `container` CLI.
+#
+#   make dev         http://localhost:5173/  (first run fetches Guix packages: minutes)
+#   make wasm-guix   the release gssk.wasm into dist/, without the server
+#   make guix-down   stop the container; its Guix store is kept
+#   make guix-rm     remove it, store and all
+#
+# The container is long-lived because the Guix store lives in it: removing it
+# means fetching every package again.
+# ──────────────────────────────────────────────────────────────
+GUIX_IMAGE := gssk-guix
+GUIX_BOX   := gssk-guix
+DEV_PORT   := 5173
+GUIX        = guix time-machine -C guix/channels.scm --
+
+.PHONY: guix-image guix-up guix-down guix-rm wasm-guix dev
+
+guix-image: container-start
+	$(CONTAINER_BIN) build -f guix/Containerfile.guix-host -t $(GUIX_IMAGE) .
+
+guix-up: container-start
+	@if ! $(CONTAINER_BIN) inspect $(GUIX_BOX) >/dev/null 2>&1; then \
+		$(MAKE) guix-image && \
+		$(CONTAINER_BIN) run -d --name $(GUIX_BOX) -c 4 -m 8G -p $(DEV_PORT):$(DEV_PORT) \
+			-v $(shell pwd):$(CWORKDIR) $(GUIX_IMAGE) sleep infinity >/dev/null; \
+	else \
+		$(CONTAINER_BIN) start $(GUIX_BOX) >/dev/null 2>&1 || true; \
+	fi
+
+guix-down:
+	-$(CONTAINER_BIN) stop $(GUIX_BOX)
+
+guix-rm: guix-down
+	-$(CONTAINER_BIN) rm $(GUIX_BOX)
+
+# Store files are read-only; the copies in dist/ must not be, or `make wasm`
+# could not overwrite them.
+wasm-guix: guix-up dist
+	$(CONTAINER_BIN) exec $(GUIX_BOX) sh -c 'cd $(CWORKDIR) && \
+		P=$$($(GUIX) build --fallback -f guix/gssk.scm | tail -1) && \
+		cp $$P/share/gssk/gssk.wasm $$P/share/gssk/gssk.js $$P/share/gssk/gssk.d.ts $(DIST_DIR)/ && \
+		chmod u+w $(DIST_DIR)/gssk.wasm $(DIST_DIR)/gssk.js $(DIST_DIR)/gssk.d.ts && \
+		sha256sum $(DIST_DIR)/gssk.wasm'
+
+dev: wasm-guix
+	$(CONTAINER_BIN) exec -it $(GUIX_BOX) sh -c 'cd $(CWORKDIR) && \
+		$(GUIX) shell -m guix/dev.scm -- sh -c "npm install --no-audit --no-fund && \
+		npx vite --config dev/vite.config.js --host 0.0.0.0 --port $(DEV_PORT) --strictPort"'
+
+# ──────────────────────────────────────────────────────────────
 # Containerised Linux builds
 #
 # `make wasm` and a real-GCC build cannot run on macOS directly. These

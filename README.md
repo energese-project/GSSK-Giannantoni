@@ -90,6 +90,14 @@ make shared     # shared library
 make wasm       # WebAssembly: dist/gssk.wasm + dist/gssk.js (fetches the pinned WASI SDK)
 ```
 
+### In the browser, locally
+
+```bash
+make dev        # http://localhost:5173/ — any example model, run through gssk.js + gssk.wasm
+```
+
+Needs only the Apple `container` CLI. Node and the toolchain come from the pinned Guix (`guix/`), and `gssk.wasm` is the release build, so the page runs the bytes a release would ship. The first run fetches Guix packages (about 15 minutes); after that, `make wasm-guix` takes a second when the kernel is unchanged. `make guix-down` stops the container and keeps its store.
+
 ## Testing
 
 ```bash
