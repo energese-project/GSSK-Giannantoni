@@ -16,6 +16,10 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **Tagged releases ship a `gssk.wasm` built by Guix, reproducible bit for bit, with the toolchain that built it.** [`guix/`](https://github.com/energese-project/GSSK-Giannantoni/blob/main/guix/README.md) pins Guix (`channels.scm`) and builds wasi-libc, wasm32 compiler-rt and the kernel from pinned source (`gssk.scm`), through the Makefile's own `make wasm` and `make test-wasm`. On each version tag CI builds it on x86_64 and aarch64, requires identical bytes and a passing `guix build --check`, and releases that `gssk.wasm` with `gssk-guix.sha256`, the recipe, and `gssk-toolchain-x86_64-linux.tar.xz` — clang 21, wasi-libc, make and Node, relocatable so `make wasm-toolchain TC=…` rebuilds the identical file on any x86_64 Linux without Guix. Verified before adoption: unpacked in a Debian container with no Guix, the toolchain rebuilt the same bytes and passed all 37 WASM tests. Rolling `latest` keeps the faster WASI SDK build.
+
+  The Makefile's WASM toolchain is now overridable (`WASM_CC`, `WASM_SYSROOT`, `WASM_TOOLCHAIN_FLAGS`, `WASM_TOOLCHAIN_LIBS`), so one rule defines the build for the SDK, Guix and the archived toolchain alike.
+
 - **The WASM artefact is tested like the native one.** `make test-wasm` (or `make test-wasm-container` without host Node) runs three suites through `dist/gssk.js` under Node's built-in test runner: the loader's contract, **every regression model against `tests/expected`** — before, only the forcing evaluator ran under WASM, so a kernel change could break the shipped artefact for every other model unnoticed — and the forcing-parity check, ported from `forcing_parity.cjs` to an ES module. The repository's JavaScript is `.js` (and `.ts`) ES modules only — no `.mjs` or `.cjs`; the VitePress config moves from `config.mts` to `config.ts` accordingly. The CI job's grep for export names is replaced by a test that each declared export is a callable function.
 
 - **The Giannantoni engine's transactor: Odum's §XV exchange as a module with four named legs.** [ADR 0013](adr/0013-module-roles-not-position.md) decision 5.

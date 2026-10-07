@@ -1,0 +1,114 @@
+name: Guix release build
+
+# The released gssk.wasm is built here, by Guix, from guix/channels.scm (the
+# pinned Guix) and guix/gssk.scm (wasi-libc, compiler-rt and the kernel, all
+# from pinned source, through the Makefile's own `make wasm`). Everyday builds
+# use the WASI SDK instead (deploy.yml's `wasm` job); this is the build an
+# archived release can be reproduced from, bit for bit.
+#
+# Three claims, each checked rather than assumed:
+#   1. the build passes the same WASM suites CI runs (the package's check phase);
+#   2. `guix build --check` rebuilds every package to identical bits;
+#   3. x86_64 and aarch64 runners produce byte-identical gssk.wasm.
+#
+# Runs on a version tag (called from deploy.yml, which then releases this
+# gssk.wasm), on PRs that touch the recipe, monthly so a recipe that has
+# stopped building is found before a release needs it, and on demand.
+
+on:
+  pull_request:
+    branches: [ main, 'feat/**', 'fix/**', 'docs/**' ]
+    paths: [ 'guix/**', 'Makefile', '.github/workflows/guix.yml' ]
+  schedule:
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      pack-toolchain:
+        description: Also pack the toolchain as a relocatable tarball
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Guix build (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64,  runner: ubuntu-24.04 }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ubuntu's archive carries Guix 1.4.0; time-machine moves to the pin.
+      # Not ftp.gnu.org: it was unreachable for a whole day during the spike
+      # while Guix's own git and substitute servers stayed up.
+      - name: Install Guix
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q guix
+          for k in /usr/share/guix/ci.guix.gnu.org.pub /usr/share/guix/bordeaux.guix.gnu.org.pub; do
+            [ -f "$k" ] && sudo guix archive --authorize < "$k" || true
+          done
+          systemctl is-active guix-daemon || sudo systemctl start guix-daemon
+
+      - name: Build at the pinned Guix
+        run: |
+          P=$(guix time-machine -C guix/channels.scm -- build --fallback -f guix/gssk.scm | tail -1)
+          mkdir out && cp "$P"/share/gssk/* out/
+          (cd out && sha256sum gssk.wasm gssk.js gssk.d.ts | tee SHA256SUMS)
+
+      - name: Rebuild every package and compare bits
+        run: GSSK_GUIX=all guix time-machine -C guix/channels.scm -- build --check -f guix/gssk.scm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gssk-guix-${{ matrix.arch }}
+          path: out/
+
+  same-bytes:
+    name: Same bytes on x86_64 and aarch64
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gssk-guix-*
+      - name: Compare
+        run: |
+          diff gssk-guix-x86_64/SHA256SUMS gssk-guix-aarch64/SHA256SUMS
+          echo "Identical on both architectures:"; cat gssk-guix-x86_64/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gssk-guix
+          path: gssk-guix-x86_64/
+
+  toolchain:
+    name: Pack the toolchain
+    if: inputs.pack-toolchain
+    needs: same-bytes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Guix
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q guix
+          for k in /usr/share/guix/ci.guix.gnu.org.pub /usr/share/guix/bordeaux.guix.gnu.org.pub; do
+            [ -f "$k" ] && sudo guix archive --authorize < "$k" || true
+          done
+          systemctl is-active guix-daemon || sudo systemctl start guix-daemon
+      # Relocatable (-RR): unpacks and runs on any x86_64 Linux, without Guix.
+      - name: Pack
+        run: |
+          T=$(GSSK_GUIX=toolchain guix time-machine -C guix/channels.scm -- \
+                pack -RR -C xz -S /bin=bin -S /include=include -S /lib=lib -m guix/gssk.scm | tail -1)
+          mkdir out && cp "$T" out/gssk-toolchain-x86_64-linux.tar.xz
+          (cd out && sha256sum gssk-toolchain-x86_64-linux.tar.xz | tee gssk-toolchain-x86_64-linux.tar.xz.sha256)
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gssk-toolchain
+          path: out/
