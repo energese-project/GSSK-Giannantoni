@@ -32,8 +32,9 @@ docs/.vitepress/dist/
 .build/
 .swiftpm/
 
-# Ensure dist/ artifacts are tracked
-!dist/
+# Ensure dist/ artifacts are tracked. Anchored to the root: unanchored, it
+# re-included every directory named dist, including docs/.vitepress/dist.
+!/dist/
 
 # AI assistant memory
 .claude/
@@ -54,3 +55,4 @@ __pycache__/
 # Reference papers are cited, not redistributed: several are Elsevier or
 # Academic Press and this repository is public.
 docs/*.pdf
+tools/

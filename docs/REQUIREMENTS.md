@@ -46,7 +46,7 @@ The kernel must recognize three primary object types:
 - **JSONL Emission**: Output one line of JSON per timestamp for pipe-based CLI workflows or real-time web charts.
 
 ## 5. Non-Functional Requirements
-- **Portability**: Written in ISO C99 for compatibility with gcc, clang, and emcc (Emscripten).
+- **Portability**: Written in ISO C99 for compatibility with gcc and clang, including clang's wasm32-wasip1 target.
 - **Memory Safety**: Zero use of global state variables to allow for "Thread Safety," enabling multiple kernels to run in parallel (WebWorkers/Threads).
 - **Speed**: Capable of simulating 1,000 iterations for a 100-node model in under 10ms on modern hardware.
 - **No External Dependencies**: The core kernel must not rely on external C libraries (except standard math/string headers) to ensure a lightweight WASM binary.

@@ -296,7 +296,7 @@ jobs:
   # undefined exported symbol would surface there rather than on the PR.
   # ────────────────────────────────────────────────────────────
   wasm:
-    name: WASM build (emscripten)
+    name: WASM build (clang + wasi-libc)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -304,41 +304,28 @@ jobs:
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y build-essential
 
-      - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v14
+      # Node 22 is what Guix ships, and so what an archived build reproduces.
+      - uses: actions/setup-node@v4
         with:
-          version: 3.1.64
+          node-version: 22
 
+      # Fetches the pinned WASI SDK into tools/ and verifies its SHA-256.
       - name: Build WASM
         run: make wasm
 
-      # emcc errors on an undefined exported symbol, so a successful build is
-      # already meaningful. This asserts the stronger property that every
-      # symbol named in WASM_EXPORTS actually reached the artifact.
-      - name: Verify every declared export reached the artifact
-        run: |
-          missing=0
-          for sym in $(grep -o '"_GSSK_[A-Za-z0-9_]*"' Makefile | tr -d '"' | sort -u); do
-            if ! grep -q "$sym" dist/gssk.js; then
-              echo "::error::declared in WASM_EXPORTS but absent from dist/gssk.js: $sym"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then exit 1; fi
-          echo "All declared exports present in dist/gssk.js."
-
-      # Requirement 3 of the forcing proposal: sin/exp must stay in the ONE
-      # pinned artifact and must not silently differ from native. The native
-      # binary writes its evaluator's answers; the JS side reads them back
-      # and compares through the built dist/gssk.js. An exported symbol that
-      # is present but wrong would pass the check above and fail this one.
-      #
-      # Compared to 4 ULP, not bit-for-bit. Measured three ways: WASM agrees
-      # with Linux GCC exactly, and macOS libm's sin() is the outlier by 1 ULP
-      # at 2 of 8 sample points. sin/exp are not required by IEEE-754 to be
-      # correctly rounded. Tracked as deterministic-transcendentals-cross-platform.
-      - name: Forcing evaluator parity (WASM vs native)
-        run: make test-forcing-wasm
+      # Three suites under Node's own test runner, through dist/gssk.js:
+      #   loader          every symbol in WASM_EXPORTS is a function on the
+      #                   module; an unprovided host import fails at load
+      #   corpus          every regression model matches tests/expected,
+      #                   as `make test` checks natively
+      #   forcing parity  sin/exp within 4 ULP of native. Measured three
+      #                   ways under Emscripten: WASM agreed with Linux GCC
+      #                   exactly, and macOS libm's sin() was the outlier by
+      #                   1 ULP. sin/exp are not required by IEEE-754 to be
+      #                   correctly rounded. Tracked as
+      #                   deterministic-transcendentals-cross-platform.
+      - name: WASM test suites
+        run: make test-wasm
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4
@@ -434,11 +421,6 @@ jobs:
 
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y build-essential
-
-      - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 3.1.64
 
       - name: Build native
         run: make all

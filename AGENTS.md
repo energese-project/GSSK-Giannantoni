@@ -32,7 +32,7 @@ We use a **Registration-based Regression Testing** system.
 3. **No Placeholders**: Never use placeholder code. If a feature isn't implemented, return a proper error code or use `(void)` for intentional stubs.
 
 ## 🚀 Deployment (WASM)
-GSSK is designed for web integration. Ensure any core changes are compatible with `emcc` (Emscripten).
+GSSK is designed for web integration. Any core change must still build for `wasm32-wasip1` with `make wasm` (clang + wasi-libc from the pinned WASI SDK; no Emscripten). The JavaScript side is `src/gssk.js`, a dependency-free ES module — keep it that way, and never add CommonJS.
 Command: `make wasm`
 
 ## 🎨 Web surfaces and the design tokens
@@ -81,7 +81,7 @@ npm install && npm run docs:build     # the docs must build; the theme @import m
 npm run docs:preview                  # then open it in both colour schemes
 ```
 
-For the demo, serve `web/` alongside a built `dist/gssk.js`. The deploy workflow
+For the demo, serve `web/` alongside a built `dist/gssk.js` and `dist/gssk.wasm`. The deploy workflow
 has a step that asserts every local asset `web/index.html` references reached the
 Pages artifact — that catches a forgotten `cp`, which is otherwise invisible
 until someone loads the deployed page.
@@ -91,14 +91,17 @@ Before submitting any changes, you MUST ensure:
 1. `make clean && make` completes without any errors or warnings.
 2. `make test` passes all regression tests with "PASSED" status.
 3. `make test-advanced` and `make test-price-node` pass.
-4. `make wasm-container` builds `dist/gssk.js` and `dist/gssk.wasm`. This runs
-   Emscripten in a Linux container, so it works without a local `emcc` — there
-   is no longer an "if available" excuse for shipping unverified WASM.
+4. `make wasm` builds `dist/gssk.wasm` and `dist/gssk.js`, fetching the pinned
+   WASI SDK into `tools/` on first use (SHA-256 checked). It runs natively on
+   macOS and Linux, so there is no "if available" excuse for unverified WASM.
+   Then `make test-wasm` (or `make test-wasm-container`, since the host is not
+   assumed to have Node) runs the loader, corpus and forcing-parity suites
+   through the built artefact.
 5. `make test-linux` builds and tests under **real GCC**. `/usr/bin/gcc` on macOS
    is a symlink to Apple clang, so a clean local build is NOT evidence of a clean
    CI build; GCC emits diagnostics clang does not and `CFLAGS` carries `-Werror`.
 
-`make ci-local` runs 4 and 5 together.
+`make ci-local` runs 5 under both Linux compilers. 4 needs no container.
 
 `make demo` is also containerised, for a different reason: it plots with
 matplotlib, which a bare system `python3` does not have. `Containerfile.demo`
@@ -120,7 +123,7 @@ host that does have matplotlib.
    finished work: CI runs on `pull_request`, so a bare push produces **no test
    signal at all** and there is nothing for a reviewer to merge on.
 4. **Wait for CI to pass.** All checks green — including `WASM build
-   (emscripten)`, which exists specifically because export-list breakage used to
+   (clang + wasi-libc)`, which exists specifically because export-list breakage used to
    reach `main` unverified.
 5. **Do not merge your own PR.** Merging is the maintainer's decision. Hand over
    a green PR, not a branch.

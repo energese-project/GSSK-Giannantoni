@@ -138,4 +138,4 @@ Benchmarks must be run on a single thread.
 ### 6.3 Build & CI Standards
 - **Compiler**: `gcc` or `clang` with `-Wall -Wextra -Werror -std=c99`.
 - **Sanitizers**: Must run clean under `valgrind` (zero leaks) and AddressSanitizer (ASan).
-- **WASM**: Must compile via `emcc` without modifications.
+- **WASM**: Must compile for `wasm32-wasip1` with clang and wasi-libc without modifications (`make wasm`).

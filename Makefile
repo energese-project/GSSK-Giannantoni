@@ -47,32 +47,29 @@ TARGET_SIM = $(BIN_DIR)/giannantoni_sim
 # ──────────────────────────────────────────────────────────────
 # Containerised Linux toolchains (Apple `container` CLI)
 #
-# Two things macOS cannot verify locally:
-#   emcc — no emsdk, and CI only builds WASM in the deploy job, which does
-#          not run on pull requests.
+# One thing macOS cannot verify locally:
 #   gcc  — /usr/bin/gcc here is Apple clang; real GCC emits warnings clang
 #          does not, and CFLAGS carries -Werror.
 #
-# Both emsdk and ubuntu images are amd64-only or resolve wrong on Apple
-# silicon, so --platform is explicit: without it `container run` fails with
-# "platform linux/arm64" even when the image built fine.
+# The ubuntu image resolves wrong on Apple silicon, so --platform is
+# explicit: without it `container run` fails with "platform linux/arm64"
+# even when the image built fine. (WASM needs no container: the WASI SDK
+# below runs natively on macOS and Linux.)
 # ──────────────────────────────────────────────────────────────
 CONTAINER_BIN    := container
 CONTAINER_PLATFORM := linux/amd64
-IMAGE_WASM       := gssk-wasm
 IMAGE_LINUX      := gssk-linux
 IMAGE_DEMO       := gssk-demo
-EMSDK_VERSION    := 3.1.64
 UBUNTU_VERSION   := 24.04
 CWORKDIR         := /work
 CRUN              = $(CONTAINER_BIN) run --rm --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR)
 
-.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-forcing-wasm test-carrier-api test-edge-flows test-schema check-version test-python demo demo-python plot-demo directories dist \
+.PHONY: all clean test test-update test-advanced test-price-node test-ratio test-delivered-work test-price-dynamics test-net-energy test-gnp-loop test-node-types test-unknown-keys test-deactivation test-stage-times test-forcing test-wasm test-carrier-api test-edge-flows test-schema check-version test-python demo demo-python plot-demo directories dist \
         shared asan test-asan coverage-build coverage-report coverage-check \
         fuzz-build fuzz-run test-valgrind bench bench-check bench-gen \
-        container-start container-image container-image-wasm container-image-linux \
+        container-start container-image container-image-linux \
         container-image-demo demo-native \
-        wasm-container test-linux test-linux-clang shell-wasm shell-linux ci-local
+        wasm wasi-sdk test-wasm-container test-linux test-linux-clang shell-linux ci-local
 
 all: directories $(TARGET_LIB) $(TARGET_CLI) $(TARGET_COMPARE) $(TARGET_SIM)
 
@@ -444,34 +441,35 @@ test-forcing: all $(TARGET_TEST_FORCING)
 	@echo "Running forcing function tests..."
 	@./$(TARGET_TEST_FORCING)
 
-# WASM forcing parity — requirement 3: sin/exp must stay in the ONE pinned
-# artifact and must not silently differ from native. The native binary writes
-# its evaluator's answers to JSON; the JS side reads them back and compares
-# through the built dist/gssk.js. Needs `make wasm` (or `make wasm-container`)
-# to have produced dist/.
-#
-# NODE resolution, and why it is not just `node`. Under the emsdk CI action,
-# PATH contains the emsdk root, and that directory holds a SUBDIRECTORY named
-# `node`. A bare `node` resolves to the directory and the shell reports
-# "Permission denied" — which reads like a sandbox problem and is not one.
-# emsdk exports EMSDK_NODE pointing at the real binary, so prefer it. Override
-# with `make test-forcing-wasm NODE=/path/to/node` if neither applies.
-NODE ?= $(if $(EMSDK_NODE),$(EMSDK_NODE),node)
+# WASM: the shipped artefact, through the ES module loader, under Node's own
+# test runner (no test framework). Three files in tests/wasm/:
+#   loader.test.js         the loader's contract: exports, imports, strings, heap
+#   corpus.test.js         every regression model, as `make test` runs natively
+#   forcing_parity.test.js sin/exp must not silently differ from native
+# The native forcing evaluator writes its answers first, for the parity check.
+# Needs `make wasm`. The host is not assumed to have Node: use
+# `make test-wasm-container`, or NODE=/path/to/node.
+NODE ?= node
+NODE_IMAGE := docker.io/library/node:22-slim
 
 TARGET_DUMP_FORCING = $(BIN_DIR)/dump_forcing_native
 
 $(TARGET_DUMP_FORCING): $(TEST_DIR)/dump_forcing_native.c $(TARGET_LIB)
 	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
 
-test-forcing-wasm: all $(TARGET_DUMP_FORCING)
+test-wasm: all $(TARGET_DUMP_FORCING)
 	@mkdir -p tests/results
 	@./$(TARGET_DUMP_FORCING) tests/results/forcing_native.json
-	@test -f $(DIST_DIR)/gssk.js || { echo "dist/gssk.js missing — run 'make wasm' or 'make wasm-container' first"; exit 1; }
-	@command -v $(NODE) >/dev/null 2>&1 || { \
-		echo "node not found or not executable: $(NODE)"; \
-		echo "  set EMSDK_NODE, or run: make test-forcing-wasm NODE=/path/to/node"; \
-		exit 1; }
-	@$(NODE) tests/wasm/forcing_parity.cjs
+	@test -f $(DIST_DIR)/gssk.wasm -a -f $(DIST_DIR)/gssk.js || { echo "dist/gssk.wasm or dist/gssk.js missing — run 'make wasm' first"; exit 1; }
+	@$(NODE) --test "tests/wasm/*.test.js"
+
+# Same, with Node from a container. The native dump runs on the host first,
+# so its JSON is the host's libm — exactly what the parity check compares.
+test-wasm-container: all $(TARGET_DUMP_FORCING) container-start
+	@mkdir -p tests/results
+	@./$(TARGET_DUMP_FORCING) tests/results/forcing_native.json
+	@test -f $(DIST_DIR)/gssk.wasm -a -f $(DIST_DIR)/gssk.js || { echo "dist/gssk.wasm or dist/gssk.js missing — run 'make wasm' first"; exit 1; }
+	$(CONTAINER_BIN) run --rm -v $(shell pwd):$(CWORKDIR) -w $(CWORKDIR) $(NODE_IMAGE) node --test "tests/wasm/*.test.js"
 
 # Stage times — the solver must hand each derivative evaluation the right time.
 # Pinned BEFORE anything consumes t, so the rest of the suite can hold "nothing
@@ -717,49 +715,82 @@ dist: directories
 	cp $(SRC_DIR)/gssk.d.ts $(DIST_DIR)/gssk.d.ts
 	cp gssk.schema.json $(DIST_DIR)/gssk.schema.json
 
-# WASM Build (Requires emscripten)
-WASM_EXPORTS = ["_GSSK_Init","_GSSK_Step","_GSSK_Reset","_GSSK_GetState","_GSSK_GetStateSize","_GSSK_GetFlows","_GSSK_GetFlowCount",\
-"_GSSK_GetTStart","_GSSK_GetTEnd","_GSSK_GetDt","_GSSK_GetCurrentTime","_GSSK_GetStepCount",\
-"_GSSK_GetNodeID","_GSSK_FindNodeIdx","_GSSK_GetEdgeID","_GSSK_FindEdgeIdx",\
-"_GSSK_GetEdgeCount","_GSSK_GetEdgeK","_GSSK_SetEdgeK",\
-"_GSSK_GetTransformationRatio","_GSSK_GetQualityFlow","_GSSK_GetEdgeQualityFlow",\
-"_GSSK_GetSolverConfidence","_GSSK_AddNode","_GSSK_AddEdge","_GSSK_DeactivateEdge",\
-"_GSSK_DeactivateNode","_GSSK_ReclassifyNetwork",\
-"_GSSK_SerializeModel","_GSSK_SerializeSnapshot","_GSSK_FreeString",\
-"_GSSK_GetSchemaVersion","_GSSK_GetModelName","_GSSK_GetModelDescription",\
-"_GSSK_GetModelKernelVersion","_GSSK_GetModelHash","_GSSK_GetVersionString","_GSSK_GetVersionCode",\
-"_GSSK_GetEdgeErrorEstimate","_GSSK_GetStepErrorEstimate",\
-"_GSSK_GetEventCount","_GSSK_GetEventTime","_GSSK_GetEventEdgeID","_GSSK_GetEventDirection",\
-"_GSSK_EnsembleForecast","_GSSK_FreeEnsembleResult","_GSSK_Calibrate",\
-"_GSSK_GetEnsembleNodeCount","_GSSK_GetEnsembleStepCount",\
-"_GSSK_GetEnsembleMin","_GSSK_GetEnsembleMax","_GSSK_GetEnsembleMean",\
-"_GSSK_GetErrorDescription","_GSSK_Free","_malloc","_free",\
-"_GSSK_StepAdaptive","_GSSK_GetLastStepSize","_GSSK_GetNextStepSize",\
-"_GSSK_GetConservationError","_GSSK_SetDiagHooks",\
-"_GSSK_EnableForwardSensitivity","_GSSK_DisableForwardSensitivity","_GSSK_GetSensitivity",\
-"_GSSK_RunAdjoint","_GSSK_GetTransformitySensitivity",\
-"_GSSK_CalibrateGradient","_GSSK_CalibrateMonteCarlo",\
-"_GSSK_GetMutationCount","_GSSK_GetMutationRecord","_GSSK_SetMutationCause",\
-"_GSSK_ClearMutationLog","_GSSK_ExportMutationLog","_GSSK_Replay",\
-"_GSSK_GetNodeForcingKind","_GSSK_GetEdgeForcingKind",\
-"_GSSK_EvaluateNodeForcing","_GSSK_EvaluateEdgeForcing",\
-"_GSSK_GetCarrierCount","_GSSK_GetCarrier","_GSSK_GetNodeCarrier",\
-"_GSSK_GetCarrierID","_GSSK_GetCarrierUnit","_GSSK_GetCarrierConserved",\
-"_GSSK_FindCarrierIdx",\
-"_GSSK_GetEdgeCarrier","_GSSK_GetCarrierConservationError",\
-"_GSSK_GetNodeTypeString","_GSSK_GetNodeType",\
-"_GSSK_GetArchetypeCount","_GSSK_GetArchetypeName",\
-"_GSSK_GetCompositeCount","_GSSK_GetCompositeID",\
-"_GSSK_GetCompositeArchetype","_GSSK_GetNodeComposite","_GSSK_GetNodeRole",\
-"_GSSK_GetCompositeMemberCount","_GSSK_GetCompositeMemberIndex",\
-"_GSSK_SetSeed","_GSSK_GetSeed","_GSSK_NextRandom","_GSSK_NextRandomUniform"]
+# ──────────────────────────────────────────────────────────────
+# WebAssembly: clang + wasi-libc from the pinned WASI SDK
+#
+# gssk.wasm is the kernel compiled for wasm32-wasip1 as a "reactor" (a
+# library, no main), and src/gssk.js is the whole of its JavaScript side.
+# No Emscripten: its generated glue was replaced by that loader, so what
+# ships is a standard .wasm and a short, readable ES module.
+#
+# Release builds are reproduced bit-for-bit, on any architecture, by Guix
+# (spike/guix). This SDK is the everyday toolchain, here and in CI.
+# `make wasi-sdk` fetches it into tools/ and verifies its SHA-256.
+# ──────────────────────────────────────────────────────────────
+WASI_SDK_TAG     := wasi-sdk-34
+WASI_SDK_VERSION := 34.0
+WASI_SDK_HOST    := $(shell uname -m | sed 's/aarch64/arm64/')-$(shell uname -s | tr A-Z a-z | sed 's/darwin/macos/')
+WASI_SDK         ?= tools/wasi-sdk-$(WASI_SDK_VERSION)-$(WASI_SDK_HOST)
+WASI_SDK_SHA256_arm64-macos  := 9c59398106b417f8f14913380fdf0097a8cc0ff4af9eb3ce0065a859e88d49e9
+WASI_SDK_SHA256_x86_64-macos := 87d27fa8adc68dee59bfbf2e22a6d34ef717c34d6bf1d8af2a56fc929d9ce0eb
+WASI_SDK_SHA256_arm64-linux  := f7e243dff54d60bcc576e94d6166b69f410f2500ae4a9ceef34315be10e77971
+WASI_SDK_SHA256_x86_64-linux := b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
+SHA256SUM        := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-wasm: dist
-	emcc $(SRC_DIR)/gssk.c $(SRC_DIR)/advanced.c $(SRC_DIR)/cJSON.c -Iinclude -O3 -s WASM=1 \
-	-s MODULARIZE=1 -s EXPORT_NAME='createGSSK' \
-	-s EXPORTED_FUNCTIONS='$(WASM_EXPORTS)' \
-	-s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","stringToUTF8","UTF8ToString","lengthBytesUTF8","allocate","ALLOC_NORMAL","HEAPU8","HEAPF64","HEAPU32"]' \
-	-o $(DIST_DIR)/gssk.js
+# Every symbol the module exports. tests/wasm/loader.test.js reads this
+# list, so the build and the test cannot disagree about it.
+WASM_EXPORTS := \
+	GSSK_Init GSSK_Step GSSK_Reset GSSK_GetState GSSK_GetStateSize GSSK_GetFlows \
+	GSSK_GetFlowCount GSSK_GetTStart GSSK_GetTEnd GSSK_GetDt GSSK_GetCurrentTime \
+	GSSK_GetStepCount GSSK_GetNodeID GSSK_FindNodeIdx GSSK_GetEdgeID \
+	GSSK_FindEdgeIdx GSSK_GetEdgeCount GSSK_GetEdgeK GSSK_SetEdgeK \
+	GSSK_GetTransformationRatio GSSK_GetQualityFlow GSSK_GetEdgeQualityFlow \
+	GSSK_GetSolverConfidence GSSK_AddNode GSSK_AddEdge GSSK_DeactivateEdge \
+	GSSK_DeactivateNode GSSK_ReclassifyNetwork GSSK_SerializeModel \
+	GSSK_SerializeSnapshot GSSK_FreeString GSSK_GetSchemaVersion \
+	GSSK_GetModelName GSSK_GetModelDescription GSSK_GetModelKernelVersion \
+	GSSK_GetModelHash GSSK_GetVersionString GSSK_GetVersionCode \
+	GSSK_GetEdgeErrorEstimate GSSK_GetStepErrorEstimate GSSK_GetEventCount \
+	GSSK_GetEventTime GSSK_GetEventEdgeID GSSK_GetEventDirection \
+	GSSK_EnsembleForecast GSSK_FreeEnsembleResult GSSK_Calibrate \
+	GSSK_GetEnsembleNodeCount GSSK_GetEnsembleStepCount GSSK_GetEnsembleMin \
+	GSSK_GetEnsembleMax GSSK_GetEnsembleMean GSSK_GetErrorDescription GSSK_Free \
+	malloc free GSSK_StepAdaptive GSSK_GetLastStepSize GSSK_GetNextStepSize \
+	GSSK_GetConservationError GSSK_SetDiagHooks GSSK_EnableForwardSensitivity \
+	GSSK_DisableForwardSensitivity GSSK_GetSensitivity GSSK_RunAdjoint \
+	GSSK_GetTransformitySensitivity GSSK_CalibrateGradient \
+	GSSK_CalibrateMonteCarlo GSSK_GetMutationCount GSSK_GetMutationRecord \
+	GSSK_SetMutationCause GSSK_ClearMutationLog GSSK_ExportMutationLog \
+	GSSK_Replay GSSK_GetNodeForcingKind GSSK_GetEdgeForcingKind \
+	GSSK_EvaluateNodeForcing GSSK_EvaluateEdgeForcing GSSK_GetCarrierCount \
+	GSSK_GetCarrier GSSK_GetNodeCarrier GSSK_GetCarrierID GSSK_GetCarrierUnit \
+	GSSK_GetCarrierConserved GSSK_FindCarrierIdx GSSK_GetEdgeCarrier \
+	GSSK_GetCarrierConservationError GSSK_GetNodeTypeString GSSK_GetNodeType \
+	GSSK_GetArchetypeCount GSSK_GetArchetypeName GSSK_GetCompositeCount \
+	GSSK_GetCompositeID GSSK_GetCompositeArchetype GSSK_GetNodeComposite \
+	GSSK_GetNodeRole GSSK_GetCompositeMemberCount GSSK_GetCompositeMemberIndex \
+	GSSK_SetSeed GSSK_GetSeed GSSK_NextRandom GSSK_NextRandomUniform
+
+comma := ,
+WASM_CFLAGS = --target=wasm32-wasip1 --sysroot=$(WASI_SDK)/share/wasi-sysroot \
+              -mexec-model=reactor -std=c99 -Wall -Wextra -Werror -O3 -Iinclude \
+              -Wl,--strip-debug   # the SDK's libc carries DWARF; keep only function names
+
+wasm: dist $(WASI_SDK)/bin/clang
+	$(WASI_SDK)/bin/clang $(WASM_CFLAGS) $(SOURCES) \
+		$(addprefix -Wl$(comma)--export=,$(WASM_EXPORTS)) -o $(DIST_DIR)/gssk.wasm
+	cp $(SRC_DIR)/gssk.js $(DIST_DIR)/gssk.js
+
+wasi-sdk: $(WASI_SDK)/bin/clang
+
+$(WASI_SDK)/bin/clang:
+	@test -n "$(WASI_SDK_SHA256_$(WASI_SDK_HOST))" || { echo "no pinned WASI SDK for $(WASI_SDK_HOST)"; exit 1; }
+	@mkdir -p tools
+	curl -fsSL --retry 3 -o tools/wasi-sdk.tar.gz \
+		https://github.com/WebAssembly/wasi-sdk/releases/download/$(WASI_SDK_TAG)/wasi-sdk-$(WASI_SDK_VERSION)-$(WASI_SDK_HOST).tar.gz
+	echo "$(WASI_SDK_SHA256_$(WASI_SDK_HOST))  tools/wasi-sdk.tar.gz" | $(SHA256SUM) -c -
+	tar xzf tools/wasi-sdk.tar.gz -C tools
+	rm tools/wasi-sdk.tar.gz
 
 # ──────────────────────────────────────────────────────────────
 # Containerised Linux builds
@@ -773,12 +804,6 @@ wasm: dist
 # Start the container system daemon (idempotent)
 container-start:
 	@$(CONTAINER_BIN) system start >/dev/null 2>&1 || true
-
-# Build the Emscripten image (matches deploy.yml's emsdk pin)
-container-image-wasm: container-start
-	$(CONTAINER_BIN) build -f Containerfile -t $(IMAGE_WASM) \
-		--platform $(CONTAINER_PLATFORM) \
-		--build-arg EMSDK_VERSION=$(EMSDK_VERSION) .
 
 # Build the native Linux image (matches CI's ubuntu-latest)
 container-image-linux: container-start
@@ -795,13 +820,7 @@ container-image-demo: container-start
 
 # Build both build-toolchain images (the demo image is built on demand by
 # `make demo`, which is not part of the CI-parity set)
-container-image: container-image-wasm container-image-linux
-
-# Build the WASM artefacts into dist/. This is the check that CI does NOT
-# run on pull requests, so run it before pushing anything that touches
-# WASM_EXPORTS or any exported symbol.
-wasm-container: container-image-wasm
-	$(CRUN) $(IMAGE_WASM) make wasm
+container-image: container-image-linux
 
 # Full native build + both test suites under real GCC with -Werror.
 test-linux: container-image-linux
@@ -811,17 +830,14 @@ test-linux: container-image-linux
 test-linux-clang: container-image-linux
 	$(CRUN) $(IMAGE_LINUX) sh -c 'make clean && make CC=clang all && make CC=clang test && make CC=clang test-advanced'
 
-# Everything CI would catch that macOS cannot: both Linux compilers plus WASM.
+# Everything CI would catch that macOS cannot: both Linux compilers.
 # Leaves the tree holding Linux objects — run `make clean && make all` after.
-ci-local: test-linux test-linux-clang wasm-container
+ci-local: test-linux test-linux-clang
 	@echo "──────────────────────────────────────────────"
-	@echo "Linux gcc + clang and WASM all built."
+	@echo "Linux gcc + clang both built."
 	@echo "Tree now holds Linux artefacts; run 'make clean && make all' to restore native."
 
 # Interactive shells for debugging a container build
-shell-wasm: container-image-wasm
-	$(CONTAINER_BIN) run --rm -it --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR) $(IMAGE_WASM) bash
-
 shell-linux: container-image-linux
 	$(CONTAINER_BIN) run --rm -it --platform $(CONTAINER_PLATFORM) -v $(shell pwd):$(CWORKDIR) $(IMAGE_LINUX) bash
 

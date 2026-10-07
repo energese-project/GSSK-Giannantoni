@@ -19,5 +19,5 @@ features:
   - title: Visual Modeling
     details: Designed for Odum's Energy Systems Language and General Systems Theory.
   - title: WebAssembly Ready
-    details: High-performance browser integration via Emscripten.
+    details: High-performance browser integration as a standard WebAssembly module with a dependency-free ES module loader.
 ---
