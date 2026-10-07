@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GSSK dev</title>
+  <style>
+    body {
+      margin: 0; padding: 16px; font: 14px/1.5 system-ui, sans-serif;
+      background: var(--e-ground); color: var(--e-ink);
+    }
+    main { max-width: 960px; margin: 0 auto; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p.note { color: var(--e-muted); margin: 0 0 16px; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    select, button {
+      font: inherit; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--e-rule); background: var(--e-surface); color: var(--e-ink);
+    }
+    button { background: var(--e-accent); color: var(--e-ground); border-color: var(--e-accent); cursor: pointer; }
+    .card { background: var(--e-surface); border: 1px solid var(--e-rule); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+    #status { color: var(--e-muted); }
+    #status.error { color: var(--e-critical); }
+    svg { width: 100%; height: auto; display: block; }
+    .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .table-wrap { overflow-x: auto; max-height: 320px; }
+    table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { padding: 2px 10px; text-align: right; border-bottom: 1px solid var(--e-rule); white-space: nowrap; }
+    th { position: sticky; top: 0; background: var(--e-surface); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>GSSK dev</h1>
+    <p class="note">Runs a model from <code>examples/</code> through <code>dist/gssk.js</code> and the
+      Guix-built <code>gssk.wasm</code>, in this browser. <span id="kernel"></span></p>
+    <div class="controls">
+      <label for="model">Model</label>
+      <select id="model"></select>
+      <button id="run" type="button">Run</button>
+      <span id="status" role="status"></span>
+    </div>
+    <div class="card">
+      <svg id="chart" viewBox="0 0 900 360" role="img" aria-label="State over time"></svg>
+      <div id="legend" class="legend"></div>
+    </div>
+    <div class="card table-wrap"><table id="table"></table></div>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
