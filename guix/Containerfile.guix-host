@@ -1,0 +1,19 @@
+# A plain Linux box whose only job is to host Guix. Everything else comes from Guix.
+FROM debian:bookworm-slim
+ARG GUIX_VERSION=1.5.0
+ARG ARCH=aarch64
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils gnupg netbase \
+ && rm -rf /var/lib/apt/lists/*
+RUN cd /tmp && curl -fsSLO https://ftp.gnu.org/gnu/guix/guix-binary-${GUIX_VERSION}.${ARCH}-linux.tar.xz \
+ && tar --warning=no-timestamp -xf guix-binary-${GUIX_VERSION}.${ARCH}-linux.tar.xz \
+ && mv var/guix /var/ && mv gnu / && rm -rf /tmp/* \
+ && mkdir -p ~root/.config/guix \
+ && ln -sf /var/guix/profiles/per-user/root/current-guix ~root/.config/guix/current \
+ && groupadd --system guixbuild \
+ && for i in $(seq -w 1 10); do useradd -g guixbuild -G guixbuild -d /var/empty -s /usr/sbin/nologin -c "Guix build user $i" --system guixbuilder$i; done
+ENV PATH=/root/.config/guix/current/bin:$PATH
+RUN guix archive --authorize < /root/.config/guix/current/share/guix/ci.guix.gnu.org.pub \
+ && guix archive --authorize < /root/.config/guix/current/share/guix/bordeaux.guix.gnu.org.pub
+COPY guix/entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["bash"]

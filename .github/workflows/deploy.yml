@@ -409,9 +409,30 @@ jobs:
   # second before any step ran, and no number of pushed tags could ever have
   # produced a release while the release steps lived inside the deploy job.
   # ────────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────
+  # Guix release build — version tags only.
+  #
+  # A tagged release ships the gssk.wasm Guix built, not the WASI SDK's: that
+  # is the one reproducible bit for bit from guix/ on x86_64 and aarch64 alike,
+  # and the toolchain that built it ships beside it. See guix.yml and
+  # guix/README.md. Rolling `latest` keeps the faster SDK build.
+  # ────────────────────────────────────────────────────────────
+  guix:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/guix.yml
+    with:
+      pack-toolchain: true
+
   release:
-    needs: [ build-native, quality, wasm ]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [ build-native, quality, wasm, guix ]
+    # `guix` is skipped on main and required on tags; an `if` that names no
+    # status function would skip this job whenever a need was skipped.
+    if: >-
+      !cancelled() && github.event_name == 'push' &&
+      needs.build-native.result == 'success' && needs.quality.result == 'success' &&
+      needs.wasm.result == 'success' &&
+      ((github.ref == 'refs/heads/main' && needs.guix.result == 'skipped') ||
+       (startsWith(github.ref, 'refs/tags/v') && needs.guix.result == 'success'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -427,6 +448,30 @@ jobs:
 
       - name: Build WASM
         run: make wasm
+
+      # On a tag, replace the SDK build with Guix's, and add the toolchain
+      # and the recipe that reproduce it.
+      - name: Take the Guix build (tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/download-artifact@v4
+        with:
+          name: gssk-guix
+          path: guix-out
+      - name: Take the Guix toolchain (tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/download-artifact@v4
+        with:
+          name: gssk-toolchain
+          path: guix-toolchain
+      - name: Use the Guix artefacts (tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          (cd guix-out && sha256sum -c SHA256SUMS)
+          cp guix-out/gssk.wasm guix-out/gssk.js guix-out/gssk.d.ts dist/
+          cp guix-out/SHA256SUMS dist/gssk-guix.sha256
+          cp guix-toolchain/gssk-toolchain-x86_64-linux.tar.xz dist/
+          cp guix/channels.scm dist/guix-channels.scm
+          cp guix/gssk.scm dist/guix-gssk.scm
 
       - name: Deploy to distribution branch
         run: |
@@ -468,6 +513,9 @@ jobs:
               [ -f "$f" ] || { echo "missing artifact: $f" >&2; exit 1; }
               printf '| `%s` | `%s` |\n' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"
             done
+            for f in dist/gssk-toolchain-x86_64-linux.tar.xz dist/guix-channels.scm dist/guix-gssk.scm; do
+              if [ -f "$f" ]; then printf '| `%s` | `%s` |\n' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"; fi
+            done
             echo 'DIGEST_TABLE_EOF'
           } >> "$GITHUB_OUTPUT"
 
@@ -483,6 +531,13 @@ jobs:
             against a fixed kernel. The artifacts below are byte-for-byte the
             ones this tag was built from; verify with `sha256sum`.
 
+            `gssk.wasm` here was built by Guix and is reproducible bit for bit:
+            `guix-channels.scm` pins Guix and `guix-gssk.scm` builds wasi-libc,
+            compiler-rt and the kernel from pinned source. CI rebuilt it on
+            x86_64 and aarch64 and got identical bytes. The toolchain that built
+            it, `gssk-toolchain-x86_64-linux.tar.xz`, runs on any x86_64 Linux
+            without Guix. See `guix/README.md`.
+
             ${{ steps.digests.outputs.table }}
 
             Commit: `${{ github.sha }}`
@@ -494,6 +549,10 @@ jobs:
             dist/gssk.wasm
             dist/gssk.d.ts
             dist/gssk.schema.json
+            dist/gssk-guix.sha256
+            dist/gssk-toolchain-x86_64-linux.tar.xz
+            dist/guix-channels.scm
+            dist/guix-gssk.scm
           draft: false
           prerelease: false
           make_latest: true

@@ -69,7 +69,7 @@ CRUN              = $(CONTAINER_BIN) run --rm --platform $(CONTAINER_PLATFORM) -
         fuzz-build fuzz-run test-valgrind bench bench-check bench-gen \
         container-start container-image container-image-linux \
         container-image-demo demo-native \
-        wasm wasi-sdk test-wasm-container test-linux test-linux-clang shell-linux ci-local
+        wasm wasi-sdk wasm-toolchain test-wasm-container test-linux test-linux-clang shell-linux ci-local
 
 all: directories $(TARGET_LIB) $(TARGET_CLI) $(TARGET_COMPARE) $(TARGET_SIM)
 
@@ -771,17 +771,37 @@ WASM_EXPORTS := \
 	GSSK_GetNodeRole GSSK_GetCompositeMemberCount GSSK_GetCompositeMemberIndex \
 	GSSK_SetSeed GSSK_GetSeed GSSK_NextRandom GSSK_NextRandomUniform
 
+# The toolchain. By default the WASI SDK above; guix/gssk.scm overrides these
+# to build the release artefact with Guix's clang and its own
+# wasi-libc, so this rule stays the one place the WASM build is defined.
+WASM_CC              ?= $(WASI_SDK)/bin/clang
+WASM_SYSROOT         ?= $(WASI_SDK)/share/wasi-sysroot
+WASM_TOOLCHAIN_FLAGS ?=
+WASM_TOOLCHAIN_LIBS  ?=
+
 comma := ,
-WASM_CFLAGS = --target=wasm32-wasip1 --sysroot=$(WASI_SDK)/share/wasi-sysroot \
+WASM_CFLAGS = --target=wasm32-wasip1 --sysroot=$(WASM_SYSROOT) \
               -mexec-model=reactor -std=c99 -Wall -Wextra -Werror -O3 -Iinclude \
               -Wl,--strip-debug   # the SDK's libc carries DWARF; keep only function names
 
-wasm: dist $(WASI_SDK)/bin/clang
-	$(WASI_SDK)/bin/clang $(WASM_CFLAGS) $(SOURCES) \
-		$(addprefix -Wl$(comma)--export=,$(WASM_EXPORTS)) -o $(DIST_DIR)/gssk.wasm
+# The SDK is fetched only when it is the toolchain in use.
+wasm: dist $(filter $(WASI_SDK)/bin/clang,$(WASM_CC))
+	$(WASM_CC) $(WASM_CFLAGS) $(WASM_TOOLCHAIN_FLAGS) $(SOURCES) \
+		$(addprefix -Wl$(comma)--export=,$(WASM_EXPORTS)) $(WASM_TOOLCHAIN_LIBS) -o $(DIST_DIR)/gssk.wasm
 	cp $(SRC_DIR)/gssk.js $(DIST_DIR)/gssk.js
 
 wasi-sdk: $(WASI_SDK)/bin/clang
+
+# Rebuild gssk.wasm with the toolchain archived beside a release
+# (gssk-toolchain-x86_64-linux.tar.xz), on any x86_64 Linux, without Guix:
+#   mkdir tc && tar xf gssk-toolchain-x86_64-linux.tar.xz -C tc
+#   tc/bin/make wasm-toolchain TC=$$PWD/tc && sha256sum dist/gssk.wasm
+# The result must match the release's gssk-guix.sha256. See guix/README.md.
+wasm-toolchain:
+	@test -x "$(TC)/bin/clang" || { echo "set TC to the unpacked toolchain directory"; exit 1; }
+	PATH="$(TC)/bin:$$PATH" $(MAKE) wasm WASM_CC=clang WASM_SYSROOT=$(TC) \
+		WASM_TOOLCHAIN_FLAGS="-nostdlibinc -isystem $(TC)/include/wasm32-wasip1" \
+		WASM_TOOLCHAIN_LIBS="-nodefaultlibs -L$(TC)/lib/wasm32-wasip1 -lc $(TC)/lib/wasip1/libclang_rt.builtins-wasm32.a"
 
 $(WASI_SDK)/bin/clang:
 	@test -n "$(WASI_SDK_SHA256_$(WASI_SDK_HOST))" || { echo "no pinned WASI SDK for $(WASI_SDK_HOST)"; exit 1; }
