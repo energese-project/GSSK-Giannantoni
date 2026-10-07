@@ -1,7 +1,7 @@
 /**
  * GSSK's WebAssembly loader, as a dependency-free ES module.
  *
- *   import createGSSK from './gssk.mjs';
+ *   import createGSSK from './gssk.js';
  *   const gssk = await createGSSK();            // loads ./gssk.wasm beside this file
  *   const p = gssk._malloc(n); gssk.stringToUTF8(json, p, n); gssk._GSSK_Init(p, out);
  *

@@ -85,7 +85,7 @@ make bench
 ```bash
 make            # native library + CLI
 make shared     # shared library
-make wasm       # WebAssembly: dist/gssk.wasm + dist/gssk.mjs (fetches the pinned WASI SDK)
+make wasm       # WebAssembly: dist/gssk.wasm + dist/gssk.js (fetches the pinned WASI SDK)
 ```
 
 ## Testing

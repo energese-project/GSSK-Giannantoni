@@ -38,7 +38,7 @@ make demo                  # the demo + plot, without a local matplotlib
 ```
 
 These need the Apple `container` CLI. `make wasm` itself does not: the pinned
-WASI SDK runs natively on macOS, and `tests/wasm/loader.test.mjs` checks every
+WASI SDK runs natively on macOS, and `tests/wasm/loader.test.js` checks every
 declared export reached the artefact, so an unverified export list has no excuse.
 
 `make demo` is containerised for a different reason than the other three: it is

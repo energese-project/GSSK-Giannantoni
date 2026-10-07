@@ -33,7 +33,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import createGSSK from '../../dist/gssk.mjs';
+import createGSSK from '../../dist/gssk.js';
 
 const NATIVE = JSON.parse(await readFile(
   new URL('../results/forcing_native.json', import.meta.url), 'utf8'));

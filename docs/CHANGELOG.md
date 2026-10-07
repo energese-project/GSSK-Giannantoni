@@ -8,15 +8,15 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed — breaking for JavaScript consumers
 
-- **The WASM build no longer uses Emscripten.** The kernel is compiled by clang for `wasm32-wasip1` against wasi-libc, from the pinned WASI SDK (`make wasm` fetches it into `tools/` and checks its SHA-256, natively on macOS and Linux). Emscripten's generated `dist/gssk.js` is replaced by **`dist/gssk.mjs`**, a hand-written, dependency-free ES module, and the types move to **`dist/gssk.d.mts`**.
+- **The WASM build no longer uses Emscripten.** The kernel is compiled by clang for `wasm32-wasip1` against wasi-libc, from the pinned WASI SDK (`make wasm` fetches it into `tools/` and checks its SHA-256, natively on macOS and Linux). **`dist/gssk.js` is now a hand-written, dependency-free ES module** in place of Emscripten's generated factory, and `package.json` declares `"type": "module"`. File names are unchanged.
 
-  The module keeps the shape callers used: `_GSSK_*` functions, `_malloc`/`_free`, `HEAPU8`/`HEAPU32`/`HEAPF64` and `stringToUTF8`/`UTF8ToString`/`lengthBytesUTF8`. Migration is the import — `import createGSSK from './gssk.mjs'` — and dropping `ccall`, `cwrap`, `allocate` and `ALLOC_NORMAL`, which nothing in this repository used. `createGSSK({ wasm, print, printErr })` takes the module's location or bytes. A host import the loader does not provide is refused at load, by name.
+  The module keeps the shape callers used: `_GSSK_*` functions, `_malloc`/`_free`, `HEAPU8`/`HEAPU32`/`HEAPF64` and `stringToUTF8`/`UTF8ToString`/`lengthBytesUTF8`. Migration is the import — `import createGSSK from './gssk.js'` — and dropping `ccall`, `cwrap`, `allocate` and `ALLOC_NORMAL`, which nothing in this repository used. `createGSSK({ wasm, print, printErr })` takes the module's location or bytes. A host import the loader does not provide is refused at load, by name.
 
   **Why:** an archived kernel must stay runnable after today's toolchains are gone. What ships is now a standard `.wasm` and under 200 readable lines of JavaScript, and the same sources build bit-for-bit identically under Guix on aarch64 and x86_64 (`spike/guix`, PR #23).
 
 ### Added
 
-- **The WASM artefact is tested like the native one.** `make test-wasm` (or `make test-wasm-container` without host Node) runs three suites through `dist/gssk.mjs` under Node's built-in test runner: the loader's contract, **every regression model against `tests/expected`** — before, only the forcing evaluator ran under WASM, so a kernel change could break the shipped artefact for every other model unnoticed — and the forcing-parity check, ported from `forcing_parity.cjs` to an ES module. The CI job's grep for export names is replaced by a test that each declared export is a callable function.
+- **The WASM artefact is tested like the native one.** `make test-wasm` (or `make test-wasm-container` without host Node) runs three suites through `dist/gssk.js` under Node's built-in test runner: the loader's contract, **every regression model against `tests/expected`** — before, only the forcing evaluator ran under WASM, so a kernel change could break the shipped artefact for every other model unnoticed — and the forcing-parity check, ported from `forcing_parity.cjs` to an ES module. The repository's JavaScript is `.js` (and `.ts`) ES modules only — no `.mjs` or `.cjs`; the VitePress config moves from `config.mts` to `config.ts` accordingly. The CI job's grep for export names is replaced by a test that each declared export is a callable function.
 
 - **The Giannantoni engine's transactor: Odum's §XV exchange as a module with four named legs.** [ADR 0013](adr/0013-module-roles-not-position.md) decision 5.
 

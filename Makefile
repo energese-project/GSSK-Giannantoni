@@ -443,9 +443,9 @@ test-forcing: all $(TARGET_TEST_FORCING)
 
 # WASM: the shipped artefact, through the ES module loader, under Node's own
 # test runner (no test framework). Three files in tests/wasm/:
-#   loader.test.mjs         the loader's contract: exports, imports, strings, heap
-#   corpus.test.mjs         every regression model, as `make test` runs natively
-#   forcing_parity.test.mjs sin/exp must not silently differ from native
+#   loader.test.js         the loader's contract: exports, imports, strings, heap
+#   corpus.test.js         every regression model, as `make test` runs natively
+#   forcing_parity.test.js sin/exp must not silently differ from native
 # The native forcing evaluator writes its answers first, for the parity check.
 # Needs `make wasm`. The host is not assumed to have Node: use
 # `make test-wasm-container`, or NODE=/path/to/node.
@@ -460,16 +460,16 @@ $(TARGET_DUMP_FORCING): $(TEST_DIR)/dump_forcing_native.c $(TARGET_LIB)
 test-wasm: all $(TARGET_DUMP_FORCING)
 	@mkdir -p tests/results
 	@./$(TARGET_DUMP_FORCING) tests/results/forcing_native.json
-	@test -f $(DIST_DIR)/gssk.wasm -a -f $(DIST_DIR)/gssk.mjs || { echo "dist/gssk.wasm or dist/gssk.mjs missing — run 'make wasm' first"; exit 1; }
-	@$(NODE) --test "tests/wasm/*.test.mjs"
+	@test -f $(DIST_DIR)/gssk.wasm -a -f $(DIST_DIR)/gssk.js || { echo "dist/gssk.wasm or dist/gssk.js missing — run 'make wasm' first"; exit 1; }
+	@$(NODE) --test "tests/wasm/*.test.js"
 
 # Same, with Node from a container. The native dump runs on the host first,
 # so its JSON is the host's libm — exactly what the parity check compares.
 test-wasm-container: all $(TARGET_DUMP_FORCING) container-start
 	@mkdir -p tests/results
 	@./$(TARGET_DUMP_FORCING) tests/results/forcing_native.json
-	@test -f $(DIST_DIR)/gssk.wasm -a -f $(DIST_DIR)/gssk.mjs || { echo "dist/gssk.wasm or dist/gssk.mjs missing — run 'make wasm' first"; exit 1; }
-	$(CONTAINER_BIN) run --rm -v $(shell pwd):$(CWORKDIR) -w $(CWORKDIR) $(NODE_IMAGE) node --test "tests/wasm/*.test.mjs"
+	@test -f $(DIST_DIR)/gssk.wasm -a -f $(DIST_DIR)/gssk.js || { echo "dist/gssk.wasm or dist/gssk.js missing — run 'make wasm' first"; exit 1; }
+	$(CONTAINER_BIN) run --rm -v $(shell pwd):$(CWORKDIR) -w $(CWORKDIR) $(NODE_IMAGE) node --test "tests/wasm/*.test.js"
 
 # Stage times — the solver must hand each derivative evaluation the right time.
 # Pinned BEFORE anything consumes t, so the rest of the suite can hold "nothing
@@ -712,14 +712,14 @@ bench-check: all bench-gen
 
 # Sync dist/ without requiring emscripten (schema + TypeScript declarations)
 dist: directories
-	cp $(SRC_DIR)/gssk.d.mts $(DIST_DIR)/gssk.d.mts
+	cp $(SRC_DIR)/gssk.d.ts $(DIST_DIR)/gssk.d.ts
 	cp gssk.schema.json $(DIST_DIR)/gssk.schema.json
 
 # ──────────────────────────────────────────────────────────────
 # WebAssembly: clang + wasi-libc from the pinned WASI SDK
 #
 # gssk.wasm is the kernel compiled for wasm32-wasip1 as a "reactor" (a
-# library, no main), and src/gssk.mjs is the whole of its JavaScript side.
+# library, no main), and src/gssk.js is the whole of its JavaScript side.
 # No Emscripten: its generated glue was replaced by that loader, so what
 # ships is a standard .wasm and a short, readable ES module.
 #
@@ -737,7 +737,7 @@ WASI_SDK_SHA256_arm64-linux  := f7e243dff54d60bcc576e94d6166b69f410f2500ae4a9cee
 WASI_SDK_SHA256_x86_64-linux := b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
 SHA256SUM        := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-# Every symbol the module exports. tests/wasm/loader.test.mjs reads this
+# Every symbol the module exports. tests/wasm/loader.test.js reads this
 # list, so the build and the test cannot disagree about it.
 WASM_EXPORTS := \
 	GSSK_Init GSSK_Step GSSK_Reset GSSK_GetState GSSK_GetStateSize GSSK_GetFlows \
@@ -779,7 +779,7 @@ WASM_CFLAGS = --target=wasm32-wasip1 --sysroot=$(WASI_SDK)/share/wasi-sysroot \
 wasm: dist $(WASI_SDK)/bin/clang
 	$(WASI_SDK)/bin/clang $(WASM_CFLAGS) $(SOURCES) \
 		$(addprefix -Wl$(comma)--export=,$(WASM_EXPORTS)) -o $(DIST_DIR)/gssk.wasm
-	cp $(SRC_DIR)/gssk.mjs $(DIST_DIR)/gssk.mjs
+	cp $(SRC_DIR)/gssk.js $(DIST_DIR)/gssk.js
 
 wasi-sdk: $(WASI_SDK)/bin/clang
 

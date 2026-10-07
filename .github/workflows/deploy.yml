@@ -313,7 +313,7 @@ jobs:
       - name: Build WASM
         run: make wasm
 
-      # Three suites under Node's own test runner, through dist/gssk.mjs:
+      # Three suites under Node's own test runner, through dist/gssk.js:
       #   loader          every symbol in WASM_EXPORTS is a function on the
       #                   module; an unprovided host import fails at load
       #   corpus          every regression model matches tests/expected,
@@ -332,7 +332,7 @@ jobs:
         with:
           name: wasm-build
           path: |
-            dist/gssk.mjs
+            dist/gssk.js
             dist/gssk.wasm
 
   # ────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ jobs:
   # job was added to close, in a different corner.
   #
   # It deliberately does NOT build WASM: the point is that the docs theme
-  # builds and its design tokens inline, and gssk.mjs/gssk.wasm are covered by
+  # builds and its design tokens inline, and gssk.js/gssk.wasm are covered by
   # the wasm job.
   # ────────────────────────────────────────────────────────────
   # Documentation.
@@ -463,7 +463,7 @@ jobs:
             echo 'table<<DIGEST_TABLE_EOF'
             echo '| Artifact | SHA-256 |'
             echo '| --- | --- |'
-            for f in dist/gssk.mjs dist/gssk.wasm dist/gssk.d.mts dist/gssk.schema.json \
+            for f in dist/gssk.js dist/gssk.wasm dist/gssk.d.ts dist/gssk.schema.json \
                      include/gssk.h lib/libgssk.a bin/gssk; do
               [ -f "$f" ] || { echo "missing artifact: $f" >&2; exit 1; }
               printf '| `%s` | `%s` |\n' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"
@@ -490,9 +490,9 @@ jobs:
             bin/gssk
             lib/libgssk.a
             include/gssk.h
-            dist/gssk.mjs
+            dist/gssk.js
             dist/gssk.wasm
-            dist/gssk.d.mts
+            dist/gssk.d.ts
             dist/gssk.schema.json
           draft: false
           prerelease: false
@@ -519,9 +519,9 @@ jobs:
             bin/gssk
             lib/libgssk.a
             include/gssk.h
-            dist/gssk.mjs
+            dist/gssk.js
             dist/gssk.wasm
-            dist/gssk.d.mts
+            dist/gssk.d.ts
             dist/gssk.schema.json
           draft: false
           prerelease: true

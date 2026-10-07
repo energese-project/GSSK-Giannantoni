@@ -350,7 +350,7 @@ BENCH_BASELINE_MS=200 make bench-check   # tighter gate
 
 ```bash
 # Fetches the pinned WASI SDK into tools/ on first use; no Emscripten
-make wasm          # produces dist/gssk.wasm + dist/gssk.mjs (its ES module loader)
+make wasm          # produces dist/gssk.wasm + dist/gssk.js (its ES module loader)
 ```
 
 Serve `dist/` alongside your web app and import via `<script type="module">` or a bundler.

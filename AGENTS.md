@@ -32,7 +32,7 @@ We use a **Registration-based Regression Testing** system.
 3. **No Placeholders**: Never use placeholder code. If a feature isn't implemented, return a proper error code or use `(void)` for intentional stubs.
 
 ## 🚀 Deployment (WASM)
-GSSK is designed for web integration. Any core change must still build for `wasm32-wasip1` with `make wasm` (clang + wasi-libc from the pinned WASI SDK; no Emscripten). The JavaScript side is `src/gssk.mjs`, a dependency-free ES module — keep it that way, and never add CommonJS.
+GSSK is designed for web integration. Any core change must still build for `wasm32-wasip1` with `make wasm` (clang + wasi-libc from the pinned WASI SDK; no Emscripten). The JavaScript side is `src/gssk.js`, a dependency-free ES module — keep it that way, and never add CommonJS.
 Command: `make wasm`
 
 ## 🎨 Web surfaces and the design tokens
@@ -81,7 +81,7 @@ npm install && npm run docs:build     # the docs must build; the theme @import m
 npm run docs:preview                  # then open it in both colour schemes
 ```
 
-For the demo, serve `web/` alongside a built `dist/gssk.mjs` and `dist/gssk.wasm`. The deploy workflow
+For the demo, serve `web/` alongside a built `dist/gssk.js` and `dist/gssk.wasm`. The deploy workflow
 has a step that asserts every local asset `web/index.html` references reached the
 Pages artifact — that catches a forgotten `cp`, which is otherwise invisible
 until someone loads the deployed page.
@@ -91,7 +91,7 @@ Before submitting any changes, you MUST ensure:
 1. `make clean && make` completes without any errors or warnings.
 2. `make test` passes all regression tests with "PASSED" status.
 3. `make test-advanced` and `make test-price-node` pass.
-4. `make wasm` builds `dist/gssk.wasm` and `dist/gssk.mjs`, fetching the pinned
+4. `make wasm` builds `dist/gssk.wasm` and `dist/gssk.js`, fetching the pinned
    WASI SDK into `tools/` on first use (SHA-256 checked). It runs natively on
    macOS and Linux, so there is no "if available" excuse for unverified WASM.
    Then `make test-wasm` (or `make test-wasm-container`, since the host is not

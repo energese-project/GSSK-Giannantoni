@@ -1,4 +1,4 @@
-// Types for gssk.mjs, the ES module loader for gssk.wasm.
+// Types for gssk.js, the ES module loader for gssk.wasm.
 // Function members are the kernel's exports, prefixed with `_` as the
 // Emscripten build had them, so existing callers keep their names.
 
@@ -287,7 +287,7 @@ export interface GSSKModule {
 }
 
 export interface GSSKOptions {
-  /** The kernel. Defaults to gssk.wasm beside gssk.mjs. */
+  /** The kernel. Defaults to gssk.wasm beside gssk.js. */
   wasm?: URL | string | BufferSource | Response | WebAssembly.Module;
   /** Receives the kernel's stdout, one line per call. Default: console.log. */
   print?: (line: string) => void;
