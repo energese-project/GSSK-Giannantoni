@@ -212,7 +212,6 @@ Commutative operators take an array. Non-commutative operators take named operan
 | `exp`, `log`, `sqrt`, `sin`, `cos` | `of` | | out of domain is `ERR_DIVERGENCE` |
 | `compare` | `relation` (`gt`, `ge`, `lt`, `le`), `left`, `right` | 1 or 0 | relation is an enum, not a string to parse |
 | `select` | `condition`, `then`, `else` | | memoryless conditional (§6.1) |
-| `random` | `distribution` (`uniform`, `normal`), `low`/`high` or `mean`/`sd` | | §8 |
 | `previous` | `of`, `initial` | value of `of` at the last accepted step | §9 |
 | `time` | — | t | |
 
@@ -223,7 +222,7 @@ scenario (§6.4), not a condition inside a law.
 ### 5.3 Evaluation
 
 - A law is evaluated at every solver stage.
-- `random` and `previous` are latched per accepted step (§8, §9).
+- `previous` is latched per accepted step (§9).
 - Evaluation is pure: a law has no side effects. Only events change parameters or
   state.
 
@@ -361,8 +360,8 @@ constant within a run, this `compare` never crosses, and the solver knows it.
 
 ## 7. Forcing
 
-ADR 0006's vocabulary is unchanged, with one addition: `table`, for `READ`/`DATA` series
-and observed driving data.
+ADR 0006's vocabulary is unchanged, with two additions: `random` (§8), and `table`,
+for `READ`/`DATA` series and observed driving data.
 
 ```json
 "forcing": { "waveform": "table",
@@ -381,23 +380,42 @@ and observed driving data.
 | `min`, `max` | as for every waveform |
 
 Table forcing attaches to a source's value or to a pathway's `k`, as every waveform
-does. A table can also be used as a value inside a law: `{"op": "table", "forcing": {…}}`.
+does, and nowhere else. A data series comes from outside the system, as noise does
+(§8), so a law that needs it reads a source over a `control` pathway.
 
 ## 8. Randomness
 
-- **Draws:** `random` (§5.2) draws from the instance PRNG (SplitMix64, as now).
-- **Latching:** each occurrence in the document is a separate stream position. It is
-  drawn **once per accepted step** and held across that step's solver stages. A stage
-  re-draw would make RK4 integrate a different function at each stage, and the result
-  would depend on the solver.
-- **`jitter`:** the waveform is unchanged, and now defined as `uniform` `random`
-  composed with its mean and amplitude.
+Randomness is a **source**, not an operator. In Odum's terms, noise reaches a system
+from outside it, so it enters the diagram the way any outside driver does: as a source
+whose held value is a forcing waveform. A law that needs it reads the source over a
+`control` pathway, so the noise input is drawn like every other influence.
+
+```json
+{ "id": "weather", "type": "source", "value": 0,
+  "forcing": { "waveform": "random", "distribution": "uniform", "low": 0, "high": 1 } }
+```
+
+- **`random` waveform:** `distribution` is `uniform` (`low`, `high`) or `normal`
+  (`mean`, `sd`). `min`/`max` clamp it, as they do every waveform.
+- **`jitter`** is unchanged, and is now defined as `random` `uniform` on
+  `[mean − amplitude, mean + amplitude)`.
+- **Draws:** from the instance PRNG (SplitMix64, as now). Each random source has its
+  own stream position.
+- **Latching:** each source draws **once per accepted step** and holds the value across
+  that step's solver stages. A draw at every stage would make RK4 integrate a
+  different function at each stage, and the result would depend on the solver.
 - **Seed:** `config.seed` (a hex string, the snapshot's `rng_state` convention) seeds
   the run. Absent, `GSSK_DEFAULT_SEED` is used. Scenarios each start from the seed, so
   a scenario's result does not depend on which scenarios ran before it.
-- **Solver:** a model with `random` runs fixed-step at `config.dt`. The step *is* the
-  noise's correlation time, so changing `dt` changes the model, and the kernel says so
-  (§10).
+- **Solver:** a model with a random source runs fixed-step at `config.dt`. The step
+  *is* the noise's correlation time, so changing `dt` changes the model, and the kernel
+  says so (§10).
+- **On a pathway:** a random waveform on a pathway's `k` is the same thing attached to
+  a flow rather than a force (ADR 0006).
+
+**Extraction.** Each `RND` occurrence in a listing becomes its own random source, with
+a `control` pathway to whatever reads it. Two `RND` calls in one expression are two
+independent draws in BASIC, so they are two sources here.
 
 **Fidelity.** A BASIC `RND` stream cannot be reproduced bit for bit: each dialect has
 its own generator. So a stochastic listing and its extraction are compared as
@@ -450,7 +468,7 @@ of the modules:
 | rational (`divide`, `loop_limited`) | RK4 / DOPRI5 | bounded-approximate, reported |
 | `compare`, `select`, events, `subtract`/`switch` modules | piecewise between located events | per segment |
 | `exp`, `log`, `sin`, `cos`, `power` (non-polynomial) | RK4 / DOPRI5 | RK4 vs DOPRI5 |
-| `random` or `previous` | fixed-step at `dt` | **off**, reported as `GSSK_CONFIDENCE_STEP_DEPENDENT` |
+| a random source, or `previous` | fixed-step at `dt` | **off**, reported as `GSSK_CONFIDENCE_STEP_DEPENDENT` |
 
 Two consequences:
 
@@ -524,7 +542,7 @@ satisfied unchanged.
 | `IF cond THEN param = v`, never reset | `event`, `repeat: false` |
 | flag tested with `GOTO`, rerun with `CONT` | `scenarios` |
 | `READ` inside the loop over `DATA` | `table` forcing, `interpolation: step` |
-| `RND` | `random`, `uniform`, low 0, high 1 |
+| `RND` | a `source` with `random` forcing, `uniform`, low 0, high 1, read by `control` pathway (§8) |
 | `INT`, `ABS`, `EXP`, `LOG`, `SQR`, `SIN`, `COS` | the matching operator |
 | sequential update, verbatim fidelity | `previous` |
 | `PRINT`, `PSET`, `LINE`, `SCREEN`, `COLOR`, `CLS` | `config.outputs`. Graphics are dropped and listed in the report |
@@ -612,7 +630,7 @@ v5 is accepted when, with tests written first:
 3. The Odum archive's listings (MACROEC and DEVELOP first) extract to v5 through psde,
    run in GSSK, and match PC-BASIC in CI:
    - to the §6.3 tolerance for event listings
-   - by ensemble for `RND` listings (§8)
+   - by ensemble for listings with random sources (§8)
    - exactly for `previous`-form verbatim extractions
 4. `gssk.schema.json` v5 validates every document in 1–3, and the loader rejects each
    refusal case in this spec with the named error.
