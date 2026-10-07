@@ -1,10 +1,9 @@
 # Reproducing a release's `gssk.wasm`
 
 Every tagged release's `gssk.wasm` is built by [Guix](https://guix.gnu.org) from
-the two files here, and the toolchain that built it is released beside it. So a
-release can be **re-run** (load `gssk.wasm` in any WebAssembly runtime) and
-**rebuilt** to the same bytes, on any machine, for as long as either Guix or the
-archived toolchain can be run.
+the two files here. So a release can be **re-run** (load `gssk.wasm` in any
+WebAssembly runtime) and **rebuilt** to the same bytes, on any machine that can
+run Guix — or a packed toolchain, which CI produces on demand (below).
 
 | File | What it pins |
 |---|---|
@@ -25,7 +24,9 @@ guix time-machine -C guix/channels.scm -- build -f guix/gssk.scm
 sha256sum /gnu/store/…-gssk-wasm-release/share/gssk/gssk.wasm
 ```
 
-**2. With the archived toolchain** (no Guix; any x86_64 Linux):
+**2. With a packed toolchain** (no Guix; any x86_64 Linux). Releases do not
+carry it for now; run `guix.yml` by hand with `pack-toolchain` to get it as a
+workflow artifact:
 
 ```sh
 mkdir tc && tar xf gssk-toolchain-x86_64-linux.tar.xz -C tc
@@ -51,9 +52,10 @@ and on demand:
 2. `guix build --check` rebuilds each package and fails on any differing bit.
 3. x86_64 and aarch64 runners must produce byte-identical `gssk.wasm`.
 
-On tags it also packs the toolchain (`guix pack -RR -C xz`, about 450 MB): clang
-and lld 21, wasi-libc, compiler-rt, make, Node and coreutils, relocatable so it
-runs without Guix.
+Run by hand with `pack-toolchain`, it also packs the toolchain (`guix pack -RR
+-C xz`, about 450 MB): clang and lld 21, wasi-libc, compiler-rt, make, Node and
+coreutils, relocatable so it runs without Guix. It is not attached to releases
+for now.
 
 ## How this was established
 
