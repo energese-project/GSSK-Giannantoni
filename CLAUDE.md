@@ -34,6 +34,7 @@ containerised toolchains:
 make ci-local              # real GCC + Linux clang
 make test-linux            # real GCC only (Ubuntu 24.04, matches CI)
 make test-wasm-container   # WASM suites with Node from a container
+make docs-build-container  # the CI "Documentation builds" job, Node from a container
 make dev                   # dev page on :5173: WASI SDK gssk.wasm, Node from a container
 ```
 
