@@ -6,6 +6,14 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Removed
+
+- **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
+
+### Fixed
+
+- **`make test-linux` and `make test-linux-clang` run what CI runs.** Each spelled out its own suite list, and both had drifted: gcc was missing `test-limit-logic`, `test-reversible`, `test-node-type-enum`, `test-edge-flows`, `test-giannantoni`, `check-version` and `test-schema`; clang ran only `test` and `test-advanced`. They now share one list, `CI_TESTS`, so `make ci-local` is evidence of what it claims.
+
 ### Changed
 
 - **Daily work no longer waits on Guix.** `make dev` builds `gssk.wasm` natively with the WASI SDK and runs Vite in the `node:22-slim` container `make test-wasm-container` already uses: seconds, not a Guix fetch. The Guix-backed page is `make dev-guix`. The Guix CI build (`guix.yml`) no longer runs on every PR that edits the `Makefile`, which cost 22–27 minutes per PR; it runs on `guix/` changes, monthly, on demand, and on every version tag, where it still gates the release.

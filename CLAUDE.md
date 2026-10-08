@@ -35,22 +35,11 @@ make ci-local              # real GCC + Linux clang
 make test-linux            # real GCC only (Ubuntu 24.04, matches CI)
 make test-wasm-container   # WASM suites with Node from a container
 make dev                   # dev page on :5173: WASI SDK gssk.wasm, Node from a container
-make demo                  # the demo + plot, without a local matplotlib
 ```
 
 These need the Apple `container` CLI. `make wasm` itself does not: the pinned
 WASI SDK runs natively on macOS, and `tests/wasm/loader.test.js` checks every
 declared export reached the artefact, so an unverified export list has no excuse.
-
-`make demo` is containerised for a different reason than the other three: it is
-not about compiler parity but about matplotlib. `python/plot_demo.py` needs it,
-the system `python3` here does not have it, and the target used to die with
-`ERROR: matplotlib is required for plot-demo`. `Containerfile.demo` pins the
-interpreter and the deps through `uv`, so the plot is reproducible instead of
-depending on what happens to be pip-installed. Like the other container
-targets it leaves Linux objects in `lib/` — it says so when it finishes, and
-`make clean && make all` restores a native tree. `make demo-native` skips the
-container if you do have matplotlib on the host.
 
 **Task tracking is `crux`.** One global binary and one shared database, scoped
 to this project by `.crux/project.json`. There is no project-local `crux`
@@ -70,7 +59,7 @@ crux task worktree <slug>          # creates ../GSSK-<slug> on branch feat/<slug
 cd ../GSSK-<slug>
 # ... red -> green -> refactor, in here ...
 make test && make test-advanced && make test-schema
-make ci-local                      # real GCC + Linux clang + WASM; see above
+make ci-local                      # real GCC + Linux clang; see above
 git push -u origin feat/<slug>
 gh pr create --fill
 ```

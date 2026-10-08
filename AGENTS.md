@@ -105,14 +105,9 @@ Before submitting any changes, you MUST ensure:
 
 `make ci-local` runs 5 under both Linux compilers. 4 needs no container.
 
-`make demo` is also containerised, for a different reason: it plots with
-matplotlib, which a bare system `python3` does not have. `Containerfile.demo`
-carries a uv-managed interpreter and a pinned matplotlib
-(`python/requirements-demo.txt`) alongside the C toolchain, so `make demo`
-needs nothing installed on the host but the `container` CLI. It cleans first
-and leaves Linux artefacts in `lib/`, so run `make clean && make all`
-afterwards. `make demo-native` is the same demo without the container, for a
-host that does have matplotlib.
+`make test-linux` and `make test-linux-clang` run one list, `CI_TESTS` in the
+`Makefile`, which mirrors the build-native job in `deploy.yml`. When you add a
+suite to CI, add it there too, or local parity silently lapses.
 
 ## 🔀 Contribution Workflow
 
@@ -148,7 +143,7 @@ Before opening a PR, ask what *else* in flight touches the same line. The shared
 
 | Anchor | Do this instead |
 | --- | --- |
-| the `.PHONY:` list in `Makefile` | declare `.PHONY: <your-target>` on its own line beside your own rule — GNU make accumulates `.PHONY` prerequisites across declarations, and the file already does this for the `doco` targets |
+| the `.PHONY:` list in `Makefile` | declare `.PHONY: <your-target>` on its own line beside your own rule — GNU make accumulates `.PHONY` prerequisites across declarations, and the file already does this for the Giannantoni targets |
 | a target block above `# Schema conformance` | put it beside the suite it relates to, not at a shared landmark |
 | a step after the same step in `deploy.yml` | anchor it after the step your work actually relates to |
 | `## [Unreleased]` in `docs/CHANGELOG.md` | unavoidable — see below |
