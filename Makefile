@@ -813,29 +813,35 @@ $(WASI_SDK)/bin/clang:
 	rm tools/wasi-sdk.tar.gz
 
 # ──────────────────────────────────────────────────────────────
-# Local development, in Guix
+# Local development
 #
 # `make dev` serves dev/ — a page that runs any example model through
-# dist/gssk.js in the browser — with Vite, inside a long-lived container that
-# hosts Guix (guix/Containerfile.guix-host). Node comes from the pinned Guix
-# (guix/channels.scm + guix/dev.scm), and gssk.wasm from the release recipe
-# (guix/gssk.scm), so the page runs the bytes a release would ship. The host
-# needs only the `container` CLI.
+# dist/gssk.js in the browser — with Vite. gssk.wasm comes from `make wasm`
+# (the WASI SDK, natively, in seconds) and Node from the same container image
+# test-wasm-container uses, so the host needs only the `container` CLI and
+# nothing waits on Guix.
 #
-#   make dev         http://localhost:5173/  (first run fetches Guix packages: minutes)
+#   make dev         http://localhost:5173/
+#
+# Guix is for releases (guix.yml). To check the page against the bytes a
+# release would ship, the Guix path is still here, inside a long-lived
+# container that hosts Guix (guix/Containerfile.guix-host):
+#
+#   make dev-guix    same page, Node and gssk.wasm from the pinned Guix
+#                    (first run fetches Guix packages: about 15 minutes)
 #   make wasm-guix   the release gssk.wasm into dist/, without the server
 #   make guix-down   stop the container; its Guix store is kept
 #   make guix-rm     remove it, store and all
 #
-# The container is long-lived because the Guix store lives in it: removing it
-# means fetching every package again.
+# The Guix container is long-lived because the Guix store lives in it:
+# removing it means fetching every package again.
 # ──────────────────────────────────────────────────────────────
 GUIX_IMAGE := gssk-guix
 GUIX_BOX   := gssk-guix
 DEV_PORT   := 5173
 GUIX        = guix time-machine -C guix/channels.scm --
 
-.PHONY: guix-image guix-up guix-down guix-rm wasm-guix dev
+.PHONY: guix-image guix-up guix-down guix-rm wasm-guix dev dev-guix
 
 guix-image: container-start
 	$(CONTAINER_BIN) build -f guix/Containerfile.guix-host -t $(GUIX_IMAGE) .
@@ -864,10 +870,21 @@ wasm-guix: guix-up dist
 		chmod u+w $(DIST_DIR)/gssk.wasm $(DIST_DIR)/gssk.js $(DIST_DIR)/gssk.d.ts && \
 		sha256sum $(DIST_DIR)/gssk.wasm'
 
-dev: wasm-guix
+# npm install runs in the container, so node_modules/ holds Linux builds of
+# Vite's native dependencies; it is .gitignored and never used on the host.
+VITE = npm install --no-audit --no-fund && \
+	npx vite --config dev/vite.config.js --host 0.0.0.0 --port $(DEV_PORT) --strictPort
+
+# -it only from a terminal: without one, `container run -it` refuses to start.
+DEV_TTY := $(shell [ -t 0 ] && echo -it)
+
+dev: wasm container-start
+	$(CONTAINER_BIN) run --rm $(DEV_TTY) -p $(DEV_PORT):$(DEV_PORT) -v $(shell pwd):$(CWORKDIR) -w $(CWORKDIR) \
+		$(NODE_IMAGE) sh -c '$(VITE)'
+
+dev-guix: wasm-guix
 	$(CONTAINER_BIN) exec -it $(GUIX_BOX) sh -c 'cd $(CWORKDIR) && \
-		$(GUIX) shell -m guix/dev.scm -- sh -c "npm install --no-audit --no-fund && \
-		npx vite --config dev/vite.config.js --host 0.0.0.0 --port $(DEV_PORT) --strictPort"'
+		$(GUIX) shell -m guix/dev.scm -- sh -c "$(VITE)"'
 
 # ──────────────────────────────────────────────────────────────
 # Containerised Linux builds

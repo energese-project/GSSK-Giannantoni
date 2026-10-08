@@ -6,6 +6,10 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Changed
+
+- **Daily work no longer waits on Guix.** `make dev` builds `gssk.wasm` natively with the WASI SDK and runs Vite in the `node:22-slim` container `make test-wasm-container` already uses: seconds, not a Guix fetch. The Guix-backed page is `make dev-guix`. The Guix CI build (`guix.yml`) no longer runs on every PR that edits the `Makefile`, which cost 22–27 minutes per PR; it runs on `guix/` changes, monthly, on demand, and on every version tag, where it still gates the release.
+
 ### Changed — breaking for JavaScript consumers
 
 - **The WASM build no longer uses Emscripten.** The kernel is compiled by clang for `wasm32-wasip1` against wasi-libc, from the pinned WASI SDK (`make wasm` fetches it into `tools/` and checks its SHA-256, natively on macOS and Linux). **`dist/gssk.js` is now a hand-written, dependency-free ES module** in place of Emscripten's generated factory, and `package.json` declares `"type": "module"`. File names are unchanged.

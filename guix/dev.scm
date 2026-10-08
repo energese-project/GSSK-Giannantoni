@@ -1,4 +1,4 @@
-;;; The development shell: what `make dev` runs Vite with.
+;;; The development shell: what `make dev-guix` runs Vite with.
 ;;;
 ;;;   guix time-machine -C guix/channels.scm -- shell -m guix/dev.scm
 ;;;
