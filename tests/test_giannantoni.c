@@ -1671,7 +1671,7 @@ static cJSON *gate_model(const char *edges) {
 }
 
 #define E_ENERGY "{\"source\":\"grass\",\"target\":\"gate\",\"role\":\"energy\"}"
-#define E_CTRL   "{\"source\":\"sun\",\"target\":\"gate\",\"role\":\"control\"}"
+#define E_CTRL   "{\"source\":\"sun\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0}"
 #define E_OUT    "{\"source\":\"gate\",\"target\":\"cow\",\"weight\":1.0}"
 
 static char *slurp_file(const char *path) {
@@ -1770,8 +1770,8 @@ static void test_module_nary_and_fanout(void) {
         "  {\"id\":\"out2\",\"type\":\"storage\",\"current_level\":0.0}],"
         " \"edges\":["
         "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
-        "  {\"source\":\"b\",\"target\":\"gate\",\"role\":\"control\"},"
-        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\"},"
+        "  {\"source\":\"b\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"gate\",\"target\":\"out1\",\"weight\":3.0},"
         "  {\"source\":\"gate\",\"target\":\"out2\",\"weight\":1.0}],"
         " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
@@ -1807,7 +1807,7 @@ static void test_module_gain_closed_form(void) {
         "  {\"id\":\"amp\",\"type\":\"gain\",\"module\":{\"k\":0.05}},"
         "  {\"id\":\"load\",\"type\":\"storage\",\"current_level\":0.0}],"
         " \"edges\":["
-        "  {\"source\":\"signal\",\"target\":\"amp\",\"role\":\"control\"},"
+        "  {\"source\":\"signal\",\"target\":\"amp\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"power\",\"target\":\"amp\",\"role\":\"energy\"},"
         "  {\"source\":\"amp\",\"target\":\"load\",\"weight\":1.0}],"
         " \"simulation_params\":{\"t_val\":3.0,\"derivative_order\":1,"
@@ -1864,7 +1864,7 @@ static void test_module_validation(void) {
         "  {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0}],"
         " \"edges\":["
         "  {\"source\":\"a\",\"target\":\"rec\",\"role\":\"energy\"},"
-        "  {\"source\":\"extra\",\"target\":\"rec\",\"role\":\"control\"},"
+        "  {\"source\":\"extra\",\"target\":\"rec\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"rec\",\"target\":\"out\",\"weight\":1.0}]}");
     if (root) {
         ok("a surplus input is named, not silently discarded as GSSK does",
@@ -1900,7 +1900,7 @@ static void test_module_switch_events(void) {
         "  {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0}],"
         " \"edges\":["
         "  {\"source\":\"tank\",\"target\":\"sw\",\"role\":\"energy\"},"
-        "  {\"source\":\"tank\",\"target\":\"sw\",\"role\":\"control\"},"
+        "  {\"source\":\"tank\",\"target\":\"sw\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"sw\",\"target\":\"out\",\"weight\":1.0}],"
         " \"simulation_params\":{\"t_val\":4.0,\"derivative_order\":1,"
         "                       \"generative_mode\":false}}");
@@ -2117,7 +2117,7 @@ static void test_module_emergy_uses_module_flow(void) {
         "  {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0}],"
         " \"edges\":["
         "  {\"source\":\"sun\",\"target\":\"gate\",\"role\":\"energy\"},"
-        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\"},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"gate\",\"target\":\"out\",\"weight\":1.0}],"
         " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
         "                       \"generative_mode\":false}}");
@@ -2158,7 +2158,7 @@ static const char *ACCUMULATOR =
     "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
     " \"edges\":["
     "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
-    "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\"},"
+    "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\",\"use_ratio\":0},"
     "  {\"source\":\"g\",\"target\":\"a\",\"weight\":1.0},"
     "  {\"source\":\"g\",\"target\":\"b\",\"weight\":1.0}],"
     " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
@@ -2215,7 +2215,7 @@ static void test_module_is_passed_through(void) {
         "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
         " \"edges\":["
         "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
-        "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\"},"
+        "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"g\",\"target\":\"b\",\"weight\":1.0},"
         "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.05}],"
         " \"simulation_params\":{\"t_val\":1.0}}")) { ok("loads", false); return; }
@@ -2238,7 +2238,7 @@ static void test_control_does_not_open_the_boundary(void) {
         "  {\"id\":\"c\",\"type\":\"constant\",\"value\":2.0}],"
         " \"edges\":["
         "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
-        "  {\"source\":\"c\",\"target\":\"g\",\"role\":\"control\"},"
+        "  {\"source\":\"c\",\"target\":\"g\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"g\",\"target\":\"b\",\"weight\":1.0},"
         "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.05}],"
         " \"simulation_params\":{\"t_val\":1.0}}")) { ok("loads", false); return; }
@@ -2257,7 +2257,7 @@ static void test_control_does_not_open_the_boundary(void) {
         "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
         " \"edges\":["
         "  {\"source\":\"s\",\"target\":\"g\",\"role\":\"energy\"},"
-        "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\"},"
+        "  {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"g\",\"target\":\"b\",\"weight\":1.0}],"
         " \"simulation_params\":{\"t_val\":1.0}}")) { ok("loads", false); return; }
     ok("a source on the energy leg still opens the system",
@@ -2289,7 +2289,7 @@ static void test_ordinality_invariant_under_respelling(void) {
         "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
         " \"edges\":["
         "  {\"source\":\"src\",\"target\":\"g\",\"role\":\"energy\"},"
-        "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"control\"},"
+        "  {\"source\":\"a\",\"target\":\"g\",\"role\":\"control\",\"use_ratio\":0},"
         "  {\"source\":\"g\",\"target\":\"a\",\"weight\":1.0},"
         "  {\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.3},"
         "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2}],"
@@ -2614,6 +2614,347 @@ static void test_emergent_quality_is_a_component(void) {
     cJSON_Delete(out);
 }
 
+/* ------------------------------------------------------------------ *
+ * 54-59. A control input is a flow of energy (ADR 0017)
+ *
+ * ADR 0013 made a control "read, never consumed", so a control leg carried no
+ * flow and its emergy never reached the product: a transformity-1000 control
+ * left the product at transformity 1, where Odum's Fig. 2.6(b) draws it
+ * "moderate". A control now draws use_ratio * F from its source, that quantity
+ * leaves on the module's `used` leg to a sink, and its emergy goes into the
+ * product.
+ * ------------------------------------------------------------------ */
+
+#define CTL_SIM " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1," \
+                "                       \"generative_mode\":false}}"
+
+/* Load, or record the failure and stop: nothing after a failed load may touch
+ * the model. */
+static bool load_ok(const char *what, gia_model *m, cJSON *root) {
+    bool good = gia_model_load(m, root);
+    ok(what, good);
+    if (!good) cJSON_Delete(root);
+    return good;
+}
+
+/* Load and free; true when the document is a valid model. */
+static bool loads(const char *json) {
+    cJSON     *root = cJSON_Parse(json);
+    gia_model  m;
+    bool       good;
+    if (!root) return false;
+    good = gia_model_load(&m, root);
+    if (good) gia_model_free(&m);
+    cJSON_Delete(root);
+    return good;
+}
+
+/* Test [44]'s gate, with the control fed by a source of stated transformity.
+ * `control` is the control leg's extra fields; `extra` adds edges. */
+static cJSON *measured_gate(const char *control, const char *extra) {
+    static char buf[1600];
+    snprintf(buf, sizeof(buf),
+        "{\"nodes\":["
+        "  {\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,"
+        "   \"quality_input\":1.0},"
+        "  {\"id\":\"H\",\"type\":\"source\",\"value\":2.0,"
+        "   \"quality_input\":1000.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.3}},"
+        "  {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":["
+        "  {\"source\":\"sun\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"H\",\"target\":\"gate\",\"role\":\"control\"%s},"
+        "  {\"source\":\"gate\",\"target\":\"out\",\"weight\":1.0}%s],"
+        CTL_SIM, control, extra);
+    return cJSON_Parse(buf);
+}
+
+static void test_use_ratio_is_required(void) {
+    char buf[1400];
+    const char *head =
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"c\",\"type\":\"constant\",\"value\":2.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":[";
+
+    printf("\n[54] every control leg states its use_ratio, and 0 is allowed\n");
+
+#define CTL_CASE(ctrl_fields, energy_fields, out_fields)                      \
+    snprintf(buf, sizeof(buf), "%s"                                           \
+        "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"%s},"     \
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\"%s},"    \
+        "  {\"source\":\"gate\",\"target\":\"b\"%s}]," CTL_SIM,               \
+        head, energy_fields, ctrl_fields, out_fields)
+
+    /* The measured defect was a silent zero, so a missing value is an error
+     * rather than a default (decision 4). */
+    CTL_CASE("", "", "");
+    ok("a control leg without use_ratio is refused", !loads(buf));
+    CTL_CASE(",\"use_ratio\":0", "", "");
+    ok("use_ratio 0 is allowed, and needs no used leg", loads(buf));
+    CTL_CASE(",\"use_ratio\":-0.1", "", "");
+    ok("a negative use_ratio is refused", !loads(buf));
+    CTL_CASE(",\"use_ratio\":\"0.1\"", "", "");
+    ok("a use_ratio that is not a number is refused", !loads(buf));
+    CTL_CASE(",\"use_ratio\":0", ",\"use_ratio\":0.1", "");
+    ok("use_ratio on an energy leg is refused", !loads(buf));
+    CTL_CASE(",\"use_ratio\":0", "", ",\"use_ratio\":0.1");
+    ok("use_ratio on an output leg is refused", !loads(buf));
+#undef CTL_CASE
+}
+
+static void test_control_emergy_reaches_product(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     em[5], tr[5], q[5];
+
+    printf("\n[55] the measured gate: the control's emergy reaches the product\n");
+
+    /* ADR 0017's measurement, use_ratio 0: the control contributes nothing,
+     * which is exactly the read-only behaviour the figure contradicts. */
+    root = measured_gate(",\"use_ratio\":0", "");
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads with use_ratio 0", &m, root)) return;
+    ok("emergy computes", gia_emergy_at(&m, 1.0, em, tr));
+    close_to("use_ratio 0: empower at product is 6", em[3], 6.0, 1e-6);
+    close_to("use_ratio 0: product transformity is 1", tr[3], 1.0, 1e-6);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* Decision 3, worked: Tr = 1 + 0.01 * 1000 = 11, "moderate" -- between
+     * the energy input's 1 and the control's 1000. */
+    root = measured_gate(",\"use_ratio\":0.01",
+        ",{\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}");
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads with use_ratio 0.01 and a used leg", &m, root)) return;
+    ok("emergy computes", gia_emergy_at(&m, 1.0, em, tr));
+    ok("solves", gia_network_state(&m, 1.0, q, NULL));
+    close_to("the product still receives F = 6: the control is not added",
+             q[3], 6.0, 1e-6);
+    close_to("empower at product is F + s F Tr_c = 66", em[3], 66.0, 1e-6);
+    close_to("product transformity is 11", tr[3], 11.0, 1e-6);
+    ok("which is moderate: between 1 and 1000", tr[3] > 1.0 && tr[3] < 1000.0);
+    close_to("the used leg delivers s F = 0.06 to the sink", q[4], 0.06, 1e-6);
+    close_to("and carries no emergy onward", em[4], 0.0, 1e-12);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_control_is_drawn_and_dissipated(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[5], k = 0.05, s = 0.1, S = 10.0, t = 3.0, d;
+
+    printf("\n[56] a control draws use_ratio * F from its source, into the sink\n");
+
+    /* Odum SecIX amplifier with a control that is a stock. F = k Q_signal and
+     * the signal loses s F, so Q_signal = S e^(-s k t), exactly; the load gets
+     * what the flow integrates to and the heat sink gets s times that. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"signal\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"power\",\"type\":\"storage\",\"current_level\":100.0},"
+        "  {\"id\":\"amp\",\"type\":\"gain\",\"module\":{\"k\":0.05}},"
+        "  {\"id\":\"load\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":["
+        "  {\"source\":\"signal\",\"target\":\"amp\",\"role\":\"control\","
+        "   \"use_ratio\":0.1},"
+        "  {\"source\":\"power\",\"target\":\"amp\",\"role\":\"energy\"},"
+        "  {\"source\":\"amp\",\"target\":\"load\",\"weight\":1.0},"
+        "  {\"source\":\"amp\",\"target\":\"heat\",\"role\":\"used\"}],"
+        " \"simulation_params\":{\"t_val\":3.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads", &m, root)) return;
+    ok("solves", gia_network_state(&m, t, q, NULL));
+    d = 1.0 - exp(-s * k * t);
+    close_to("signal(3) = S e^(-s k t): the control is drawn",
+             q[0], S * exp(-s * k * t), 1e-9);
+    close_to("load(3) = (S / s)(1 - e^(-s k t))", q[3], S / s * d, 1e-9);
+    close_to("power(3) = 100 - load: the energy input is what feeds it",
+             q[1], 100.0 - S / s * d, 1e-9);
+    close_to("heat(3) = what the signal lost", q[4], S * d, 1e-9);
+    ok("drawn only from stocks, so the system is closed",
+       gia_system_is_closed(&m));
+    close_to("and conserved", gia_conservation_residual(&m, t), 0.0, 1e-9);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* Work gate, two stocks: what the product gains is exactly what the
+     * energy input lost, and what the control lost is exactly what the sink
+     * gained. The control's quantity never reaches the product. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"grass\",\"type\":\"storage\",\"current_level\":100.0},"
+        "  {\"id\":\"sun\",\"type\":\"storage\",\"current_level\":2.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.01}},"
+        "  {\"id\":\"cow\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":["
+        "  {\"source\":\"grass\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"sun\",\"target\":\"gate\",\"role\":\"control\","
+        "   \"use_ratio\":0.002},"
+        "  {\"source\":\"gate\",\"target\":\"cow\",\"weight\":1.0},"
+        "  {\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}],"
+        CTL_SIM);
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("work gate loads", &m, root)) return;
+    ok("solves", gia_network_state(&m, 1.0, q, NULL));
+    ok("the control is drawn down", q[1] < 2.0);
+    close_to("grass + cow = 100: the product is the energy input's",
+             q[0] + q[3], 100.0, 1e-9);
+    close_to("sun + heat = 2: the control's quantity goes to the sink",
+             q[1] + q[4], 2.0, 1e-9);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_used_leg_validation(void) {
+    char buf[1600];
+    const char *nodes =
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0,"
+        "   \"carrier\":\"energy\"},"
+        "  {\"id\":\"p\",\"type\":\"storage\",\"current_level\":2.0,"
+        "   \"carrier\":\"%s\"},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0,"
+        "   \"carrier\":\"energy\"},"
+        "  {\"id\":\"heat\",\"type\":\"%s\",\"carrier\":\"%s\"},"
+        "  {\"id\":\"heat2\",\"type\":\"sink\",\"carrier\":\"%s\"}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"p\",\"target\":\"gate\",\"role\":\"control\","
+        "   \"use_ratio\":%s},"
+        "  {\"source\":\"gate\",\"target\":\"b\"}%s]," CTL_SIM;
+    const char *used  = ",{\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}";
+    const char *used2 = ",{\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"},"
+                        "{\"source\":\"gate\",\"target\":\"heat2\",\"role\":\"used\"}";
+    const char *into  = ",{\"source\":\"heat\",\"target\":\"gate\",\"role\":\"used\"}";
+
+    printf("\n[57] the used-energy leg belongs to the module (decision 5)\n");
+
+    snprintf(buf, sizeof(buf), nodes, "energy", "sink", "energy", "energy", "0.1", "");
+    ok("use_ratio > 0 with no used leg is refused", !loads(buf));
+    snprintf(buf, sizeof(buf), nodes, "energy", "sink", "energy", "energy", "0.1", used);
+    ok("with a used leg to a sink of its carrier, it loads", loads(buf));
+    snprintf(buf, sizeof(buf), nodes, "energy", "storage", "energy", "energy", "0.1", used);
+    ok("a used leg must end at a sink", !loads(buf));
+    snprintf(buf, sizeof(buf), nodes, "energy", "sink", "energy", "energy", "0.1", used2);
+    ok("one used leg per carrier, not two", !loads(buf));
+    snprintf(buf, sizeof(buf), nodes, "energy", "sink", "energy", "energy", "0", used);
+    ok("a used leg with nothing to carry is refused", !loads(buf));
+    snprintf(buf, sizeof(buf), nodes, "energy", "sink", "energy", "energy", "0.1", into);
+    ok("used names a leg leaving a module, never entering one", !loads(buf));
+
+    /* The price case: money is not dissipated. A nonzero use_ratio on a money
+     * control forces a money sink, which is the prompt to reconsider. */
+    snprintf(buf, sizeof(buf), nodes, "money", "sink", "energy", "energy", "0.1", used);
+    ok("a money control's used leg must reach a money sink", !loads(buf));
+    snprintf(buf, sizeof(buf), nodes, "money", "sink", "money", "energy", "0.1", used);
+    ok("and the module's outputs still need not match the control", loads(buf));
+    snprintf(buf, sizeof(buf), nodes, "money", "sink", "money", "energy", "0", "");
+    ok("a price read at use_ratio 0 needs no sink at all", loads(buf));
+}
+
+static void test_control_draw_opens_the_boundary(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[58] a control drawn from a source crosses the boundary\n");
+
+    /* ADR 0014 decision 3, amended: a source delivers without being depleted,
+     * so a control drawing on one brings quantity in from outside. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"c\",\"type\":\"source\",\"value\":2.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\","
+        "   \"use_ratio\":0.1},"
+        "  {\"source\":\"gate\",\"target\":\"b\"},"
+        "  {\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}]," CTL_SIM);
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads", &m, root)) return;
+    ok("use_ratio > 0 from a source: the system is open",
+       !gia_system_is_closed(&m));
+    gia_model_free(&m); cJSON_Delete(root);
+
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"c\",\"type\":\"source\",\"value\":2.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\","
+        "   \"use_ratio\":0},"
+        "  {\"source\":\"gate\",\"target\":\"b\"}]," CTL_SIM);
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads", &m, root)) return;
+    ok("use_ratio 0 from a source: still closed", gia_system_is_closed(&m));
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_drawn_control_closes_no_pathway(void) {
+    cJSON     *root;
+    gia_model  m;
+
+    printf("\n[59] a drawn control passes only to the used leg (ADR 0014)\n");
+
+    /* The product feeds the control's stock, and the control is drawn. Its
+     * quantity leaves through `used` to a sink, never into the product, so A
+     * is no more on a cycle than when the control was only read. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"E\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"A\",\"type\":\"storage\",\"current_level\":1.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"P\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":["
+        "  {\"source\":\"E\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"A\",\"target\":\"gate\",\"role\":\"control\","
+        "   \"use_ratio\":0.05},"
+        "  {\"source\":\"gate\",\"target\":\"P\"},"
+        "  {\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"},"
+        "  {\"source\":\"P\",\"target\":\"A\",\"logic\":\"linear\"}]," CTL_SIM);
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads", &m, root)) return;
+    gia_mark_cycles(&m);
+    ok("the drawn control does not close P -> A -> gate -> P",
+       !m.nodes[1].on_cycle && !m.nodes[3].on_cycle);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* Walking a control must not mark the module visited for the energy
+     * stream. C reaches the gate twice: first, in edge order, by its drawn
+     * control, then round C -> E -> gate on the energy leg -- a real cycle. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"C\",\"type\":\"storage\",\"current_level\":5.0},"
+        "  {\"id\":\"E\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":["
+        "  {\"source\":\"C\",\"target\":\"gate\",\"role\":\"control\","
+        "   \"use_ratio\":0.05},"
+        "  {\"source\":\"C\",\"target\":\"E\",\"logic\":\"linear\"},"
+        "  {\"source\":\"E\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"gate\",\"target\":\"C\"},"
+        "  {\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}]," CTL_SIM);
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads", &m, root)) return;
+    gia_mark_cycles(&m);
+    ok("C is on its energy cycle although its control reached the gate first",
+       m.nodes[0].on_cycle && m.nodes[1].on_cycle);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -2670,6 +3011,12 @@ int main(void) {
     test_sink_is_never_closed();
     test_emergence_is_order_invariant();
     test_emergent_quality_is_a_component();
+    test_use_ratio_is_required();
+    test_control_emergy_reaches_product();
+    test_control_is_drawn_and_dissipated();
+    test_used_leg_validation();
+    test_control_draw_opens_the_boundary();
+    test_drawn_control_closes_no_pathway();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);

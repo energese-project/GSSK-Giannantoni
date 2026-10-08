@@ -257,14 +257,17 @@ is instead the module's own rule. A transactor's two pairs each move one
 carrier. Every other module passes its energy input's carrier through to its
 outputs, while its *control* may be read from any carrier at all — a work gate
 whose rate is set by a price or a population is an ordinary model, and the
-pairwise check would have refused it.
+pairwise check would have refused it. What a control is drawn of leaves on a
+`used` leg to a sink of the control's own carrier (ADR 0017).
 
 **For the same reason a module is not a component, and a control closes
 nothing** ([ADR 0014](adr/0014-ordinality-over-quantity-legs.md)). Ordinality —
 which decides whether the MOP step generates at all — counts components on
 pathways that carry quantity. A cycle may run *through* a module, but the module
-is out of both the count and the total; a control leg is read and never
-consumed, so it neither closes a loop nor opens the boundary; and a transactor
+is out of both the count and the total; a control leg is drawn at its
+`use_ratio` and dissipated to the module's `used` leg, never into the product
+([ADR 0017](adr/0017-what-a-control-input-is.md)), so it closes no loop through
+the product, and opens the boundary only when it is drawn from a source; and a transactor
 passes goods on as goods and counter-flow as counter-flow. The property this
 buys is the one the module migration needs: one system written with a law on a
 pathway and written as a module has the same ordinality, the same closedness,

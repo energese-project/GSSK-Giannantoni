@@ -245,13 +245,13 @@ typedef enum {
 
 const char *gia_logic_name(gia_logic l);
 
-/* ---- module roles (ADR 0013) ----
+/* ---- module roles (ADR 0013, ADR 0017) ----
  *
  * A module is a hyperedge: Odum's work gate, amplifier, switch or cycling
  * receptor, where the transformation happens inside the symbol rather than
  * along a line (ADR 0012). Its inputs are not interchangeable — one supplies
- * the energy and is used up, the others signal and are read — so each pathway
- * entering a module says which it is.
+ * the energy that becomes the product, the others control the process and are
+ * dissipated by it — so each pathway entering a module says which it is.
  *
  * It says so by NAME. GSSK decides the same question by the ORDER its edges
  * happen to appear in, inconsistently across node types, so that swapping two
@@ -264,8 +264,14 @@ const char *gia_logic_name(gia_logic l);
  * gate, an amplifier and a switch is the law, not the kinds of input it has. */
 typedef enum {
     GIA_ROLE_NONE,     /* an ordinary pathway, not touching a module    */
-    GIA_ROLE_ENERGY,   /* consumed: the module drains it                */
-    GIA_ROLE_CONTROL,  /* read: the law depends on it, it is not drained */
+    GIA_ROLE_ENERGY,   /* consumed: its quantity becomes the product    */
+    GIA_ROLE_CONTROL,  /* the law depends on it, and it is drawn at
+                        * use_ratio * F and dissipated (ADR 0017). Its
+                        * emergy reaches the product; its quantity does
+                        * not. At use_ratio 0 it is only read.          */
+    GIA_ROLE_USED,     /* outgoing: the used energy, Odum's heat-sink
+                        * line. Carries the drawn controls of one carrier
+                        * to a sink, and no emergy onward (ADR 0017).   */
 
     /* A transactor couples two flows rather than consuming one and reading
      * another, so it has its own four legs (ADR 0013 decision 5). Naming them
@@ -403,6 +409,10 @@ typedef struct {
     gia_output_mode out_mode;/* partition (split) or replicate (co-product) */
     gia_role    role;        /* what this pathway is TO the module it enters,
                               * ADR 0013. GIA_ROLE_NONE for ordinary pathways. */
+    double      use_ratio;   /* s, for a control leg: it draws s * F from its
+                              * source (ADR 0017, Odum 1972 SecX.C's
+                              * "stoichiometric ratio of necessary use").
+                              * Required on every control leg; 0 elsewhere. */
     gia_forcing  forcing;    /* drives the RATE k; ADR 0006 edge attachment.
                               * Unlike the node attachment this is NOT
                               * absorbable: the flow becomes k(t)*Q, bilinear
@@ -510,8 +520,9 @@ int gia_count_events(const gia_model *m, double t);
  * as a symbol and holds no quantity, so it names no carrier and contributes no
  * carrier class. Which of its legs must agree on a carrier is the module's own
  * rule -- a transactor's two pairs each move one carrier, and every other
- * module hands its energy input's carrier to its outputs while its control,
- * being read rather than consumed, may come from any carrier at all. */
+ * module hands its energy input's carrier to its outputs. A control may come
+ * from any carrier; what it is drawn of leaves on a `used` leg to a sink of
+ * that same carrier (ADR 0017). */
 
 /* Number of distinct carriers held by components; at least 1. */
 int gia_carrier_count(const gia_model *m);
@@ -547,10 +558,10 @@ double gia_conservation_residual_for(const gia_model *m, double t, int carrier);
 double gia_conservation_residual(const gia_model *m, double t);
 
 /* True when no QUANTITY enters from a held (non-integrating) component, so
- * nothing crosses the boundary and the total must be conserved. A control read
- * from a source or a constant moves nothing and leaves the system closed; a
- * pathway leaving a module passes on only what the module's energy leg brought
- * (ADR 0014). */
+ * nothing crosses the boundary and the total must be conserved. A control at
+ * use_ratio 0 moves nothing and leaves the system closed; one drawn from a
+ * source or a constant brings quantity in (ADR 0017). A pathway leaving a
+ * module passes on only what the module's legs brought (ADR 0014). */
 bool gia_system_is_closed(const gia_model *m);
 
 /* ================================================================== *
@@ -641,7 +652,10 @@ double gia_emergy_excess(const gia_model *m, double t);
 
 /* Ordinality is over COMPONENTS on pathways that CARRY QUANTITY (ADR 0014).
  *
- *  - A control leg is read and never consumed, so it does not close a pathway.
+ *  - A control leg passes through its module only to the `used` leg, and so
+ *    to a sink, never into the product (ADR 0017). At use_ratio 0 it carries
+ *    nothing and is not walked at all. Either way it closes no pathway through
+ *    the product.
  *  - A module is passed through but is not a component: it holds nothing, so
  *    it is out of both the count and the total, and its on_cycle stays false.
  *    A transactor passes goods on as goods and counter-flow on as counter-flow.

@@ -136,8 +136,9 @@ change a module.
 ### 3.2 The `process` module
 
 `process` is the general module: Odum's rectangle with the function written inside
-it. Its `law` is any tree from §5. It has exactly one `energy` input, which it drains,
-and any number of `control` inputs, which it reads.
+it. Its `law` is any tree from §5. It has exactly one `energy` input, which it drains
+into the product, and any number of `control` inputs, each drawn at its `use_ratio`
+(§4).
 
 ```json
 { "id": "residual_use", "type": "process",
@@ -163,14 +164,22 @@ something written for this model.
 |---|---|
 | `law` | `constant`, `linear` or `reversible`: Odum §III and nothing else (ADR 0012, decision 5). A pathway *into* a module has no `law`, because the module computes the flow |
 | `k` | number or `{"param": …}`. Required for `constant`, `linear` and `reversible` |
-| `role` | required on every pathway into a module: `energy` or `control`, or an exchange role. Forbidden elsewhere |
+| `role` | required on every pathway into a module: `energy` or `control`, or an exchange role. On a pathway out of a module, `used` for the used-energy leg; a product leg has none. Forbidden elsewhere |
+| `use_ratio` | required on every `control` pathway, a number ≥ 0: the control draws `use_ratio · F` (ADR 0017). Forbidden elsewhere |
 | `weight` | share of a module's output (ADR 0013, decision 4). Default 1 |
 | `carrier`, `output_mode` | unchanged from v4 |
 | `forcing` | drives `k` (ADR 0006), unchanged |
 
-A `control` pathway carries information, not quantity. It drains nothing and is not a
-quantity leg for ordinality (ADR 0014). This is psde's `state_vector` edge and Odum's
-signal line.
+A `control` pathway is a flow of energy ([ADR 0017](adr/0017-what-a-control-input-is.md)).
+It draws `use_ratio · F` from its origin, where `F` is the module's flow. That quantity
+is dissipated, not added to the product: it leaves on the module's `used` pathway, one
+per carrier, to a `sink` holding the control's carrier. Its emergy reaches the product,
+which is what makes Fig. 2.6(b)'s product "moderate" between its inputs.
+
+`use_ratio: 0` is the pure signal — Odum's "feedback of effect without a special
+pathway", written on the pathway. It drains nothing, needs no `used` pathway, is not a
+quantity leg for ordinality (ADR 0014), and is named in the run report. This is psde's
+`state_vector` edge, and the right value for a price: money is not dissipated.
 
 `coupled_edge` is removed. Its job (pairing a goods flow with its money counter-flow)
 is done by the `exchange` module's four roles.
@@ -592,7 +601,7 @@ investment cut-off, and an interaction drawn from a drawn store.
   "pathways": [
     { "id": "invest",   "origin": "investment", "target": "D", "law": "constant", "k": { "param": "IV" } },
     { "id": "d_energy", "origin": "D", "target": "debt_service", "role": "energy" },
-    { "id": "m_ctrl",   "origin": "M", "target": "debt_service", "role": "control" },
+    { "id": "m_ctrl",   "origin": "M", "target": "debt_service", "role": "control", "use_ratio": 0 },
     { "id": "d_out",    "origin": "debt_service", "target": "heat" }
   ],
   "events": [
@@ -605,7 +614,7 @@ investment cut-off, and an interaction drawn from a drawn store.
 }
 ```
 
-`N5*D*M` is a work gate: D supplies the energy and is drained, M controls and is read.
+`N5*D*M` is a work gate: D supplies the energy and is drained, M controls and is read. Its `use_ratio` is 0 because the BASIC source never drains M; a nonzero value would add an equation the original does not have, and a `used` pathway to a sink.
 So it is the named `interaction` module, not a `process`. The rates of A, M and N
 (lines 220–240) are omitted from the fragment. In full they are built the same way.
 
@@ -637,9 +646,6 @@ v5 is accepted when, with tests written first:
 
 ## 16. Open questions
 
-- **Whether a control is consumed.** ADR 0016 leaves this open, and it decides a
-  `process` module's output transformity as much as an interaction's. This spec
-  follows current behaviour: energy supplies quality, controls do not.
 - **Where the spec lives.** This draft is in GSSK-Giannantoni. It targets the GSSK
   kernel (`energese-project/GSSK`), whose published schema has external users. Its
   migration policy (ADR 0001's "deprecate neither" balance) has to be decided there.
