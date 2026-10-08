@@ -11,7 +11,9 @@
       "id": "interaction_1",
       "label": "Photosynthesis Interaction",
       "type": "interaction",
-      "generativity_factor": 1.5
+      "module": {
+        "k": 0.1
+      }
     },
     {
       "id": "store_1",
@@ -25,32 +27,50 @@
       "label": "Herbivore Consumer",
       "type": "storage",
       "metabolic_rate": 0.2
+    },
+    {
+      "id": "heat_1",
+      "label": "Heat Sink",
+      "type": "sink"
     }
   ],
   "edges": [
     {
       "source": "source_1",
       "target": "interaction_1",
-      "flow_type": "inflow",
-      "weight": 1.0
+      "role": "energy",
+      "label": "inflow"
+    },
+    {
+      "source": "store_1",
+      "target": "interaction_1",
+      "role": "control",
+      "use_ratio": 0,
+      "label": "autocatalytic feedback: biomass sets the rate it is made at"
+    },
+    {
+      "source": "consumer_1",
+      "target": "interaction_1",
+      "role": "control",
+      "use_ratio": 0.1,
+      "label": "ordinal_feedback: the consumer's work, used up as heat"
     },
     {
       "source": "interaction_1",
       "target": "store_1",
-      "flow_type": "generative_production",
-      "weight": 1.2
+      "label": "generative_production"
+    },
+    {
+      "source": "interaction_1",
+      "target": "heat_1",
+      "role": "used",
+      "label": "used energy"
     },
     {
       "source": "store_1",
       "target": "consumer_1",
       "flow_type": "outflow",
       "weight": 0.5
-    },
-    {
-      "source": "consumer_1",
-      "target": "interaction_1",
-      "flow_type": "ordinal_feedback",
-      "weight": 0.3
     }
   ],
   "simulation_params": {

@@ -149,10 +149,12 @@ simulate-linux: container-image-linux
 # select; it is what the engine turns out to have done, decided afterwards by
 # diffing the output graph against the seed.
 #
-#   input.json       solar source is fed by nothing and returns to nothing,
-#                    so ordinality is 3/4 and a regulator emerges to close it.
-#   closed_loop.json every component already sits on a closed pathway, so
-#                    there is nothing left to close and the run is functional.
+#   input.json       Odum's work gate: sun is the energy, biomass and the
+#                    consumer's feedback are controls. Nothing returns to the
+#                    sun or the stores, so an emergent quality closes them.
+#   closed_loop.json the same gate with a recycler returning to the sun. Every
+#                    component that can close already has; the heat sink
+#                    never does (ADR 0015), so the run is functional.
 demo-giannantoni: directories $(TARGET_SIM)
 	@echo
 	@echo "### 1. Seed below maximum ordinality -> expect GENERATIVE"
@@ -160,7 +162,7 @@ demo-giannantoni: directories $(TARGET_SIM)
 	    --csv $(TEST_DIR)/results/gia_generative.csv \
 	    --out $(TEST_DIR)/results/gia_generative.json
 	@echo
-	@echo "### 2. Seed already at maximum ordinality -> expect FUNCTIONAL"
+	@echo "### 2. Seed with nothing left to close -> expect FUNCTIONAL"
 	@./$(TARGET_SIM) examples/giannantoni/closed_loop.json --steps 5 --print \
 	    --csv $(TEST_DIR)/results/gia_functional.csv \
 	    --out $(TEST_DIR)/results/gia_functional.json
