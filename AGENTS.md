@@ -34,7 +34,7 @@ We use a **Registration-based Regression Testing** system.
 ## 🚀 Deployment (WASM)
 GSSK is designed for web integration. Any core change must still build for `wasm32-wasip1` with `make wasm` (clang + wasi-libc from the pinned WASI SDK; no Emscripten). The JavaScript side is `src/gssk.js`, a dependency-free ES module — keep it that way, and never add CommonJS.
 
-Tagged releases ship the `gssk.wasm` that **Guix** builds from `guix/`, reproducible bit for bit on x86_64 and aarch64, with its toolchain archived beside it ([`guix/README.md`](guix/README.md)). A change to the Makefile's `wasm` rule or to `guix/` runs that build on the PR (`guix.yml`); keep `make wasm`'s flags the one definition both builds use.
+Tagged releases ship the `gssk.wasm` that **Guix** builds from `guix/`, reproducible bit for bit on x86_64 and aarch64, with its toolchain archived beside it ([`guix/README.md`](guix/README.md)). A change to `guix/` runs that build on the PR (`guix.yml`). A change to the Makefile's `wasm` rule does not trigger it automatically, so run the Guix build by hand (Actions → Guix release build → Run workflow) before merging one; keep `make wasm`'s flags the one definition both builds use.
 Command: `make wasm`
 
 ## 🎨 Web surfaces and the design tokens

@@ -43,8 +43,8 @@ In 1 and 2 the hash must equal the release's `gssk-guix.sha256`.
 ## What CI checks
 
 `.github/workflows/guix.yml`, on every version tag (where `deploy.yml` then
-releases its output), on PRs that touch this directory or the Makefile, monthly,
-and on demand:
+releases its output), on PRs that touch this directory, monthly, and on demand —
+run it by hand for a PR that changes the Makefile's `wasm` rule:
 
 1. The package's check phase runs `make test-wasm`: the loader, every
    regression model, and forcing parity — the suites the everyday CI runs.
