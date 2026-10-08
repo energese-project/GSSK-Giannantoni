@@ -1,6 +1,6 @@
 # ADR 0012 — Where a law lives: pathway or module
 
-- **Status**: accepted — amended 2026-09-11 to decide that module laws leave pathways (decision 5)
+- **Status**: accepted — amended 2026-09-11 to decide that module laws leave pathways (decision 5); decision 5 carried out by task `pathway-laws-leave`
 - **Date**: 2026-09-11
 - **Task**: `adr-where-laws-live`
 - **Supersedes**: nothing

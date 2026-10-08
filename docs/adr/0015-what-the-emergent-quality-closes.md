@@ -163,6 +163,11 @@ A prototype of that terminates on every model above, and gets two things wrong:
   emergent component is a `gain`. It still loads, and its ordinality is
   unchanged. Rewriting it belongs to the model migration, which now depends on
   this ADR.
+
+  *Done by the migration:* the recycler is a `storage`, and the seed gained a
+  heat sink with the work gate. That sink is never closed, so the seed's
+  ordinality is 0.8, not 1, and the step leaves it at a fixed point below
+  maximum: functional, as before.
 - Tests: each model in Reproduction 1 reaches its fixed point in one step, and a
   second step is functional. Ordinality never decreases across a step. Both
   node orders append byte-identical components and legs. No sink appears on any

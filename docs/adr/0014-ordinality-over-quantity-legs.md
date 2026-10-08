@@ -165,6 +165,14 @@ then written explicitly.
   with the consumer as a control is a different system, not a new spelling of
   the same one. The migration task decides which system the seed is meant to be
   and says so.
+
+  *Decided by the migration (task `pathway-laws-leave`):* the seed is Odum's
+  work gate. The sun is the energy input; biomass is the autocatalytic control
+  at `use_ratio` 0; the consumer's feedback is a control drawn at `use_ratio`
+  0.1 and dissipated to a heat sink ([ADR 0017](0017-what-a-control-input-is.md)),
+  Odum's consumer feeding back work that is used up. It is the different system
+  this note anticipated, chosen deliberately: trajectories change, and the
+  demo's generative and functional verdicts hold.
 - **Whether a module keeps a CSV column.** A module is written today as a state
   column that is identically zero — `g_Q`, `g_Em` and the rest. That is the
   "state column nobody wrote" ADR 0012 cited against desugaring, and it follows

@@ -16,6 +16,15 @@
 #include <stdio.h>
 #include <string.h>
 
+static void added(gia_coverage *cov, const char *fmt, ...) {
+    va_list ap;
+    if (!cov || cov->n_added >= GIA_MAX_FINDINGS) return;
+    va_start(ap, fmt);
+    vsnprintf(cov->added[cov->n_added], sizeof(cov->added[0]), fmt, ap);
+    va_end(ap);
+    cov->n_added++;
+}
+
 static void finding(gia_coverage *cov, const char *fmt, ...) {
     va_list ap;
     if (!cov) return;
@@ -57,17 +66,43 @@ static bool node_type_carried(const char *t, const char **why) {
     return false;
 }
 
-/* Pathway laws. The names match the kernel's deliberately, so the two
- * vocabularies cannot drift; what differs is which the MOP engine implements. */
-static bool logic_carried(const char *l, const char **why) {
-    static const char *ok[] = { "linear", "interaction", "limit", "threshold",
-                                "ratio", "reversible", "subtract", "constant" };
-    size_t i;
-    if (!l) l = "linear";                     /* the schema's default */
-    for (i = 0; i < sizeof(ok) / sizeof(ok[0]); i++)
-        if (!strcmp(l, ok[i])) return true;
-    *why = "not a pathway law this engine implements";
+/* GSSK's edge laws. The names match the kernel's deliberately, so the two
+ * vocabularies cannot drift. Odum SecIII stays on the pathway; the rest are
+ * module laws here (ADR 0012 decision 5) and are carried by writing the gate
+ * GSSK draws implicitly -- in the new document, and declared as added. */
+static bool logic_is_pathway(const char *l) {
+    return !strcmp(l, "linear") || !strcmp(l, "reversible") ||
+           !strcmp(l, "constant");
+}
+
+static bool logic_is_module(const char *l) {
+    return !strcmp(l, "interaction") || !strcmp(l, "ratio") ||
+           !strcmp(l, "subtract")    || !strcmp(l, "limit") ||
+           !strcmp(l, "threshold");
+}
+
+static bool is_carried(const cJSON *onodes, const char *id) {
+    const cJSON *it;
+    if (!id) return false;
+    cJSON_ArrayForEach(it, onodes) {
+        const cJSON *v = cJSON_GetObjectItemCaseSensitive(it, "id");
+        if (cJSON_IsString(v) && !strcmp(v->valuestring, id)) return true;
+    }
     return false;
+}
+
+static void add_leg(cJSON *oedges, const char *from, const char *to,
+                    const char *role) {
+    cJSON *e = cJSON_CreateObject();
+    if (!e) return;
+    cJSON_AddStringToObject(e, "source", from);
+    cJSON_AddStringToObject(e, "target", to);
+    if (role) cJSON_AddStringToObject(e, "role", role);
+    /* GSSK reads a control and never draws it, so the faithful translation
+     * is use_ratio 0 -- which the MOP run report then names (ADR 0017). */
+    if (role && !strcmp(role, "control"))
+        cJSON_AddNumberToObject(e, "use_ratio", 0.0);
+    cJSON_AddItemToArray(oedges, e);
 }
 
 bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
@@ -104,31 +139,32 @@ bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
             continue;
         }
         /* GSSK configures a PROCESSING node's law in its own `params` block
-         * (Phase 7: k, C, threshold, price). This engine puts laws on
-         * pathways, not on components, so those parameters have nowhere to
-         * land — and a node emitted without them is not a work gate or a
-         * transactor, it is a storage wearing the name. That is the silent
-         * substitution this projection exists to refuse, so it is reported
-         * and the node is dropped. */
+         * (Phase 7: k, C, threshold, price) and finds its legs by POSITION.
+         * Here a module names its legs by role (ADR 0013), and guessing which
+         * pathway is the energy and which the control is the silent
+         * substitution this projection exists to refuse. With no params it
+         * fares no better: a module type without its law is a storage wearing
+         * the name (ADR 0012). Either way it is reported and dropped. */
         if (!strcmp(type, "interaction") || !strcmp(type, "gain") ||
             !strcmp(type, "loop_limited") || !strcmp(type, "exchange") ||
             !strcmp(type, "switch")) {
             const cJSON *np = cJSON_GetObjectItemCaseSensitive(it, "params");
-            if (cJSON_IsObject(np) && cJSON_GetArraySize(np) > 0) {
-                if (cJSON_IsString(cJSON_GetObjectItemCaseSensitive(np,
-                                                            "price_node")))
-                    finding(cov, "node '%s': '%s' with an endogenous price "
-                                 "resolved from a node — this engine takes a "
-                                 "constant exchange ratio (ADR 0001)",
-                            id ? id : "?", type);
-                else
-                    finding(cov, "node '%s': '%s' carries its law in node "
-                                 "params, and this engine puts laws on "
-                                 "pathways — emitting it without them would "
-                                 "make it a storage wearing the name",
-                            id ? id : "?", type);
-                continue;
-            }
+            if (cJSON_IsObject(np) &&
+                cJSON_IsString(cJSON_GetObjectItemCaseSensitive(np, "price_node")))
+                finding(cov, "node '%s': '%s' with an endogenous price "
+                             "resolved from a node — this engine takes a "
+                             "constant exchange ratio (ADR 0001)",
+                        id ? id : "?", type);
+            else if (cJSON_IsObject(np) && cJSON_GetArraySize(np) > 0)
+                finding(cov, "node '%s': '%s' carries its law in node params "
+                             "and finds its legs by position; this engine names "
+                             "a module's legs by role (ADR 0013)",
+                        id ? id : "?", type);
+            else
+                finding(cov, "node '%s': '%s' with no law of its own would be "
+                             "a storage wearing the name (ADR 0012)",
+                        id ? id : "?", type);
+            continue;
         }
 
         n = cJSON_CreateObject();
@@ -164,33 +200,25 @@ bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
     }
 
     cJSON_ArrayForEach(it, edges) {
-        const char *eid   = sfield(it, "id", NULL);
-        const char *logic = sfield(it, "logic", "linear");
-        const char *why   = NULL;
-        cJSON      *e;
+        const char   *eid    = sfield(it, "id", NULL);
+        const char   *logic  = sfield(it, "logic", "linear");
+        const char   *origin = sfield(it, "origin", NULL);
+        const char   *target = sfield(it, "target", NULL);
+        const cJSON  *cns;
+        const char   *ctrl;
+        int           n_ctrl;
+        double        k;
+        cJSON        *e;
 
         cov->edges_total++;
-        if (!logic_carried(logic, &why)) {
-            finding(cov, "edge '%s': logic '%s' not carried — %s",
-                    eid ? eid : "?", logic, why);
+        if (!logic_is_pathway(logic) && !logic_is_module(logic)) {
+            finding(cov, "edge '%s': logic '%s' not carried — not a law this "
+                         "engine implements", eid ? eid : "?", logic);
             continue;
         }
         params = cJSON_GetObjectItemCaseSensitive((cJSON *)it, "params");
+        k      = nfield(params, "k", 1.0);
 
-        /* An n-ary work gate is a real arity, not a spelling (ADR 0008), and
-         * this engine reads one control. Carrying it with the first control
-         * silently would change the model's law. */
-        {
-            const cJSON *cn = cJSON_GetObjectItemCaseSensitive(params,
-                                                               "control_nodes");
-            if (cJSON_IsArray(cn) && cJSON_GetArraySize(cn) > 1) {
-                finding(cov, "edge '%s': %d control nodes — this engine reads "
-                             "one, and an n-ary product is a different law "
-                             "(ADR 0008)", eid ? eid : "?",
-                        cJSON_GetArraySize(cn));
-                continue;
-            }
-        }
         /* An endogenous price is resolved from a node each step; this engine
          * takes a constant (ADR 0001). */
         if (cJSON_IsString(cJSON_GetObjectItemCaseSensitive(params,
@@ -201,23 +229,104 @@ bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
             continue;
         }
 
-        e = cJSON_CreateObject();
-        if (!e) continue;
-        cJSON_AddStringToObject(e, "source", sfield(it, "origin", "?"));
-        cJSON_AddStringToObject(e, "target", sfield(it, "target", "?"));
-        cJSON_AddStringToObject(e, "logic",  logic);
-        cJSON_AddNumberToObject(e, "weight", nfield(params, "k", 1.0));
-        if (cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(params, "C")))
-            cJSON_AddNumberToObject(e, "capacity", nfield(params, "C", 0.0));
-        if (cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(params, "threshold")))
-            cJSON_AddNumberToObject(e, "threshold",
-                                    nfield(params, "threshold", 0.0));
-        {
-            const char *cn = sfield(params, "control_node", NULL);
-            if (cn) cJSON_AddStringToObject(e, "control_node", cn);
+        /* Controls: one named, several (ADR 0008), or by GSSK's default the
+         * target -- the autocatalytic reading. */
+        cns    = cJSON_GetObjectItemCaseSensitive(params, "control_nodes");
+        ctrl   = sfield(params, "control_node", target);
+        n_ctrl = cJSON_IsArray(cns) ? cJSON_GetArraySize(cns) : 1;
+        if (n_ctrl > 1 && (!strcmp(logic, "ratio") || !strcmp(logic, "subtract"))) {
+            finding(cov, "edge '%s': %d control nodes on '%s' — a quotient or "
+                         "difference of more than two is not in Odum Fig. 2.6 "
+                         "(ADR 0016)", eid ? eid : "?", n_ctrl, logic);
+            continue;
         }
-        cJSON_AddItemToArray(oedges, e);
-        cov->edges_carried++;
+
+        /* Every endpoint must have been carried. An edge to a dropped node
+         * would be ignored on load, and a gate missing a leg would not load at
+         * all, so it is dropped here and named. */
+        {
+            bool ends = is_carried(onodes, origin) && is_carried(onodes, target);
+            if (logic_is_module(logic) && strcmp(logic, "limit") &&
+                strcmp(logic, "threshold")) {
+                if (cJSON_IsArray(cns)) {
+                    const cJSON *c;
+                    cJSON_ArrayForEach(c, cns)
+                        if (!cJSON_IsString(c) || !is_carried(onodes, c->valuestring))
+                            ends = false;
+                } else if (!is_carried(onodes, ctrl)) {
+                    ends = false;
+                }
+            }
+            if (!ends) {
+                finding(cov, "edge '%s': it touches a node that was not "
+                             "carried", eid ? eid : "?");
+                continue;
+            }
+        }
+
+        if (logic_is_pathway(logic)) {
+            e = cJSON_CreateObject();
+            if (!e) continue;
+            cJSON_AddStringToObject(e, "source", origin);
+            cJSON_AddStringToObject(e, "target", target);
+            cJSON_AddStringToObject(e, "logic",  logic);
+            cJSON_AddNumberToObject(e, "weight", k);
+            cJSON_AddItemToArray(oedges, e);
+            cov->edges_carried++;
+            continue;
+        }
+
+        {   /* A module law: write the gate GSSK draws implicitly on the edge,
+             * with its legs named. */
+            char        gid[160];
+            const char *type, *action = NULL;
+            cJSON      *gate, *mod;
+
+            if (eid) snprintf(gid, sizeof(gid), "%s__gate", eid);
+            else     snprintf(gid, sizeof(gid), "%s_%s__gate", origin, target);
+
+            if      (!strcmp(logic, "limit"))     type = "loop_limited";
+            else if (!strcmp(logic, "threshold")) type = "switch";
+            else {
+                type = "interaction";
+                if (!strcmp(logic, "ratio"))    action = "divide";
+                if (!strcmp(logic, "subtract")) action = "subtract";
+            }
+
+            gate = cJSON_CreateObject();
+            mod  = cJSON_CreateObject();
+            if (!gate || !mod) { cJSON_Delete(gate); cJSON_Delete(mod); continue; }
+            cJSON_AddStringToObject(gate, "id", gid);
+            cJSON_AddStringToObject(gate, "type", type);
+            cJSON_AddNumberToObject(mod, "k", k);
+            if (action) cJSON_AddStringToObject(mod, "action", action);
+            if (!strcmp(type, "loop_limited"))
+                cJSON_AddNumberToObject(mod, "capacity", nfield(params, "C", 1.0));
+            if (!strcmp(type, "switch"))
+                cJSON_AddNumberToObject(mod, "threshold",
+                                        nfield(params, "threshold", 0.0));
+            cJSON_AddItemToObject(gate, "module", mod);
+            cJSON_AddItemToArray(onodes, gate);
+
+            add_leg(oedges, origin, gid, "energy");
+            if (!strcmp(type, "interaction")) {
+                if (cJSON_IsArray(cns)) {
+                    const cJSON *c;
+                    cJSON_ArrayForEach(c, cns) add_leg(oedges, c->valuestring, gid, "control");
+                } else {
+                    add_leg(oedges, ctrl, gid, "control");
+                }
+            }
+            /* GSSK's threshold reads the level of the stock it drains, so the
+             * switch's sensor is its own energy input. */
+            if (!strcmp(type, "switch")) add_leg(oedges, origin, gid, "control");
+            add_leg(oedges, gid, target, NULL);
+
+            added(cov, "edge '%s': GSSK '%s' on the edge becomes %s module "
+                       "'%s', a node the GSSK author did not write (ADR 0012)",
+                  eid ? eid : "?", logic, type, gid);
+            cov->edges_carried++;
+        }
     }
 
     {   /* Horizon, so the projected model is runnable rather than a fragment. */
@@ -253,6 +362,14 @@ void gia_report_coverage(const gia_coverage *cov) {
     printf("  components     %d / %d\n", cov->nodes_carried, cov->nodes_total);
     printf("  pathways       %d / %d\n", cov->edges_carried, cov->edges_total);
     printf("  coverage       %.1f%%\n", 100.0 * gia_coverage_fraction(cov));
+
+    if (cov->n_added > 0) {
+        /* Carried, not lost -- but these nodes move the component and module
+         * counts, so a reader comparing ordinality needs to see them. */
+        printf("\n  Added in translation:\n");
+        for (i = 0; i < cov->n_added; i++)
+            printf("    + %s\n", cov->added[i]);
+    }
 
     if (cov->n_findings == 0) {
         printf("\n  Everything in this model has a MOP representation.\n");

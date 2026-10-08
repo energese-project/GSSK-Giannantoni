@@ -285,12 +285,10 @@ const char *gia_action_name(gia_action a) {
 const char *gia_logic_name(gia_logic l) {
     switch (l) {
         case GIA_LOGIC_LINEAR:      return "linear";
-        case GIA_LOGIC_INTERACTION: return "interaction";
         case GIA_LOGIC_REVERSIBLE:  return "reversible";
         case GIA_LOGIC_CONSTANT:    return "constant";
-        case GIA_LOGIC_LIMIT:       return "limit";
-        default:                    return "unknown";
     }
+    return "unknown";
 }
 
 bool gia_matrix_init(gia_matrix *m, int n) {
@@ -546,18 +544,6 @@ static void forcing_decompose(const gia_node *nd, double *konst, double *coeff) 
 
 /* True when a threshold pathway is open at the operating point. The clamp on
  * `subtract` is the same kind of boundary and is treated the same way. */
-static bool edge_is_open(const gia_edge *e, const double *q) {
-    double qa;
-    if (e->from < 0) return false;
-    qa = q ? q[e->from] : 0.0;
-    if (e->logic == GIA_LOGIC_THRESHOLD) return qa > e->threshold;
-    if (e->logic == GIA_LOGIC_SUBTRACT) {
-        double qc = (e->control >= 0 && q) ? q[e->control] : 0.0;
-        return (qa - qc) > 0.0;
-    }
-    return true;
-}
-
 bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
                            gia_matrix *out) {
     int i, n, dim;
@@ -594,7 +580,7 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
     for (i = 0; i < m->n_edges; i++) {
         const gia_edge *e = &m->edges[i];
         int    a = e->from, b = e->to;
-        double g, k_t;
+        double g = 0.0, k_t;
         bool   drain_a, fill_b;
 
         if (a < 0 || b < 0) continue;
@@ -623,104 +609,13 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
                 if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)n] += k_t;
                 continue;
 
-            case GIA_LOGIC_THRESHOLD:
-                /* Odum SecXI: a fixed rate while open, nothing while shut.
-                 * Also affine. The discontinuity is handled by the event loop
-                 * in gia_network_state, not here. */
-                if (!edge_is_open(e, q)) continue;
-                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)n] -= k_t;
-                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)n] += k_t;
-                continue;
-
-            case GIA_LOGIC_GAIN: {
-                /* Odum SecIX: F = k Q_control. The control sets the rate; the
-                 * origin supplies the power but does not scale the flow, so the
-                 * entry sits in the control's column. */
-                int c = (e->control >= 0) ? e->control : b;
-                if (drain_a) out->a[(size_t)a*(size_t)dim+(size_t)c] -= k_t;
-                if (fill_b)  out->a[(size_t)b*(size_t)dim+(size_t)c] += k_t;
-                continue;
-            }
-
-            case GIA_LOGIC_SUBTRACT: {
-                /* ADR 0008: F = max(0, k (Q_a - Q_c)). While the clamp is off
-                 * the law is linear in two quantities, so it touches four
-                 * entries the way `reversible` does -- but it reads a CONTROL
-                 * rather than the target, and the control is never consumed. */
-                int c = (e->control >= 0) ? e->control : b;
-                if (!edge_is_open(e, q)) continue;
-                if (drain_a) {
-                    out->a[(size_t)a*(size_t)dim+(size_t)a] -= k_t;
-                    out->a[(size_t)a*(size_t)dim+(size_t)c] += k_t;
-                }
-                if (fill_b) {
-                    out->a[(size_t)b*(size_t)dim+(size_t)a] += k_t;
-                    out->a[(size_t)b*(size_t)dim+(size_t)c] -= k_t;
-                }
-                continue;
-            }
-
-            case GIA_LOGIC_RATIO: {
-                /* ADR 0002: F = k Q_a / max(Q_c, eps). Linear in Q_a with a
-                 * conductance set by the denominator, so the floor is what
-                 * keeps it from diverging as the control goes to zero. */
-                int    c  = (e->control >= 0) ? e->control : b;
-                double qc = q ? q[c] : 1.0;
-                if (qc < GIA_EPS) qc = GIA_EPS;
-                g = k_t / qc;
-                break;
-            }
-
-            case GIA_LOGIC_EXCHANGE: {
-                /* Odum 1972 SecXV, Eq (103): J_energy = P J_currency, and
-                 * "flows of currency move opposite in direction to the flow of
-                 * potential energy". So the goods move origin -> target at
-                 * F = k Q_origin, and F/P of currency moves the other way,
-                 * between the two currency legs.
-                 *
-                 * No second quantity per component is needed: the currency
-                 * stock is simply another component, which is how Odum draws
-                 * it. What is NOT modelled here, and is in the kernel: leg
-                 * discovery from the diamond's shape, gating on the money
-                 * stock, and a price resolved from a node rather than fixed
-                 * (ADR 0001). Price is constant and the legs are named. */
-                double k = k_t;
-                double P = (fabs(e->price) > GIA_EPS) ? e->price : 1.0;
-                if (drain_a) add_origin_term(m, out, dim, a, a, -k);
-                if (fill_b)  add_origin_term(m, out, dim, b, a,  k);
-                if (e->cur_from >= 0 && m->nodes[e->cur_from].integrates)
-                    add_origin_term(m, out, dim, e->cur_from, a, -k / P);
-                if (e->cur_to >= 0 && m->nodes[e->cur_to].integrates)
-                    add_origin_term(m, out, dim, e->cur_to, a,  k / P);
-                continue;
-            }
-
             case GIA_LOGIC_LINEAR:
                 g = k_t;
                 break;
 
-            case GIA_LOGIC_INTERACTION: {
-                /* Odum SecX: F = k Q_a Q_ctl, linearised about the operating
-                 * point by folding the control into the conductance. This is
-                 * where A stops being constant, and so where psi appears. */
-                double qc = (e->control >= 0 && q) ? q[e->control] : 1.0;
-                g = k_t * qc;
-                break;
-            }
-
-            case GIA_LOGIC_LIMIT: {
-                double qa = q ? q[a] : 0.0;
-                double C  = (e->capacity > GIA_EPS) ? e->capacity : 1.0;
-                g = k_t * C / (C + qa);
-                break;
-            }
-
             case GIA_LOGIC_REVERSIBLE:
                 g = k_t;
                 break;
-
-            default:
-                continue;
         }
 
         if (drain_a) add_origin_term(m, out, dim, a, a, -g);
@@ -911,20 +806,9 @@ bool gia_flow_matrix_is_constant(const gia_model *m) {
          * absorbed. A driven node VALUE can be, which is why the node
          * attachment leaves this true -- see the note above. */
         if (m->edges[i].forcing.kind != GIA_FORCE_NONE) return false;
-        (void)0;
-        switch (m->edges[i].logic) {
-            case GIA_LOGIC_INTERACTION:  /* folds a control into the conductance */
-            case GIA_LOGIC_LIMIT:        /* conductance depends on the origin    */
-            case GIA_LOGIC_RATIO:        /* conductance depends on the divisor   */
-            case GIA_LOGIC_THRESHOLD:    /* regime flips at a crossing           */
-            case GIA_LOGIC_SUBTRACT:     /* clamp flips at a crossing            */
-                return false;
-            default:
-                break;
-        }
     }
-    /* A module whose law reads the state varies the matrix exactly as its
-     * pathway-level counterpart does. A work gate folds controls into the
+    /* SecIII pathways are constant-coefficient. What makes the matrix depend on
+     * the state is a module's law: a work gate folds its controls into the
      * conductance, a cycling receptor saturates, a switch flips regime. */
     for (i = 0; i < m->n_nodes; i++) {
         if (!m->nodes[i].is_module) continue;
@@ -966,9 +850,6 @@ static bool module_switches(const gia_node *nd) {
 
 static bool has_switching(const gia_model *m) {
     int i;
-    for (i = 0; i < m->n_edges; i++)
-        if (m->edges[i].logic == GIA_LOGIC_THRESHOLD ||
-            m->edges[i].logic == GIA_LOGIC_SUBTRACT) return true;
     for (i = 0; i < m->n_nodes; i++)
         if (module_switches(&m->nodes[i])) return true;
     return false;
@@ -1107,22 +988,7 @@ static bool advance(const gia_model *m, const double *q, double h, double *out) 
     return advance_from(m, q, 0.0, h, out);
 }
 
-/* Signed distance to a switching boundary: > 0 while the pathway is open. */
-static double boundary_gap(const gia_model *m, const gia_edge *e,
-                           const double *q) {
-    double qa, qc;
-    (void)m;
-    if (e->from < 0) return 1.0;
-    qa = q[e->from];
-    if (e->logic == GIA_LOGIC_THRESHOLD) return qa - e->threshold;
-    if (e->logic == GIA_LOGIC_SUBTRACT) {
-        qc = (e->control >= 0) ? q[e->control] : 0.0;
-        return qa - qc;
-    }
-    return 1.0;
-}
-
-/* Earliest crossing in (0, span] of any switching pathway, located by the
+/* Earliest crossing in (0, span] of any switching module, located by the
  * Illinois variant of false position -- the same method the kernel uses. The
  * regime is frozen during the search, which is what makes the bracket valid:
  * inside one regime the trajectory is a single exponential.
@@ -1133,45 +999,10 @@ static double locate_event(const gia_model *m, const double *q0, double span,
     int    i;
     double earliest = span;
 
-    for (i = 0; i < m->n_edges; i++) {
-        const gia_edge *e = &m->edges[i];
-        double lo, hi, glo, ghi, mid, gmid;
-        int    it, side = 0;
-
-        if (e->logic != GIA_LOGIC_THRESHOLD && e->logic != GIA_LOGIC_SUBTRACT)
-            continue;
-
-        glo = boundary_gap(m, e, q0);
-        if (!advance(m, q0, earliest, work)) continue;
-        ghi = boundary_gap(m, e, work);
-        if ((glo > 0.0) == (ghi > 0.0)) continue;   /* no sign change: no crossing */
-
-        lo = 0.0; hi = earliest;
-        for (it = 0; it < 64; it++) {
-            double denom = (ghi - glo);
-            if (fabs(denom) < 1e-300) break;
-            mid = lo - glo * (hi - lo) / denom;
-            if (!(mid > lo && mid < hi)) mid = 0.5 * (lo + hi);
-            if (!advance(m, q0, mid, work)) break;
-            gmid = boundary_gap(m, e, work);
-            if (fabs(gmid) < 1e-14 || (hi - lo) < 1e-12) { hi = mid; break; }
-            if ((gmid > 0.0) == (glo > 0.0)) {
-                lo = mid; glo = gmid;
-                if (side == -1) ghi *= 0.5;         /* Illinois: halve the stale end */
-                side = -1;
-            } else {
-                hi = mid; ghi = gmid;
-                if (side == +1) glo *= 0.5;
-                side = +1;
-            }
-        }
-        if (hi < earliest) earliest = hi;
-    }
-
-    /* The same search over switch modules. Their boundary is the sensor
-     * crossing its threshold, and it is located rather than stepped over, for
-     * the same reason a pathway threshold is: there is no smooth alpha across
-     * it, so persistence of form holds on each side and not through it. */
+    /* A switch's boundary is its sensor crossing the threshold, a subtracting
+     * action's is the difference reaching zero. Each is located rather than
+     * stepped over: there is no smooth alpha across it, so persistence of form
+     * holds on each side and not through it. */
     for (i = 0; i < m->n_nodes; i++) {
         double lo, hi, glo, ghi, mid, gmid;
         int    it, side = 0;
@@ -1623,25 +1454,35 @@ static void phi_for_node(gia_node *nd, const cJSON *jn) {
 static bool logic_of(const char *s, gia_logic *out) {
     if (!s) return false;
     if (!strcmp(s, "linear"))                 { *out = GIA_LOGIC_LINEAR;      return true; }
-    if (!strcmp(s, "interaction"))            { *out = GIA_LOGIC_INTERACTION; return true; }
     if (!strcmp(s, "reversible"))             { *out = GIA_LOGIC_REVERSIBLE;  return true; }
     if (!strcmp(s, "constant"))               { *out = GIA_LOGIC_CONSTANT;    return true; }
-    if (!strcmp(s, "limit"))                  { *out = GIA_LOGIC_LIMIT;       return true; }
-    if (!strcmp(s, "gain"))                   { *out = GIA_LOGIC_GAIN;        return true; }
-    if (!strcmp(s, "ratio"))                  { *out = GIA_LOGIC_RATIO;       return true; }
-    if (!strcmp(s, "subtract"))               { *out = GIA_LOGIC_SUBTRACT;    return true; }
-    if (!strcmp(s, "threshold"))              { *out = GIA_LOGIC_THRESHOLD;   return true; }
-    if (!strcmp(s, "exchange"))               { *out = GIA_LOGIC_EXCHANGE;    return true; }
     /* Descriptive labels from the Odum-shaped seed format. */
     if (!strcmp(s, "inflow"))                 { *out = GIA_LOGIC_LINEAR;      return true; }
     if (!strcmp(s, "outflow"))                { *out = GIA_LOGIC_LINEAR;      return true; }
     if (!strcmp(s, "flow"))                   { *out = GIA_LOGIC_LINEAR;      return true; }
-    if (!strcmp(s, "generative_production"))  { *out = GIA_LOGIC_INTERACTION; return true; }
-    if (!strcmp(s, "ordinal_feedback"))       { *out = GIA_LOGIC_INTERACTION; return true; }
     if (!strcmp(s, "ordinal_ascent"))         { *out = GIA_LOGIC_LINEAR;      return true; }
     if (!strcmp(s, "emergent_feedback_loop")) { *out = GIA_LOGIC_LINEAR;      return true; }
     if (!strcmp(s, "diffusion"))              { *out = GIA_LOGIC_REVERSIBLE;  return true; }
     return false;
+}
+
+/* The module a law removed from pathways now lives on (ADR 0012 decision 5),
+ * or NULL. Named in the load error, so a model written the old way says what
+ * to write instead -- the loader never rewrites it, because a gate the author
+ * did not draw would vote on ordinality. The two seed labels named the work
+ * gate law. */
+static const char *module_for_law(const char *s) {
+    if (!s) return NULL;
+    if (!strcmp(s, "interaction") || !strcmp(s, "generative_production") ||
+        !strcmp(s, "ordinal_feedback"))
+        return "an `interaction` module";
+    if (!strcmp(s, "ratio"))     return "an `interaction` module with action divide";
+    if (!strcmp(s, "subtract"))  return "an `interaction` module with action subtract";
+    if (!strcmp(s, "limit"))     return "a `loop_limited` module";
+    if (!strcmp(s, "gain"))      return "a `gain` module";
+    if (!strcmp(s, "threshold")) return "a `switch` module";
+    if (!strcmp(s, "exchange"))  return "an `exchange` module with four named legs";
+    return NULL;
 }
 
 static int find_node(const gia_model *m, const char *id) {
@@ -1703,11 +1544,11 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         }
         phi_for_node(nd, jn);
         nd->quality_input = num_field(jn, "quality_input", 0.0);
-        {   /* A module is OPT-IN: declaring a `module` block makes this
-             * component host its law, rather than the pathways around it. Being
-             * a work gate by type is not enough, because models written before
-             * ADR 0012 put the law on the pathway and must keep working until
-             * they are migrated. */
+        {   /* A module hosts its law over the pathways around it (ADR 0012).
+             * Its type and its `module` block go together: a work gate without
+             * one would be a storage wearing the name, holding quantity and
+             * counting toward ordinality as a component, which is exactly what
+             * the example seeds did before they were migrated. */
             const cJSON *mj = cJSON_GetObjectItemCaseSensitive(jn, "module");
             nd->is_module = false;
             if (cJSON_IsObject(mj)) {
@@ -1764,6 +1605,24 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                  * made an earlier revision rule out barter. */
                 nd->mod_price     = num_field(mj, "exchange_ratio",
                                     num_field(mj, "price", 1.0));
+            }
+            if (!nd->is_module) {
+                switch (nd->kind) {
+                    case GIA_NODE_INTERACTION:
+                    case GIA_NODE_GAIN:
+                    case GIA_NODE_SWITCH:
+                    case GIA_NODE_LOOP_LIMITED:
+                    case GIA_NODE_EXCHANGE:
+                        fprintf(stderr,
+                                "engine: node %d ('%s'): type '%s' is a module "
+                                "and needs its `module` block (ADR 0012)\n",
+                                i, nd->id ? nd->id : "?",
+                                gia_node_kind_name(nd->kind));
+                        gia_model_free(m);
+                        return false;
+                    default:
+                        break;
+                }
             }
         }
         nd->carrier       = str_field(jn, "carrier", "");
@@ -1862,20 +1721,6 @@ bool gia_model_load(gia_model *m, cJSON *root) {
             ed->to        = find_node(m, str_field(je, "target", NULL));
             ed->flow_type = str_field(je, "flow_type", "flow");
             ed->weight    = num_field(je, "weight", 1.0);
-            ed->capacity  = num_field(je, "capacity", 0.0);
-            ed->threshold = num_field(je, "threshold", 0.0);
-            /* Neutral names first, money-specific ones as accepted aliases.
-             * `currency_*` and `price` are what Odum's SecXV transactor calls
-             * them, and they read correctly for a money transaction -- but they
-             * are wrong for barter, and naming them that way is what led to
-             * barter being rejected outright. docs/emergy_synthesis.md 8 sets
-             * the same preference for neutral vocabulary. */
-            ed->price     = num_field(je, "exchange_ratio",
-                                      num_field(je, "price", 1.0));
-            ed->cur_from  = find_node(m, str_field(je, "counter_origin",
-                                      str_field(je, "currency_origin", NULL)));
-            ed->cur_to    = find_node(m, str_field(je, "counter_target",
-                                      str_field(je, "currency_target", NULL)));
             {   /* ADR 0006's second attachment point: the same waveform
                  * vocabulary, driving this pathway's rate rather than a
                  * component's held value. */
@@ -1914,7 +1759,6 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                     return false;
                 }
             }
-            ed->control   = find_node(m, str_field(je, "control_node", NULL));
 
             {   /* ADR 0013: a pathway entering a module says what it is TO
                  * that module, by name. One spelling, `role`. */
@@ -1975,19 +1819,18 @@ bool gia_model_load(gia_model *m, cJSON *root) {
 
             lg = str_field(je, "logic", ed->flow_type);
             if (!logic_of(lg, &ed->logic)) {
-                fprintf(stderr, "engine: edge %d: unknown pathway law '%s'\n",
-                        i, lg);
+                if (module_for_law(lg))
+                    fprintf(stderr, "engine: edge %d: '%s' is a module law and "
+                                    "no longer lives on a pathway; write %s with "
+                                    "named roles (ADR 0012 decision 5)\n",
+                            i, lg, module_for_law(lg));
+                else
+                    fprintf(stderr, "engine: edge %d: unknown pathway law '%s' "
+                                    "(a pathway is linear, reversible or "
+                                    "constant)\n", i, lg);
                 gia_model_free(m);
                 return false;
             }
-            /* A work gate needs a control quantity; Odum 1972 SecX is explicit
-             * that it is a junction of two flows. Default the control to the
-             * target, which is the autocatalytic reading. */
-            if ((ed->logic == GIA_LOGIC_INTERACTION ||
-                 ed->logic == GIA_LOGIC_GAIN      ||
-                 ed->logic == GIA_LOGIC_RATIO     ||
-                 ed->logic == GIA_LOGIC_SUBTRACT) && ed->control < 0)
-                ed->control = ed->to;
 
             if (ed->from < 0 || ed->to < 0)
                 fprintf(stderr,
@@ -2004,7 +1847,6 @@ bool gia_model_load(gia_model *m, cJSON *root) {
     for (i = 0; i < m->n_edges; i++) {
         const gia_edge *ed = &m->edges[i];
         if (ed->from < 0 || ed->to < 0) continue;
-        if (ed->logic == GIA_LOGIC_EXCHANGE) continue;
         /* A module has no carrier of its own -- it is a hyperedge, not a stock,
          * so comparing a leg's carrier against the module's says nothing. Which
          * of its legs must agree is the module's own business, checked per
@@ -2015,61 +1857,11 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         if (gia_node_carrier(m, ed->from) != gia_node_carrier(m, ed->to)) {
             fprintf(stderr,
                     "engine: edge %d ('%s' -> '%s'): carrier '%s' cannot flow "
-                    "into carrier '%s'; use logic \"exchange\" to couple two "
-                    "carriers by price (Odum 1972 SecXV)\n",
+                    "into carrier '%s'; couple two carriers through an "
+                    "`exchange` module (Odum 1972 SecXV)\n",
                     i, m->nodes[ed->from].id, m->nodes[ed->to].id,
                     gia_carrier_name(m, gia_node_carrier(m, ed->from)),
                     gia_carrier_name(m, gia_node_carrier(m, ed->to)));
-            gia_model_free(m);
-            return false;
-        }
-    }
-
-    /* An exchange must couple DIFFERENT carriers, and its currency legs must
-     * both hold the counter-carrier. Paying for goods with goods is not a
-     * transaction. */
-    for (i = 0; i < m->n_edges; i++) {
-        const gia_edge *ed = &m->edges[i];
-        int primary, cf, ct;
-        if (ed->logic != GIA_LOGIC_EXCHANGE) continue;
-        if (ed->from < 0 || ed->to < 0) continue;
-        if (ed->cur_from < 0 || ed->cur_to < 0) {
-            fprintf(stderr, "engine: edge %d: exchange needs counter_origin "
-                            "and counter_target (or the currency_* aliases)\n", i);
-            gia_model_free(m);
-            return false;
-        }
-        primary = gia_node_carrier(m, ed->from);
-        cf      = gia_node_carrier(m, ed->cur_from);
-        ct      = gia_node_carrier(m, ed->cur_to);
-        if (cf != ct) {
-            fprintf(stderr, "engine: edge %d: the two counter-flow legs hold "
-                            "different carriers ('%s' and '%s')\n", i,
-                    gia_carrier_name(m, cf), gia_carrier_name(m, ct));
-            gia_model_free(m);
-            return false;
-        }
-        /* An exchange is NOT required to couple two different carriers.
-         *
-         * Barter is a real process: grain for sheep, or the same commodity
-         * traded between two markets at a ratio. Odum's SecXV transactor is
-         * written for money, but the structure it describes -- two
-         * counter-flowing quantities coupled by a ratio -- does not depend on
-         * either of them being money.
-         *
-         * An earlier revision rejected a same-carrier counter-flow on the
-         * reasoning that "a transaction couples two". That was wrong twice
-         * over: it ruled out barter, and it was guarded on the model having
-         * more than one carrier, so the identical barter edge was legal alone
-         * and illegal once any unrelated second carrier existed elsewhere in
-         * the graph. One edge's validity must not depend on distant parts of
-         * the model. */
-        (void)primary;
-
-        if (ed->cur_from == ed->cur_to) {
-            fprintf(stderr, "engine: edge %d: both counter-flow legs are '%s', "
-                            "so the exchange pays itself and moves nothing\n",
-                    i, m->nodes[ed->cur_from].id);
             gia_model_free(m);
             return false;
         }
@@ -2395,7 +2187,7 @@ static double module_flow(const gia_model *m, int ni, const double *q) {
 
 double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q,
                      double t) {
-    double qa, qc;
+    double qa;
     if (!m || !e || e->from < 0 || e->to < 0 || !q) return 0.0;
 
     /* A pathway touching a module carries the module's flow, not its own. A
@@ -2454,29 +2246,10 @@ double gia_edge_flow(const gia_model *m, const gia_edge *e, const double *q,
 
     switch (e->logic) {
         case GIA_LOGIC_LINEAR:      return e->weight * qa;
-        case GIA_LOGIC_EXCHANGE:    return e->weight * qa;
         case GIA_LOGIC_CONSTANT:    return e->weight;
-        case GIA_LOGIC_THRESHOLD:   return edge_is_open(e, q) ? e->weight : 0.0;
-        case GIA_LOGIC_GAIN:
-            qc = (e->control >= 0) ? q[e->control] : q[e->to];
-            return e->weight * qc;
-        case GIA_LOGIC_INTERACTION:
-            qc = (e->control >= 0) ? q[e->control] : 1.0;
-            return e->weight * qa * qc;
-        case GIA_LOGIC_LIMIT: {
-            double C = (e->capacity > GIA_EPS) ? e->capacity : 1.0;
-            return e->weight * qa * C / (C + qa);
-        }
         case GIA_LOGIC_REVERSIBLE:  return e->weight * (qa - q[e->to]);
-        case GIA_LOGIC_RATIO:
-            qc = (e->control >= 0) ? q[e->control] : q[e->to];
-            if (qc < GIA_EPS) qc = GIA_EPS;
-            return e->weight * qa / qc;
-        case GIA_LOGIC_SUBTRACT:
-            qc = (e->control >= 0) ? q[e->control] : q[e->to];
-            return edge_is_open(e, q) ? e->weight * (qa - qc) : 0.0;
-        default:                    return 0.0;
     }
+    return 0.0;
 }
 
 /* Mark the edges that close a cycle.

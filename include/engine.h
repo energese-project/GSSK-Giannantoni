@@ -216,31 +216,15 @@ double gia_harmony_reduction_residual(const gia_harmony *h);
  * t or with Q; a work gate is the latter case.
  * ================================================================== */
 
-/* Odum's pathway laws. The names follow the kernel's GSSK_LogicType so the two
- * vocabularies do not drift apart. */
+/* Odum's pathway laws: SecIII and nothing else (ADR 0012 decision 5). A law that
+ * happens inside a symbol -- a work gate, an amplifier, a switch, a cycling
+ * receptor, a transactor, and the divisor and subtracting actions -- lives on
+ * that module, never on a pathway. The names follow the kernel's
+ * GSSK_LogicType so the two vocabularies do not drift apart. */
 typedef enum {
     GIA_LOGIC_LINEAR,      /* Odum 1972 SecIII barbed:   F = k Q_origin        */
-    GIA_LOGIC_INTERACTION, /* Odum 1972 SecX work gate:  F = k Q_origin Q_ctl  */
     GIA_LOGIC_REVERSIBLE,  /* Odum 1972 SecIII barb-less: F = k (Q_a - Q_b)    */
-    GIA_LOGIC_CONSTANT,    /* F = k                                            */
-    GIA_LOGIC_LIMIT,       /* Odum 1972 SecXIII receptor: F = k Q C / (C + Q)  */
-    GIA_LOGIC_GAIN,        /* Odum 1972 SecIX amplifier: F = k Q_control.
-                            * The control signal sets the rate; the origin
-                            * supplies the power. Unlike `linear`, the flow does
-                            * NOT scale with the origin's own quantity. */
-    GIA_LOGIC_RATIO,       /* ADR 0002 divisor action (Odum 2000 Fig 2.6d):
-                            * F = k Q_origin / max(Q_control, eps).           */
-    GIA_LOGIC_SUBTRACT,    /* ADR 0008 subtracting action (Fig 2.6e):
-                            * F = max(0, k (Q_origin - Q_control)). Barbed, so
-                            * clamped at zero -- a negative flow would drain the
-                            * target along a line whose barb says it cannot.   */
-    GIA_LOGIC_THRESHOLD,   /* Odum 1972 SecXI switch: F = k when Q_origin
-                            * exceeds `threshold`, else 0. Discontinuous, so it
-                            * is solved piecewise between located crossings.   */
-    GIA_LOGIC_EXCHANGE     /* Odum 1972 SecXV transactor: J_energy = P J_currency.
-                            * A primary flow origin->target, plus a counter-flow
-                            * of currency running the OTHER way between the two
-                            * currency legs, of magnitude F / price.           */
+    GIA_LOGIC_CONSTANT     /* F = k                                            */
 } gia_logic;
 
 const char *gia_logic_name(gia_logic l);
@@ -414,12 +398,6 @@ typedef struct {
     const char *flow_type;   /* the seed's label; maps onto `logic` */
     gia_logic   logic;
     double      weight;      /* the rate coefficient k */
-    int         control;     /* control node index, or -1 */
-    double      capacity;    /* C, for limit edges */
-    double      threshold;   /* crossing level, for threshold edges */
-    double      price;       /* P, for exchange edges */
-    int         cur_from;    /* currency leg paying, for exchange edges */
-    int         cur_to;      /* currency leg receiving, for exchange edges */
     gia_output_mode out_mode;/* partition (split) or replicate (co-product) */
     gia_role    role;        /* what this pathway is TO the module it enters,
                               * ADR 0013. GIA_ROLE_NONE for ordinary pathways. */
@@ -768,6 +746,11 @@ typedef struct {
     int  n_findings;
     int  n_elided;                    /* findings past the cap */
     char finding[GIA_MAX_FINDINGS][192];
+    /* Nodes the projection ADDED: a GSSK edge law becomes a gate module the
+     * GSSK author did not write (ADR 0012 decision 5). Carried, not lost, but
+     * it moves node counts and so ordinality, so each one is named. */
+    int  n_added;
+    char added[GIA_MAX_FINDINGS][192];
 } gia_coverage;
 
 /* Read a GSSK-schema model and produce a MOP input. The caller owns *out_mop

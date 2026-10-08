@@ -44,6 +44,27 @@ static void close_to(const char *what, double got, double want, double tol) {
     if (!c) failures++;
 }
 
+/* Load, or record the failure and stop: nothing after a failed load may touch
+ * the model. */
+static bool load_ok(const char *what, gia_model *m, cJSON *root) {
+    bool good = gia_model_load(m, root);
+    ok(what, good);
+    if (!good) cJSON_Delete(root);
+    return good;
+}
+
+/* Load and free; true when the document is a valid model. */
+static bool loads(const char *json) {
+    cJSON     *root = cJSON_Parse(json);
+    gia_model  m;
+    bool       good;
+    if (!root) return false;
+    good = gia_model_load(&m, root);
+    if (good) gia_model_free(&m);
+    cJSON_Delete(root);
+    return good;
+}
+
 /* ------------------------------------------------------------------ *
  * 1. Persistence of form, and the drift TDC introduces
  * ------------------------------------------------------------------ */
@@ -203,25 +224,31 @@ static void test_harmony(void) {
  * 4. Ordinality and the generative ordinal step
  * ------------------------------------------------------------------ */
 
+/* The example seed's shape (examples/giannantoni/input.json), with both
+ * controls read rather than drawn so there is no heat sink: a sink is never
+ * closed (ADR 0015), and this test is about the step reaching maximum. */
 static const char *SEED =
     "{\"system_name\":\"test\","
     " \"nodes\":["
     "   {\"id\":\"source_1\",\"type\":\"source\",\"initial_value\":2.0},"
     "   {\"id\":\"interaction_1\",\"type\":\"interaction\","
-    "    \"generativity_factor\":1.5},"
+    "    \"module\":{\"k\":0.1}},"
     "   {\"id\":\"store_1\",\"type\":\"storage\",\"capacity\":100.0,"
     "    \"current_level\":10.0},"
     "   {\"id\":\"consumer_1\",\"type\":\"storage\",\"metabolic_rate\":0.2}],"
     " \"edges\":["
-    "   {\"source\":\"source_1\",\"target\":\"interaction_1\",\"weight\":1.0},"
-    "   {\"source\":\"interaction_1\",\"target\":\"store_1\",\"weight\":1.2},"
+    "   {\"source\":\"source_1\",\"target\":\"interaction_1\",\"role\":\"energy\"},"
+    "   {\"source\":\"store_1\",\"target\":\"interaction_1\",\"role\":\"control\","
+    "    \"use_ratio\":0},"
+    "   {\"source\":\"interaction_1\",\"target\":\"store_1\",\"weight\":1.0},"
     "   {\"source\":\"store_1\",\"target\":\"consumer_1\",\"weight\":0.5},"
-    "   {\"source\":\"consumer_1\",\"target\":\"interaction_1\",\"weight\":0.3}],"
+    "   {\"source\":\"consumer_1\",\"target\":\"interaction_1\",\"role\":\"control\","
+    "    \"use_ratio\":0}],"
     " \"simulation_params\":{\"t_val\":1.5,\"derivative_order\":2,"
     "                       \"generative_mode\":%s}}";
 
 static char *seed_json(const char *generative) {
-    static char buf[1400];
+    static char buf[1800];
     snprintf(buf, sizeof(buf), SEED, generative);
     return buf;
 }
@@ -239,12 +266,14 @@ static void test_generative(void) {
 
     ok("seed graph loads", gia_model_load(&m, root));
 
-    /* source_1 feeds the loop but nothing returns to it, so it is not on a
-     * closed pathway: 3 of 4 components are. */
-    close_to("seed ordinality is 3/4", gia_ordinality(&m), 0.75, 1e-12);
+    /* The work gate is a module, so it is not a component, and its controls
+     * are read, so they close nothing: none of the three components is on a
+     * closed pathway. */
+    close_to("seed ordinality is 0 of 3", gia_ordinality(&m), 0.0, 1e-12);
     ok("seed is below maximum ordinality", !gia_at_maximum_ordinality(&m));
-    ok("source_1 is the open component", !m.nodes[0].on_cycle);
-    ok("interaction_1 is on a cycle", m.nodes[1].on_cycle);
+    ok("source_1 is open", !m.nodes[0].on_cycle);
+    ok("interaction_1 is a module, not a component",
+       gia_node_is_module(&m, 1) && gia_component_count(&m) == 3);
 
     /* phi degree separates the storing components from the transforming one. */
     ok("source is drift-free",      gia_drift_free(&m.nodes[0].phi));
@@ -261,9 +290,9 @@ static void test_generative(void) {
     e_in  = cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(root, "edges"));
     e_out = cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(out,  "edges"));
 
-    ok("input graph is left untouched", n_in == 4 && e_in == 4);
+    ok("input graph is left untouched", n_in == 4 && e_in == 5);
     ok("one component emerged",  n_out == n_in + 1);
-    ok("two relationships emerged", e_out == e_in + 2);
+    ok("three relationships emerged", e_out == e_in + 3);
     ok("the diff reports generative mode",
        gia_validate_mode(root, out) == GIA_MODE_GENERATIVE);
 
@@ -443,7 +472,7 @@ static void test_network_nonlinear(void) {
     cJSON     *root;
     gia_model  m;
     char       buf[900];
-    double     q[2], psi = 0.0;
+    double     q[3], psi = 0.0;
 
     printf("\n[8] a work gate makes the flow matrix state-dependent\n");
 
@@ -451,10 +480,12 @@ static void test_network_nonlinear(void) {
         "{\"system_name\":\"gate\","
         " \"nodes\":["
         "   {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
-        "   {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0}],"
-        " \"edges\":[{\"source\":\"a\",\"target\":\"b\","
-        "            \"logic\":\"interaction\",\"weight\":0.1,"
-        "            \"control_node\":\"b\"}],"
+        "   {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0},"
+        "   {\"id\":\"g\",\"type\":\"interaction\",\"module\":{\"k\":0.1}}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
+        "            {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\","
+        "             \"use_ratio\":0},"
+        "            {\"source\":\"g\",\"target\":\"b\"}],"
         " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
         "                       \"generative_mode\":false}}");
 
@@ -463,8 +494,7 @@ static void test_network_nonlinear(void) {
     if (!root) return;
     ok("work-gate model loads", gia_model_load(&m, root));
 
-    ok("edge law is interaction",
-       m.edges[0].logic == GIA_LOGIC_INTERACTION);
+    ok("the gate is a module", gia_node_is_module(&m, 2));
     ok("a work gate makes A state-dependent",
        !gia_flow_matrix_is_constant(&m));
 
@@ -702,21 +732,22 @@ static void test_constant_law(void) {
 }
 
 static void test_ratio_law(void) {
-    cJSON *root; gia_model m; double q[3];
-    char   buf[1100];
+    cJSON *root; gia_model m; double q[4];
 
-    printf("\n[13] ratio pathway: F = k Qa / max(Qc, eps)\n");
-    snprintf(buf, sizeof(buf),
+    printf("\n[13] divisor action: F = k Qa / max(Qc, eps)\n");
+    root = cJSON_Parse(
         "{\"nodes\":[{\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
         "           {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
-        "           {\"id\":\"d\",\"type\":\"constant\",\"value\":4.0}],"
-        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"ratio\","
-        "            \"weight\":2.0,\"control_node\":\"d\"}],"
+        "           {\"id\":\"d\",\"type\":\"constant\",\"value\":4.0},"
+        "           {\"id\":\"g\",\"type\":\"interaction\","
+        "            \"module\":{\"k\":2.0,\"action\":\"divide\"}}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
+        "           {\"source\":\"d\",\"target\":\"g\",\"role\":\"control\",\"use_ratio\":0},"
+        "           {\"source\":\"g\",\"target\":\"b\"}],"
         " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
         "                       \"generative_mode\":false}}");
-    root = cJSON_Parse(buf);
     if (!root) { ok("parse", false); return; }
-    ok("loads", gia_model_load(&m, root));
+    if (!load_ok("loads", &m, root)) return;
 
     /* d is a constant at 4, so the conductance is k/d = 0.5 and stationary:
      * a(t) = 10 e^(-0.5 t). */
@@ -727,13 +758,21 @@ static void test_ratio_law(void) {
 }
 
 static void test_subtract_law(void) {
-    cJSON *root; gia_model m; double q[2];
+    cJSON *root; gia_model m; double q[3];
 
-    printf("\n[14] subtract pathway: F = max(0, k (Qa - Qc)), barbed\n");
-    root = two_node("{\"source\":\"a\",\"target\":\"b\",\"logic\":\"subtract\","
-                    "\"weight\":0.5,\"control_node\":\"b\"}");
+    printf("\n[14] subtracting action: F = max(0, k (Qa - Qc)), barbed\n");
+    root = cJSON_Parse(
+        "{\"nodes\":[{\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "           {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
+        "           {\"id\":\"g\",\"type\":\"interaction\","
+        "            \"module\":{\"k\":0.5,\"action\":\"subtract\"}}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"g\",\"role\":\"energy\"},"
+        "           {\"source\":\"b\",\"target\":\"g\",\"role\":\"control\",\"use_ratio\":0},"
+        "           {\"source\":\"g\",\"target\":\"b\"}],"
+        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
     if (!root) { ok("parse", false); return; }
-    ok("loads", gia_model_load(&m, root));
+    if (!load_ok("loads", &m, root)) return;
     ok("the clamp makes A state-dependent",
        !gia_flow_matrix_is_constant(&m));
 
@@ -749,14 +788,24 @@ static void test_subtract_law(void) {
 }
 
 static void test_threshold_events(void) {
-    cJSON *root; gia_model m; double q[2];
+    cJSON *root; gia_model m; double q[3];
     int    ev;
 
-    printf("\n[15] threshold pathway: Odum SecXI, solved piecewise\n");
-    root = two_node("{\"source\":\"a\",\"target\":\"b\",\"logic\":\"threshold\","
-                    "\"weight\":2.0,\"threshold\":6.0}");
+    printf("\n[15] switch: Odum SecXI, solved piecewise\n");
+    /* a is both the energy the switch drains and the sensor it reads -- the
+     * pathway threshold's reading, written as the module. */
+    root = cJSON_Parse(
+        "{\"nodes\":[{\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "           {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
+        "           {\"id\":\"sw\",\"type\":\"switch\","
+        "            \"module\":{\"k\":2.0,\"threshold\":6.0}}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"sw\",\"role\":\"energy\"},"
+        "           {\"source\":\"a\",\"target\":\"sw\",\"role\":\"control\",\"use_ratio\":0},"
+        "           {\"source\":\"sw\",\"target\":\"b\"}],"
+        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "                       \"generative_mode\":false}}");
     if (!root) { ok("parse", false); return; }
-    ok("loads", gia_model_load(&m, root));
+    if (!load_ok("loads", &m, root)) return;
     ok("a threshold makes the matrix non-constant",
        !gia_flow_matrix_is_constant(&m));
 
@@ -783,71 +832,19 @@ static void test_threshold_events(void) {
 
 static void test_switch_node(void) {
     cJSON *root; gia_model m;
-    printf("\n[16] the switch node type is accepted now its law exists\n");
+    printf("\n[16] the switch node type is a module\n");
     root = cJSON_Parse(
-        "{\"nodes\":[{\"id\":\"s\",\"type\":\"switch\",\"value\":1.0},"
+        "{\"nodes\":[{\"id\":\"s\",\"type\":\"switch\","
+        "            \"module\":{\"k\":1.0,\"threshold\":0.5}},"
+        "           {\"id\":\"t\",\"type\":\"storage\",\"current_level\":1.0},"
         "           {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0}],"
-        " \"edges\":[{\"source\":\"s\",\"target\":\"b\",\"logic\":\"threshold\","
-        "            \"weight\":1.0,\"threshold\":0.5}]}");
+        " \"edges\":[{\"source\":\"t\",\"target\":\"s\",\"role\":\"energy\"},"
+        "           {\"source\":\"t\",\"target\":\"s\",\"role\":\"control\",\"use_ratio\":0},"
+        "           {\"source\":\"s\",\"target\":\"b\"}]}");
     if (!root) { ok("parse", false); return; }
-    ok("a switch node loads", gia_model_load(&m, root));
+    if (!load_ok("a switch module loads", &m, root)) return;
     ok("it is named as a switch",
        !strcmp(gia_node_kind_name(m.nodes[0].kind), "switch"));
-    gia_model_free(&m); cJSON_Delete(root);
-}
-
-static void test_exchange_law(void) {
-    cJSON *root; gia_model m; double q[4];
-
-    printf("\n[17] exchange pathway: Odum SecXV, J_energy = P J_currency\n");
-    root = cJSON_Parse(
-        "{\"nodes\":["
-        "  {\"id\":\"goods_a\",\"type\":\"storage\",\"carrier\":\"goods\","
-        "   \"current_level\":10.0},"
-        "  {\"id\":\"goods_b\",\"type\":\"storage\",\"carrier\":\"goods\","
-        "   \"current_level\":0.0},"
-        "  {\"id\":\"cash_b\",\"type\":\"storage\",\"carrier\":\"money\","
-        "   \"current_level\":100.0},"
-        "  {\"id\":\"cash_a\",\"type\":\"storage\",\"carrier\":\"money\","
-        "   \"current_level\":0.0}],"
-        " \"edges\":[{\"source\":\"goods_a\",\"target\":\"goods_b\","
-        "            \"logic\":\"exchange\",\"weight\":0.5,\"price\":0.25,"
-        "            \"currency_origin\":\"cash_b\","
-        "            \"currency_target\":\"cash_a\"}],"
-        " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
-        "                       \"generative_mode\":false}}");
-    if (!root) { ok("parse", false); return; }
-    ok("exchange model loads", gia_model_load(&m, root));
-    ok("edge law is exchange", m.edges[0].logic == GIA_LOGIC_EXCHANGE);
-
-    ok("solves", gia_network_state(&m, 2.0, q, NULL));
-
-    /* Goods drain from a at F = k Q_a, so goods_a(t) = 10 e^(-kt) and
-     * goods_b takes the remainder. */
-    close_to("goods_a(2) = 10 e^-1", q[0], 10.0 * exp(-1.0), 1e-7);
-    close_to("goods_b(2) = the remainder", q[1], 10.0 - 10.0 * exp(-1.0), 1e-7);
-
-    /* Currency runs the OTHER way, at F/P. With P = 0.25 the cash moved is
-     * four times the goods moved, and it leaves cash_b for cash_a. */
-    close_to("cash moved = goods moved / price",
-             q[3], (10.0 - 10.0 * exp(-1.0)) / 0.25, 1e-6);
-    close_to("cash_b paid exactly that", 100.0 - q[2], q[3], 1e-9);
-
-    /* Odum's ratio, Eq (103), recovered from the trajectory. */
-    close_to("J_energy / J_currency = P",
-             (10.0 - q[0]) / q[3], 0.25, 1e-9);
-
-    /* Each carrier balances on its own. Before carriers, goods leaving and
-     * cash arriving went into one total and could cancel; now the two are
-     * accounted separately and both must hold. */
-    ok("the exchange couples two carriers",  gia_carrier_count(&m) == 2);
-    close_to("goods are conserved on their own",
-             gia_conservation_residual_for(&m, 2.0, gia_node_carrier(&m, 0)),
-             0.0, 1e-7);
-    close_to("money is conserved on its own",
-             gia_conservation_residual_for(&m, 2.0, gia_node_carrier(&m, 2)),
-             0.0, 1e-7);
-
     gia_model_free(&m); cJSON_Delete(root);
 }
 
@@ -1066,28 +1063,6 @@ static void test_carrier_validation(void) {
     if (!root) { ok("parse", false); return; }
     ok("a cross-carrier linear pathway is rejected", !gia_model_load(&m, root));
     cJSON_Delete(root);
-
-    /* Paying for goods with goods IS a transaction -- it is barter, and it is
-     * covered in [23]. What is still rejected is a counter-flow whose two legs
-     * hold DIFFERENT carriers from each other: one leg pair moves one kind of
-     * thing, and half-grain-half-money is two exchanges, not one. */
-    root = cJSON_Parse(
-        "{\"nodes\":["
-        "  {\"id\":\"a\",\"type\":\"storage\",\"carrier\":\"goods\","
-        "   \"current_level\":10.0},"
-        "  {\"id\":\"b\",\"type\":\"storage\",\"carrier\":\"goods\","
-        "   \"current_level\":0.0},"
-        "  {\"id\":\"pay\",\"type\":\"storage\",\"carrier\":\"money\","
-        "   \"current_level\":5.0},"
-        "  {\"id\":\"recv\",\"type\":\"storage\",\"carrier\":\"sheep\","
-        "   \"current_level\":0.0}],"
-        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"exchange\","
-        "            \"weight\":0.5,\"exchange_ratio\":0.25,"
-        "            \"counter_origin\":\"pay\",\"counter_target\":\"recv\"}]}");
-    if (!root) { ok("parse", false); return; }
-    ok("counter-flow legs holding different carriers is rejected",
-       !gia_model_load(&m, root));
-    cJSON_Delete(root);
 }
 
 static void test_carrier_default(void) {
@@ -1119,7 +1094,7 @@ static void test_carrier_default(void) {
  * tagged "goods", which an earlier revision rejected outright. `%s` lets the
  * same model be built with or without an unrelated money component. */
 static cJSON *barter_model(const char *extra_node, const char *neutral_names) {
-    static char buf[1500];
+    static char buf[1800];
     snprintf(buf, sizeof(buf),
         "{\"nodes\":["
         "  {\"id\":\"grain_a\",\"type\":\"storage\",\"carrier\":\"goods\","
@@ -1129,23 +1104,24 @@ static cJSON *barter_model(const char *extra_node, const char *neutral_names) {
         "  {\"id\":\"sheep_b\",\"type\":\"storage\",\"carrier\":\"goods\","
         "   \"current_level\":50.0},"
         "  {\"id\":\"sheep_a\",\"type\":\"storage\",\"carrier\":\"goods\","
-        "   \"current_level\":0.0}%s],"
-        " \"edges\":[{\"source\":\"grain_a\",\"target\":\"grain_b\","
-        "            \"logic\":\"exchange\",\"weight\":0.5,\"%s\":3.0,"
-        "            \"%s\":\"sheep_b\",\"%s\":\"sheep_a\"}],"
+        "   \"current_level\":0.0},"
+        "  {\"id\":\"mkt\",\"type\":\"exchange\","
+        "   \"module\":{\"k\":0.5,\"%s\":3.0}}%s],"
+        " \"edges\":["
+        "  {\"source\":\"grain_a\",\"target\":\"mkt\",\"role\":\"goods_in\"},"
+        "  {\"source\":\"mkt\",\"target\":\"grain_b\",\"role\":\"goods_out\"},"
+        "  {\"source\":\"sheep_b\",\"target\":\"mkt\",\"role\":\"counter_in\"},"
+        "  {\"source\":\"mkt\",\"target\":\"sheep_a\",\"role\":\"counter_out\"}],"
         " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
         "                       \"generative_mode\":false}}",
-        extra_node,
-        neutral_names ? "exchange_ratio"  : "price",
-        neutral_names ? "counter_origin"  : "currency_origin",
-        neutral_names ? "counter_target"  : "currency_target");
+        neutral_names ? "exchange_ratio" : "price", extra_node);
     return cJSON_Parse(buf);
 }
 
 static void test_barter(void) {
     cJSON     *root;
     gia_model  m;
-    double     q[5], grain_moved, sheep_moved;
+    double     q[6], grain_moved, sheep_moved;
 
     printf("\n[23] barter: an exchange need not involve money\n");
 
@@ -1185,7 +1161,7 @@ static void test_barter(void) {
     /* Neutral spelling must behave identically to the money-specific one. */
     root = barter_model("", "neutral");
     if (root) {
-        ok("counter_origin / counter_target / exchange_ratio also load",
+        ok("exchange_ratio, the neutral name for price, also loads",
            gia_model_load(&m, root));
         ok("solves under the neutral spelling",
            gia_network_state(&m, 2.0, q, NULL));
@@ -1193,26 +1169,6 @@ static void test_barter(void) {
         gia_model_free(&m);
         cJSON_Delete(root);
     }
-}
-
-static void test_exchange_self_payment(void) {
-    cJSON     *root;
-    gia_model  m;
-
-    printf("\n[24] an exchange may not pay itself\n");
-    root = cJSON_Parse(
-        "{\"nodes\":["
-        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
-        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
-        "  {\"id\":\"m\",\"type\":\"storage\",\"current_level\":5.0}],"
-        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"exchange\","
-        "            \"weight\":0.5,\"exchange_ratio\":2.0,"
-        "            \"counter_origin\":\"m\",\"counter_target\":\"m\"}]}");
-    if (!root) { ok("parse", false); return; }
-    /* Both legs on one component cancel to nothing; that is a modelling
-     * error, not a zero-value transaction. */
-    ok("both legs on the same component is rejected", !gia_model_load(&m, root));
-    cJSON_Delete(root);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1514,12 +1470,12 @@ static void test_projection_processing_node_params(void) {
     cJSON        *g, *mop = NULL;
     gia_coverage  cov;
 
-    printf("\n[31] a processing node's law lives in node params here, on "
-           "pathways there\n");
+    printf("\n[31] a GSSK processing node's legs are positional; here they "
+           "are named\n");
 
-    /* GSSK Phase 7 configures a processing node through its own params block.
-     * This engine puts laws on pathways, so those parameters have nowhere to
-     * land, and a node emitted without them is a storage wearing the name. */
+    /* GSSK Phase 7 configures a processing node through its own params block
+     * and finds its legs by position. This engine names a module's legs by
+     * role, so it will not guess which pathway is which (ADR 0013). */
     g = cJSON_Parse(
         "{\"nodes\":[{\"id\":\"gate\",\"type\":\"interaction\",\"value\":0.0,"
         "            \"params\":{\"k\":0.5}},"
@@ -1534,15 +1490,23 @@ static void test_projection_processing_node_params(void) {
     cJSON_Delete(mop);
     cJSON_Delete(g);
 
-    /* A processing node with no params has no law to lose, so it carries. */
+    /* With no params it used to carry as a plain node -- a storage wearing
+     * the name, which the engine now refuses to load (ADR 0012). Dropped and
+     * named instead. */
     g = cJSON_Parse(
         "{\"nodes\":[{\"id\":\"gate\",\"type\":\"interaction\",\"value\":0.0},"
         "           {\"id\":\"tank\",\"type\":\"storage\",\"value\":1.0}],"
         " \"edges\":[]}");
     if (g) {
         mop = NULL;
-        ok("an unconfigured processing node carries",
-           gia_project(g, &mop, &cov) && cov.nodes_carried == 2);
+        ok("an unconfigured processing node is not carried either",
+           gia_project(g, &mop, &cov) && cov.nodes_carried == 1 &&
+           cov.n_findings == 1 && strstr(cov.finding[0], "wearing the name"));
+        if (mop) {
+            gia_model m;
+            ok("and what is carried loads", gia_model_load(&m, mop));
+            gia_model_free(&m);
+        }
         cJSON_Delete(mop);
         cJSON_Delete(g);
     }
@@ -2269,7 +2233,8 @@ static void test_ordinality_invariant_under_respelling(void) {
     /* One system: a <-> b is a closed loop, and a source feeds a work gate
      * metered by a that delivers into a. Only a and b are on a closed pathway.
      * Before ADR 0014 the module spelling scored 0.75; skipping controls alone
-     * would score 0.50. */
+     * would score 0.50. The pathway spelling this was once compared against no
+     * longer loads (ADR 0012 decision 5), so the module is the one spelling. */
     const char *as_pathway =
         "{\"nodes\":["
         "  {\"id\":\"src\",\"type\":\"source\",\"value\":2.0},"
@@ -2294,29 +2259,16 @@ static void test_ordinality_invariant_under_respelling(void) {
         "  {\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.3},"
         "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2}],"
         " \"simulation_params\":{\"t_val\":1.0}}";
-    cJSON     *rp, *rm;
-    gia_model  mp, mm;
-    double     qp[3], qm[4];
+    cJSON     *rm;
+    gia_model  mm;
 
-    printf("\n[48] where a law is drawn does not change ordinality\n");
-    if (!load_json(&mp, &rp, as_pathway)) { ok("pathway spelling loads", false); return; }
-    if (!load_json(&mm, &rm, as_module))  { ok("module spelling loads", false);
-                                            gia_model_free(&mp); cJSON_Delete(rp); return; }
-
-    /* They are the same system, so establish that first. */
-    ok("pathway spelling solves", gia_network_state(&mp, 1.0, qp, NULL));
-    ok("module spelling solves",  gia_network_state(&mm, 1.0, qm, NULL));
-    close_to("same trajectory: a", qm[2], qp[1], 1e-9);
-    close_to("same trajectory: b", qm[3], qp[2], 1e-9);
-
-    close_to("pathway spelling: 2/3", gia_ordinality(&mp), 2.0 / 3.0, 1e-12);
-    close_to("module spelling: the same 2/3", gia_ordinality(&mm), 2.0 / 3.0, 1e-12);
-    ok("the same closedness",
-       gia_system_is_closed(&mp) == gia_system_is_closed(&mm));
-    ok("the same maximum-ordinality verdict",
-       gia_at_maximum_ordinality(&mp) == gia_at_maximum_ordinality(&mm));
-
-    gia_model_free(&mp); cJSON_Delete(rp);
+    printf("\n[48] a work gate has one spelling, and it keeps its ordinality\n");
+    ok("the pathway spelling no longer loads", !loads(as_pathway));
+    if (!load_json(&mm, &rm, as_module)) { ok("module spelling loads", false); return; }
+    close_to("module spelling: 2/3", gia_ordinality(&mm), 2.0 / 3.0, 1e-12);
+    ok("a read control leaves the system open only through its source",
+       !gia_system_is_closed(&mm));
+    ok("below maximum", !gia_at_maximum_ordinality(&mm));
     gia_model_free(&mm); cJSON_Delete(rm);
 }
 
@@ -2627,27 +2579,6 @@ static void test_emergent_quality_is_a_component(void) {
 
 #define CTL_SIM " \"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1," \
                 "                       \"generative_mode\":false}}"
-
-/* Load, or record the failure and stop: nothing after a failed load may touch
- * the model. */
-static bool load_ok(const char *what, gia_model *m, cJSON *root) {
-    bool good = gia_model_load(m, root);
-    ok(what, good);
-    if (!good) cJSON_Delete(root);
-    return good;
-}
-
-/* Load and free; true when the document is a valid model. */
-static bool loads(const char *json) {
-    cJSON     *root = cJSON_Parse(json);
-    gia_model  m;
-    bool       good;
-    if (!root) return false;
-    good = gia_model_load(&m, root);
-    if (good) gia_model_free(&m);
-    cJSON_Delete(root);
-    return good;
-}
 
 /* Test [44]'s gate, with the control fed by a source of stated transformity.
  * `control` is the control leg's extra fields; `extra` adds edges. */
@@ -2965,9 +2896,10 @@ static void test_drawn_control_closes_no_pathway(void) {
  * migration with nowhere to put them.
  * ------------------------------------------------------------------ */
 
-/* A store `a` feeding `b`, with `c` as the second input, written either as a
- * pathway law or as a work gate with an action. `leak` adds a linear drain on
- * `a` so a subtracting action can cross zero. */
+/* A store `a` feeding `b`, with `c` as the second input, written as a work gate
+ * with an action -- or, to check it is refused, as the pathway law it
+ * replaces. `leak` adds a linear drain on `a` so a subtracting action can cross
+ * zero. */
 static cJSON *action_model(bool module, const char *law, const char *c_node,
                            const char *leak) {
     static char buf[1800];
@@ -3048,8 +2980,7 @@ static void test_action_validation(void) {
 static void test_action_divide(void) {
     cJSON     *root;
     gia_model  m, p;
-    double     q[5], qp[4], t;
-    int        k;
+    double     q[5];
 
     printf("\n[61] divide: F = k Q_energy / max(Q_control, eps)  (Fig. 2.6d)\n");
 
@@ -3060,16 +2991,11 @@ static void test_action_divide(void) {
     /* Q_c held at 2, so F = 0.25 a and a decays exactly. */
     close_to("a(6) = 10 e^(-k t / Q_c)", q[0], 10.0 * exp(-0.25 * 6.0), 1e-9);
     close_to("b takes what a lost", q[2], 10.0 - q[0], 1e-9);
-    {
+    {   /* ADR 0016: once the pathway law is removed, the closed form above
+         * is the check, and the pathway spelling must not load. */
         cJSON *pr = action_model(false, "ratio", C_CONST, "");
-        if (!pr || !gia_model_load(&p, pr)) { ok("pathway form loads", false); return; }
-        for (k = 1; k <= 3; k++) {
-            t = 2.0 * k;
-            gia_network_state(&m, t, q, NULL);
-            gia_network_state(&p, t, qp, NULL);
-            close_to("the module reproduces the ratio pathway", q[0], qp[0], 1e-9);
-        }
-        gia_model_free(&p); cJSON_Delete(pr);
+        ok("the ratio pathway no longer loads", pr && !gia_model_load(&p, pr));
+        cJSON_Delete(pr);
     }
     gia_model_free(&m); cJSON_Delete(root);
 }
@@ -3077,8 +3003,7 @@ static void test_action_divide(void) {
 static void test_action_subtract(void) {
     cJSON     *root;
     gia_model  m, p;
-    double     q[5], qp[4], ts, t, eq = 2.0 / 0.7;
-    int        k;
+    double     q[5], ts, eq = 2.0 / 0.7;
 
     printf("\n[62] subtract: F = max(0, k (Q_energy - Q_control))  (Fig. 2.6e)\n");
 
@@ -3100,14 +3025,8 @@ static void test_action_subtract(void) {
              q[0] + q[2] + q[3], 10.0, 1e-9);
     {
         cJSON *pr = action_model(false, "subtract", C_FOUR, LEAK);
-        if (!pr || !gia_model_load(&p, pr)) { ok("pathway form loads", false); return; }
-        for (k = 1; k <= 3; k++) {
-            t = 2.0 * k;
-            gia_network_state(&m, t, q, NULL);
-            gia_network_state(&p, t, qp, NULL);
-            close_to("the module reproduces the subtract pathway", q[0], qp[0], 1e-7);
-        }
-        gia_model_free(&p); cJSON_Delete(pr);
+        ok("the subtract pathway no longer loads", pr && !gia_model_load(&p, pr));
+        cJSON_Delete(pr);
     }
     gia_model_free(&m); cJSON_Delete(root);
 }
@@ -3166,6 +3085,170 @@ static void test_action_draws_control(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 64-67. Module laws leave pathways (ADR 0012 decision 5)
+ *
+ * Pathways carry Odum SecIII and nothing else: linear, reversible, constant.
+ * The seven laws that happen inside a symbol live on modules, and a model is
+ * migrated by writing the module -- never by the loader quietly turning an
+ * edge law into a gate the author did not draw.
+ * ------------------------------------------------------------------ */
+
+static bool loads_with_law(const char *law) {
+    char buf[900];
+    snprintf(buf, sizeof(buf),
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"c\",\"type\":\"storage\",\"current_level\":1.0},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"%s\","
+        "            \"weight\":0.1,\"control_node\":\"c\"}]," CTL_SIM, law);
+    return loads(buf);
+}
+
+static void test_module_laws_leave_pathways(void) {
+    static const char *gone[] = { "interaction", "limit", "ratio", "subtract",
+                                  "gain", "threshold", "exchange",
+                                  "generative_production", "ordinal_feedback" };
+    static const char *kept[] = { "linear", "reversible", "constant", "inflow",
+                                  "outflow", "flow", "ordinal_ascent",
+                                  "emergent_feedback_loop", "diffusion" };
+    char   what[96];
+    size_t i;
+
+    printf("\n[64] a pathway carries Odum SecIII and nothing else\n");
+    for (i = 0; i < sizeof(gone) / sizeof(gone[0]); i++) {
+        snprintf(what, sizeof(what), "'%s' on a pathway is refused", gone[i]);
+        ok(what, !loads_with_law(gone[i]));
+    }
+    for (i = 0; i < sizeof(kept) / sizeof(kept[0]); i++) {
+        snprintf(what, sizeof(what), "'%s' on a pathway loads", kept[i]);
+        ok(what, loads_with_law(kept[i]));
+    }
+}
+
+static void test_module_type_needs_module(void) {
+    static const char *kinds[] = { "interaction", "gain", "switch",
+                                   "loop_limited", "exchange" };
+    char   buf[700], what[96];
+    size_t i;
+
+    printf("\n[65] a module type is a module, never a stock wearing the name\n");
+    for (i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++) {
+        snprintf(buf, sizeof(buf),
+            "{\"nodes\":["
+            "  {\"id\":\"x\",\"type\":\"%s\",\"value\":1.0},"
+            "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0}],"
+            " \"edges\":[{\"source\":\"x\",\"target\":\"b\","
+            "            \"logic\":\"linear\"}]," CTL_SIM, kinds[i]);
+        snprintf(what, sizeof(what), "'%s' with no module block is refused",
+                 kinds[i]);
+        ok(what, !loads(buf));
+    }
+}
+
+/* Find a node by id in a projected document. */
+static const cJSON *node_by_id(const cJSON *doc, const char *id) {
+    const cJSON *it, *nodes = cJSON_GetObjectItemCaseSensitive(doc, "nodes");
+    cJSON_ArrayForEach(it, nodes) {
+        const cJSON *v = cJSON_GetObjectItemCaseSensitive(it, "id");
+        if (cJSON_IsString(v) && !strcmp(v->valuestring, id)) return it;
+    }
+    return NULL;
+}
+
+static void test_projection_writes_modules(void) {
+    cJSON        *g, *mop = NULL;
+    gia_coverage  cov;
+    gia_model     m;
+    double        q[8];
+    const cJSON  *gate, *mod;
+
+    printf("\n[66] projection: a GSSK edge law becomes a gate, and says so\n");
+
+    /* Test [13]'s ratio and test [15]'s threshold, written as GSSK writes
+     * them: the law on the edge. */
+    g = cJSON_Parse(
+        "{\"nodes\":[{\"id\":\"a\",\"type\":\"storage\",\"value\":10.0},"
+        "           {\"id\":\"b\",\"type\":\"storage\",\"value\":0.0},"
+        "           {\"id\":\"d\",\"type\":\"constant\",\"value\":4.0},"
+        "           {\"id\":\"s\",\"type\":\"storage\",\"value\":10.0},"
+        "           {\"id\":\"t\",\"type\":\"storage\",\"value\":0.0}],"
+        " \"edges\":[{\"id\":\"div\",\"origin\":\"a\",\"target\":\"b\","
+        "            \"logic\":\"ratio\","
+        "            \"params\":{\"k\":2.0,\"control_node\":\"d\"}},"
+        "           {\"id\":\"sw\",\"origin\":\"s\",\"target\":\"t\","
+        "            \"logic\":\"threshold\","
+        "            \"params\":{\"k\":2.0,\"threshold\":6.0}}],"
+        " \"config\":{\"t_end\":4.0}}");
+    if (!g) { ok("parse", false); return; }
+    ok("projects", gia_project(g, &mop, &cov));
+    ok("every edge is carried", cov.edges_carried == cov.edges_total);
+    ok("both gates are declared as added in translation",
+       cov.n_added == 2 &&
+       strstr(cov.added[0], "div") && strstr(cov.added[1], "sw"));
+
+    gate = node_by_id(mop, "div__gate");
+    mod  = gate ? cJSON_GetObjectItemCaseSensitive(gate, "module") : NULL;
+    ok("ratio became an interaction module with action divide",
+       gate && mod &&
+       !strcmp(cJSON_GetObjectItemCaseSensitive(gate, "type")->valuestring,
+               "interaction") &&
+       !strcmp(cJSON_GetObjectItemCaseSensitive(mod, "action")->valuestring,
+               "divide"));
+    gate = node_by_id(mop, "sw__gate");
+    ok("threshold became a switch module",
+       gate && !strcmp(cJSON_GetObjectItemCaseSensitive(gate, "type")->valuestring,
+                       "switch"));
+
+    if (!load_ok("the projection loads", &m, mop)) { cJSON_Delete(g); return; }
+    ok("solves", gia_network_state(&m, 2.0, q, NULL));
+    /* Node order: a b d s t, then the two gates. */
+    close_to("ratio: a(2) = 10 e^-1, as the pathway gave", q[0],
+             10.0 * exp(-1.0), 1e-8);
+    ok("solves past the threshold crossing", gia_network_state(&m, 4.0, q, NULL));
+    close_to("threshold: s is held at 6, as the pathway gave", q[3], 6.0, 1e-4);
+    gia_model_free(&m);
+    cJSON_Delete(mop);
+    cJSON_Delete(g);
+}
+
+static void test_seeds_as_modules(void) {
+    static const char *paths[2] = { "examples/giannantoni/input.json",
+                                    "examples/giannantoni/closed_loop.json" };
+    gia_mode want[2] = { GIA_MODE_GENERATIVE, GIA_MODE_FUNCTIONAL };
+    int      i;
+
+    printf("\n[67] the example seeds draw Odum's work gate\n");
+
+    for (i = 0; i < 2; i++) {
+        char      *text = slurp_file(paths[i]);
+        cJSON     *root = text ? cJSON_Parse(text) : NULL, *out;
+        gia_model  m;
+        int        gate;
+        double     q[8];
+
+        free(text);
+        if (!root) { ok(paths[i], false); continue; }
+        if (!load_ok(paths[i], &m, root)) continue;
+
+        for (gate = 0; gate < m.n_nodes; gate++)
+            if (!strcmp(m.nodes[gate].id, "interaction_1")) break;
+        ok("interaction_1 is a module", gate < m.n_nodes &&
+                                        gia_node_is_module(&m, gate));
+        ok("solves", gia_network_state(&m, m.t_end, q, NULL));
+        ok("the consumer's feedback is dissipated to heat",
+           q[m.n_nodes - 1] > 0.0 && m.nodes[m.n_nodes - 1].kind == GIA_NODE_SINK);
+        out = gia_generate(&m);
+        ok(i == 0 ? "input.json still runs generatively"
+                  : "closed_loop.json still runs functionally",
+           out && gia_validate_mode(root, out) == want[i]);
+        cJSON_Delete(out);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -3185,14 +3268,12 @@ int main(void) {
     test_subtract_law();
     test_threshold_events();
     test_switch_node();
-    test_exchange_law();
     test_emergy();
     test_emergy_feedback();
     test_carriers();
     test_carrier_validation();
     test_carrier_default();
     test_barter();
-    test_exchange_self_payment();
     test_forcing();
     test_forcing_refusals();
     test_edge_rate_forcing();
@@ -3232,6 +3313,10 @@ int main(void) {
     test_action_divide();
     test_action_subtract();
     test_action_draws_control();
+    test_module_laws_leave_pathways();
+    test_module_type_needs_module();
+    test_projection_writes_modules();
+    test_seeds_as_modules();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);
