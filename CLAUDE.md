@@ -34,7 +34,7 @@ containerised toolchains:
 make ci-local              # real GCC + Linux clang
 make test-linux            # real GCC only (Ubuntu 24.04, matches CI)
 make test-wasm-container   # WASM suites with Node from a container
-make dev                   # dev page on :5173, Node + gssk.wasm from the pinned Guix
+make dev                   # dev page on :5173: WASI SDK gssk.wasm, Node from a container
 ```
 
 These need the Apple `container` CLI. `make wasm` itself does not: the pinned
