@@ -6,6 +6,7 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Changed
 ### Removed
 
 - **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
@@ -20,17 +21,20 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed — breaking for JavaScript consumers
 
-- **The WASM build no longer uses Emscripten.** The kernel is compiled by clang for `wasm32-wasip1` against wasi-libc, from the pinned WASI SDK (`make wasm` fetches it into `tools/` and checks its SHA-256, natively on macOS and Linux). **`dist/gssk.js` is now a hand-written, dependency-free ES module** in place of Emscripten's generated factory, and `package.json` declares `"type": "module"`. File names are unchanged.
+- **Breaking for JavaScript consumers — the WASM build no longer uses Emscripten.** The kernel is compiled by clang for `wasm32-wasip1` against wasi-libc, from the pinned WASI SDK (`make wasm` fetches it into `tools/` and checks its SHA-256, natively on macOS and Linux). **`dist/gssk.js` is now a hand-written, dependency-free ES module** in place of Emscripten's generated factory, and `package.json` declares `"type": "module"`. File names are unchanged.
 
   The module keeps the shape callers used: `_GSSK_*` functions, `_malloc`/`_free`, `HEAPU8`/`HEAPU32`/`HEAPF64` and `stringToUTF8`/`UTF8ToString`/`lengthBytesUTF8`. Migration is the import — `import createGSSK from './gssk.js'` — and dropping `ccall`, `cwrap`, `allocate` and `ALLOC_NORMAL`, which nothing in this repository used. `createGSSK({ wasm, print, printErr })` takes the module's location or bytes. A host import the loader does not provide is refused at load, by name.
 
   **Why:** an archived kernel must stay runnable after today's toolchains are gone. What ships is now a standard `.wasm` and under 200 readable lines of JavaScript, and the same sources build bit-for-bit identically under Guix on aarch64 and x86_64 (`spike/guix`, PR #23).
 
+- **Zenodo is disabled until this repository has its own record.** The DOI in the README badge, the citation section and `CITATION.cff` was `energese-project/GSSK`'s, not this repository's; it is commented out (marked `ZENODO:`) to be restored with the new record's DOI, and `.zenodo.json` is parked as `.zenodo.json.disabled`. Whether a release deposits is set by the repository's toggle in Zenodo's GitHub settings, not by these files.
+- **The Guix toolchain pack is no longer attached to releases.** At ~450 MB it is produced on demand instead (`guix.yml`, run by hand with `pack-toolchain`). Releases still ship the Guix-built `gssk.wasm`, its hashes and the recipe.
+
 ### Added
 
 - **`make dev`: run any example model in the browser, on the release toolchain.** Vite serves `dev/`, a page that runs `examples/*.json` through `dist/gssk.js` and charts and tabulates the result, from a long-lived container hosting Guix. Node comes from the pinned Guix (`guix/dev.scm`) and `gssk.wasm` from the release recipe (`make wasm-guix`), so the page runs the bytes a release ships; the host needs only the `container` CLI. This is the loader's first browser test: headless Chromium ran all 23 valid examples, and `invalid_model.json` showed the kernel's own error message. `package-lock.json` is now committed, pinning npm packages by hash.
 
-- **Tagged releases ship a `gssk.wasm` built by Guix, reproducible bit for bit, with the toolchain that built it.** [`guix/`](https://github.com/energese-project/GSSK-Giannantoni/blob/main/guix/README.md) pins Guix (`channels.scm`) and builds wasi-libc, wasm32 compiler-rt and the kernel from pinned source (`gssk.scm`), through the Makefile's own `make wasm` and `make test-wasm`. On each version tag CI builds it on x86_64 and aarch64, requires identical bytes and a passing `guix build --check`, and releases that `gssk.wasm` with `gssk-guix.sha256`, the recipe, and `gssk-toolchain-x86_64-linux.tar.xz` — clang 21, wasi-libc, make and Node, relocatable so `make wasm-toolchain TC=…` rebuilds the identical file on any x86_64 Linux without Guix. Verified before adoption: unpacked in a Debian container with no Guix, the toolchain rebuilt the same bytes and passed all 37 WASM tests. Rolling `latest` keeps the faster WASI SDK build.
+- **Tagged releases ship a `gssk.wasm` built by Guix, reproducible bit for bit.** [`guix/`](https://github.com/energese-project/GSSK-Giannantoni/blob/main/guix/README.md) pins Guix (`channels.scm`) and builds wasi-libc, wasm32 compiler-rt and the kernel from pinned source (`gssk.scm`), through the Makefile's own `make wasm` and `make test-wasm`. On each version tag CI builds it on x86_64 and aarch64, requires identical bytes and a passing `guix build --check`, and releases that `gssk.wasm` with `gssk-guix.sha256` and the recipe. On demand (`pack-toolchain`), it also packs the toolchain — clang 21, wasi-libc, make and Node, relocatable so `make wasm-toolchain TC=…` rebuilds the identical file on any x86_64 Linux without Guix; at ~450 MB it is not attached to releases for now. Verified before adoption: unpacked in a Debian container with no Guix, the toolchain rebuilt the same bytes and passed all 37 WASM tests. Rolling `latest` keeps the faster WASI SDK build.
 
   The Makefile's WASM toolchain is now overridable (`WASM_CC`, `WASM_SYSROOT`, `WASM_TOOLCHAIN_FLAGS`, `WASM_TOOLCHAIN_LIBS`), so one rule defines the build for the SDK, Guix and the archived toolchain alike.
 

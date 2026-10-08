@@ -758,8 +758,8 @@ wasm: dist $(filter $(WASI_SDK)/bin/clang,$(WASM_CC))
 
 wasi-sdk: $(WASI_SDK)/bin/clang
 
-# Rebuild gssk.wasm with the toolchain archived beside a release
-# (gssk-toolchain-x86_64-linux.tar.xz), on any x86_64 Linux, without Guix:
+# Rebuild gssk.wasm with a packed toolchain (gssk-toolchain-x86_64-linux.tar.xz,
+# from guix.yml run with pack-toolchain), on any x86_64 Linux, without Guix:
 #   mkdir tc && tar xf gssk-toolchain-x86_64-linux.tar.xz -C tc
 #   tc/bin/make wasm-toolchain TC=$$PWD/tc && sha256sum dist/gssk.wasm
 # The result must match the release's gssk-guix.sha256. See guix/README.md.

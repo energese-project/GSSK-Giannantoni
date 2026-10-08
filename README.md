@@ -1,6 +1,8 @@
 # GSSK-Giannantoni
 
+<!-- ZENODO: disabled until this repository has its own Zenodo record. This DOI is energese-project/GSSK's.
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22339312.svg)](https://doi.org/10.5281/zenodo.22339312)
+-->
 [![CI](https://github.com/energese-project/GSSK-Giannantoni/actions/workflows/deploy.yml/badge.svg)](https://github.com/energese-project/GSSK-Giannantoni/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Language: C99](https://img.shields.io/badge/language-C99-00599C.svg)](include/gssk.h)
@@ -139,18 +141,26 @@ The script bumps `GSK_VERSION_*` in `include/gssk.h`, updates `docs/CHANGELOG.md
 
 ## Citation
 
-If you use GSSK in published work, please cite the archived release. Citation metadata for this repository is in [CITATION.cff](CITATION.cff); GitHub renders it under **Cite this repository**, and Zenodo reads it when minting each deposit.
+If you use GSSK in published work, please cite it. Citation metadata for this repository is in [CITATION.cff](CITATION.cff); GitHub renders it under **Cite this repository**.
+
+<!-- ZENODO: disabled until this repository has its own Zenodo record; the DOI
+below is energese-project/GSSK's. Restore with the new record's DOI.
+
+Zenodo reads CITATION.cff when minting each deposit.
 
 The badge above resolves to the **concept DOI** — [10.5281/zenodo.22339312](https://doi.org/10.5281/zenodo.22339312) — which always redirects to the most recent release. Cite that when you mean "GSSK" as an ongoing work. To pin a result to the exact code that produced it, cite the **version DOI** instead: every release is minted its own, and they are listed under *Versions* on the [Zenodo record](https://doi.org/10.5281/zenodo.22339312). Reproducibility claims should use the version DOI, because the concept DOI moves with each release.
+
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.22339312},
+  url       = {https://doi.org/10.5281/zenodo.22339312}
+-->
 
 ```bibtex
 @software{maud_gssk,
   author    = {Maud, Sholto},
   title     = {{GSSK} --- General Systems Simulation Kernel},
   year      = {2026},
-  publisher = {Zenodo},
-  doi       = {10.5281/zenodo.22339312},
-  url       = {https://doi.org/10.5281/zenodo.22339312}
+  url       = {https://github.com/energese-project/GSSK-Giannantoni}
 }
 ```
 

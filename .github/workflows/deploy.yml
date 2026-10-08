@@ -413,15 +413,14 @@ jobs:
   # Guix release build — version tags only.
   #
   # A tagged release ships the gssk.wasm Guix built, not the WASI SDK's: that
-  # is the one reproducible bit for bit from guix/ on x86_64 and aarch64 alike,
-  # and the toolchain that built it ships beside it. See guix.yml and
-  # guix/README.md. Rolling `latest` keeps the faster SDK build.
+  # is the one reproducible bit for bit from guix/ on x86_64 and aarch64 alike.
+  # See guix.yml and guix/README.md. Rolling `latest` keeps the faster SDK build.
+  # The toolchain pack (~450 MB) is not released for now; guix.yml can still
+  # produce it on demand (workflow_dispatch, pack-toolchain).
   # ────────────────────────────────────────────────────────────
   guix:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/guix.yml
-    with:
-      pack-toolchain: true
 
   release:
     needs: [ build-native, quality, wasm, guix ]
@@ -449,27 +448,20 @@ jobs:
       - name: Build WASM
         run: make wasm
 
-      # On a tag, replace the SDK build with Guix's, and add the toolchain
-      # and the recipe that reproduce it.
+      # On a tag, replace the SDK build with Guix's, and add the recipe
+      # that reproduces it.
       - name: Take the Guix build (tags)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/download-artifact@v4
         with:
           name: gssk-guix
           path: guix-out
-      - name: Take the Guix toolchain (tags)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/download-artifact@v4
-        with:
-          name: gssk-toolchain
-          path: guix-toolchain
       - name: Use the Guix artefacts (tags)
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           (cd guix-out && sha256sum -c SHA256SUMS)
           cp guix-out/gssk.wasm guix-out/gssk.js guix-out/gssk.d.ts dist/
           cp guix-out/SHA256SUMS dist/gssk-guix.sha256
-          cp guix-toolchain/gssk-toolchain-x86_64-linux.tar.xz dist/
           cp guix/channels.scm dist/guix-channels.scm
           cp guix/gssk.scm dist/guix-gssk.scm
 
@@ -513,7 +505,7 @@ jobs:
               [ -f "$f" ] || { echo "missing artifact: $f" >&2; exit 1; }
               printf '| `%s` | `%s` |\n' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"
             done
-            for f in dist/gssk-toolchain-x86_64-linux.tar.xz dist/guix-channels.scm dist/guix-gssk.scm; do
+            for f in dist/guix-channels.scm dist/guix-gssk.scm; do
               if [ -f "$f" ]; then printf '| `%s` | `%s` |\n' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"; fi
             done
             echo 'DIGEST_TABLE_EOF'
@@ -534,9 +526,7 @@ jobs:
             `gssk.wasm` here was built by Guix and is reproducible bit for bit:
             `guix-channels.scm` pins Guix and `guix-gssk.scm` builds wasi-libc,
             compiler-rt and the kernel from pinned source. CI rebuilt it on
-            x86_64 and aarch64 and got identical bytes. The toolchain that built
-            it, `gssk-toolchain-x86_64-linux.tar.xz`, runs on any x86_64 Linux
-            without Guix. See `guix/README.md`.
+            x86_64 and aarch64 and got identical bytes. See `guix/README.md`.
 
             ${{ steps.digests.outputs.table }}
 
@@ -550,7 +540,6 @@ jobs:
             dist/gssk.d.ts
             dist/gssk.schema.json
             dist/gssk-guix.sha256
-            dist/gssk-toolchain-x86_64-linux.tar.xz
             dist/guix-channels.scm
             dist/guix-gssk.scm
           draft: false

@@ -13,7 +13,8 @@ name: Guix release build
 #
 # Runs on a version tag (called from deploy.yml, which then releases this
 # gssk.wasm), on PRs that touch the recipe, monthly so a recipe that has
-# stopped building is found before a release needs it, and on demand.
+# stopped building is found before a release needs it, and on demand. The
+# toolchain pack is opt-in (pack-toolchain) and is not released for now.
 
 on:
   pull_request:
@@ -26,6 +27,11 @@ on:
   schedule:
     - cron: '17 3 1 * *'
   workflow_dispatch:
+    inputs:
+      pack-toolchain:
+        description: Also pack the toolchain as a relocatable tarball (~450 MB artifact)
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       pack-toolchain:
