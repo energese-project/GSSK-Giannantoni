@@ -185,32 +185,34 @@ presented as a simulator, which it was not.
 
 **Now implemented.** The exponential form for a network is the matrix one --
 `{r}_s = e^{α(t)}`, so `Q(t) = exp(A·t)·Q(0)` where `A` is assembled from the
-pathway laws below. The matrix is augmented to `(n+1)×(n+1)` so that pathways
+laws below. The matrix is augmented to `(n+1)×(n+1)` so that pathways
 delivering a rate rather than a conductance stay exact rather than being
 approximated away.
 
 | Odum law | GSSK logic | In `engine.c` |
 |---|---|---|
-| §III barbed, `F = k·Q_origin` | `linear` | ✅ |
-| §III barb-less, `F = k·(Q_a − Q_b)` | `reversible` | ✅ four matrix entries |
-| §X work gate, `F = k·Q_a·Q_ctl` | `interaction` | ✅ linearised; duet exact, n-et open |
-| §IX amplifier, `F = k·Q_control` | `gain` | ✅ entry in the control's column |
-| §XIII receptor, Michaelis-Menten | `limit` | ✅ `g = k·C/(C+Q)` |
-| §XI switch, `F = k` above threshold | `threshold` | ✅ **piecewise, Illinois event location** |
-| §XV transactor, `J_e = P·J_$` | `exchange` | ✅ counter-flow at `F/P` |
-| Fig 2.6d divisor (ADR 0002) | `ratio` | ✅ `g = k / max(Q_c, ε)` |
-| Fig 2.6e subtracting (ADR 0008) | `subtract` | ✅ clamped, clamp is an event |
-| fixed rate | `constant` | ✅ affine, via the augmented column |
+| §III barbed, `F = k·Q_origin` | `linear` | ✅ pathway |
+| §III barb-less, `F = k·(Q_a − Q_b)` | `reversible` | ✅ pathway, four matrix entries |
+| fixed rate | `constant` | ✅ pathway, affine via the augmented column |
+| §X work gate, `F = k·Q_a·Q_ctl` | `interaction` | ✅ `interaction` module; linearised, duet exact, n-et open |
+| §IX amplifier, `F = k·Q_control` | `gain` | ✅ `gain` module, entry in the control's column |
+| §XIII receptor, Michaelis-Menten | `limit` | ✅ `loop_limited` module, `g = k·C/(C+Q)` |
+| §XI switch, `F = k` above threshold | `threshold` | ✅ `switch` module, **piecewise, Illinois event location** |
+| §XV transactor, `J_e = P·J_$` | `exchange` | ✅ `exchange` module, four named legs, counter-flow at `F/P` |
+| Fig 2.6d divisor (ADR 0002) | `ratio` | ✅ `interaction` module, `action: divide` (ADR 0016) |
+| Fig 2.6e subtracting (ADR 0008) | `subtract` | ✅ `interaction` module, `action: subtract`; the clamp is an event |
 
-**Module-hosted laws are implemented** (ADR 0012), alongside the pathway laws
-rather than replacing them — migrating the models and removing the seven
-pathway laws are separate steps, so nothing breaks at once. A component becomes
-a module by declaring a `module` block, which keeps it opt-in: being a work gate
-by type is not enough, because models written before ADR 0012 put the law on the
-pathway and still work.
+**Module laws live on modules only** ([ADR 0012](adr/0012-where-a-law-lives.md)
+decision 5). A pathway carries Odum §III and nothing else; the other seven laws
+on a pathway are load errors naming the module to write, and a module type
+without its `module` block is refused. Before the pathway spellings were removed,
+each of the seven was checked against its module form at the last commit that
+had both (`4ebedf0`): the trajectories agreed exactly — zero difference at
+t = 0.5, 1, 2 and 4 — with the same switching events.
 
-Each pathway entering a module declares `role`: `"energy"` for the input that is
-consumed, `"control"` for one that is read. **Position is never consulted**, and
+Each pathway entering a module declares `role`: `"energy"` for the input whose
+quantity becomes the product, `"control"` for one drawn at its `use_ratio` and
+dissipated ([ADR 0017](adr/0017-what-a-control-input-is.md)). **Position is never consulted**, and
 there is a test asserting the property directly — the same model with its
 pathways listed in three different orders produces byte-identical output. That
 test was verified to fail when the energy input is chosen positionally, the way
@@ -219,6 +221,8 @@ GSSK chooses it.
 | module | roles required | law |
 |---|---|---|
 | `interaction` (§X) | 1 energy, any controls | `F = k · Q_energy · Π Q_control` |
+| `interaction`, `action: divide` (Fig 2.6d) | 1 energy, 1 control | `F = k · Q_energy / max(Q_control, ε)` |
+| `interaction`, `action: subtract` (Fig 2.6e) | 1 energy, 1 control | `F = max(0, k · (Q_energy − Q_control))` |
 | `gain` (§IX) | 1 energy, 1 control | `F = k · Q_control`, drawn from energy |
 | `switch` (§XI) | 1 energy, 1 control | fixed rate while the sensor is above threshold; the crossing is located |
 | `loop_limited` (§XIII) | 1 energy, 0 controls | `F = k · Q · C / (C + Q)` |
@@ -269,9 +273,10 @@ is out of both the count and the total; a control leg is drawn at its
 ([ADR 0017](adr/0017-what-a-control-input-is.md)), so it closes no loop through
 the product, and opens the boundary only when it is drawn from a source; and a transactor
 passes goods on as goods and counter-flow as counter-flow. The property this
-buys is the one the module migration needs: one system written with a law on a
-pathway and written as a module has the same ordinality, the same closedness,
-and so the same generative verdict.
+bought is the one the module migration needed: one system written with a law on
+a pathway and written as a module had the same ordinality, the same closedness,
+and so the same generative verdict — which is what made removing the pathway
+spelling safe.
 
 **The generative step keeps its promise to raise ordinality**
 ([ADR 0015](adr/0015-what-the-emergent-quality-closes.md)). It wired a single
@@ -484,6 +489,19 @@ models are blocked by one thing.
 That rule matters more than the percentage. An earlier revision of the
 projection dropped node `params` silently and scored these same models at
 **97.2%** — a figure that was higher, and wrong.
+
+*Update, after the module migration (PR #31).* The projection now writes the
+gate GSSK draws implicitly: a GSSK edge `interaction`, `ratio`, `subtract`,
+`limit` or `threshold` becomes a named module, listed in the report under
+*Added in translation*, and an n-ary `interaction` edge is carried. Two
+over-counts were removed at the same time: an edge touching a dropped node was
+emitted and counted as carried, and a GSSK processing node with no `params` was
+carried as a storage wearing the name. Across the 24 models in `examples/`,
+**327 of 415 elements (78.8%)** are now carried, with 35 gates added in
+translation. What remains is mostly one thing: 10 GSSK processing nodes find
+their legs by position, which this engine will not guess (ADR 0013), and the 67
+pathways touching them go with them. Endogenous prices (7) and composites (4)
+are the rest.
 
 **Odum's mathematics can feed Giannantoni's calculus, module by module, with the
 limits tabulated in §2. Giannantoni's framework cannot yet carry Odum's
