@@ -4,6 +4,7 @@
 - **Date**: 2026-09-11
 - **Task**: `module-role-schema`
 - **Supersedes**: nothing
+- **Amended by**: [ADR 0017](0017-what-a-control-input-is.md), which replaces the definition of `control` in decision 2: a control is drawn at `use_ratio · F` and dissipated, not read and left undepleted
 - **Depends on**: [ADR 0012](0012-where-a-law-lives.md) — module laws leave pathways
 
 ## Context

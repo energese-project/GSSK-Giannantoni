@@ -141,6 +141,18 @@ static void report_model(gia_model *m) {
     printf("\n  ordinality        %.3f  (%s)\n", ordinality,
            ordinality >= 1.0 ? "at maximum" : "below maximum");
 
+    /* ADR 0017 decision 4: a control at use_ratio 0 is drawn as a pathway and
+     * carries nothing, so its energy and its emergy are left out. That is
+     * allowed -- a price is not dissipated -- but it is never silent. */
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        if (e->role != GIA_ROLE_CONTROL || e->use_ratio > 0.0) continue;
+        if (e->from < 0 || e->to < 0) continue;
+        printf("  control neglected %s -> %s  (use_ratio 0: read only, its "
+               "energy and emergy left out)\n",
+               m->nodes[e->from].id, m->nodes[e->to].id);
+    }
+
     printf("\n  component            kind          phi degree   calculi\n");
     for (i = 0; i < m->n_nodes; i++) {
         const gia_node *nd = &m->nodes[i];

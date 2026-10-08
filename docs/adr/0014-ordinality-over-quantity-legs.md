@@ -4,6 +4,7 @@
 - **Date**: 2026-09-13
 - **Task**: `adr-0014-ordinality-over-quantity`
 - **Supersedes**: nothing
+- **Amended by**: [ADR 0017](0017-what-a-control-input-is.md) — a drawn control passes through its module to the `used` leg only, and one drawn from a source or a constant opens the boundary (decision 3)
 - **Depends on**: [ADR 0012](0012-where-a-law-lives.md) — where a law lives;
   [ADR 0013](0013-module-roles-not-position.md) — a module's inputs are named by role
 

@@ -6,18 +6,11 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
-### Changed
-### Removed
+### Changed — breaking for Giannantoni-engine models
 
-- **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
+- **A module's control input is a flow of energy, and its emergy reaches the product** ([ADR 0017](adr/0017-what-a-control-input-is.md)). A control leg used to be read and never drawn, so it carried no flow and the emergy pass never saw it: a work gate with a transformity-1000 control gave its product transformity 1, the same as a transformity-1 control, where Odum's Fig. 2.6(b) draws the product "moderate". A control leg now states a **required** `use_ratio`, draws `use_ratio · F` from its source, and dissipates it on a new `used` leg leaving the module, one per carrier, to a `sink` of the control's carrier. Its emergy goes into the product and the `used` leg carries none onward: the measured gate now gives transformity 11 (`1 + 0.01 · 1000`), between its two inputs. `use_ratio: 0` keeps the old read-only behaviour, which is right for a price, and the run report names every such leg.
 
-### Fixed
-
-- **`make test-linux` and `make test-linux-clang` run what CI runs.** Each spelled out its own suite list, and both had drifted: gcc was missing `test-limit-logic`, `test-reversible`, `test-node-type-enum`, `test-edge-flows`, `test-giannantoni`, `check-version` and `test-schema`; clang ran only `test` and `test-advanced`. They now share one list, `CI_TESTS`, so `make ci-local` is evidence of what it claims.
-
-### Changed
-
-- **Daily work no longer waits on Guix.** `make dev` builds `gssk.wasm` natively with the WASI SDK and runs Vite in the `node:22-slim` container `make test-wasm-container` already uses: seconds, not a Guix fetch. The Guix-backed page is `make dev-guix`. The Guix CI build (`guix.yml`) no longer runs on every PR that edits the `Makefile`, which cost 22–27 minutes per PR; it runs on `guix/` changes, monthly, on demand, and on every version tag, where it still gates the release.
+  Load refuses a control with no `use_ratio`, or a negative or non-numeric one; `use_ratio` anywhere but a control leg; a drawn control with no `used` leg for its carrier; and a `used` leg that does not end at a sink, duplicates another's carrier, or has nothing to carry. A control drawn from a source or a constant now makes the system open, and the cycle scan walks a drawn control through its module to the `used` leg only, so no ordinality verdict changes. Every existing control leg in the test suite was migrated to `use_ratio: 0` and passes unchanged; the schema v5 draft is updated to match, which closes its open question on whether a control is consumed.
 
 ### Changed — breaking for JavaScript consumers
 
@@ -27,10 +20,17 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
   **Why:** an archived kernel must stay runnable after today's toolchains are gone. What ships is now a standard `.wasm` and under 200 readable lines of JavaScript, and the same sources build bit-for-bit identically under Guix on aarch64 and x86_64 (`spike/guix`, PR #23).
 
+### Changed
+
+- **Daily work no longer waits on Guix.** `make dev` builds `gssk.wasm` natively with the WASI SDK and runs Vite in the `node:22-slim` container `make test-wasm-container` already uses: seconds, not a Guix fetch. The Guix-backed page is `make dev-guix`. The Guix CI build (`guix.yml`) no longer runs on every PR that edits the `Makefile`, which cost 22–27 minutes per PR; it runs on `guix/` changes, monthly, on demand, and on every version tag, where it still gates the release.
+
 - **Zenodo is disabled until this repository has its own record.** The DOI in the README badge, the citation section and `CITATION.cff` was `energese-project/GSSK`'s, not this repository's; it is commented out (marked `ZENODO:`) to be restored with the new record's DOI, and `.zenodo.json` is parked as `.zenodo.json.disabled`. Whether a release deposits is set by the repository's toggle in Zenodo's GitHub settings, not by these files.
+
 - **The Guix toolchain pack is no longer attached to releases.** At ~450 MB it is produced on demand instead (`guix.yml`, run by hand with `pack-toolchain`). Releases still ship the Guix-built `gssk.wasm`, its hashes and the recipe.
 
 ### Added
+
+- **Divide and subtract are actions of the interaction module** ([ADR 0016](adr/0016-interaction-actions.md)), so Odum's Fig. 2.6(d) and (e) can be written as modules and not only as the `ratio` and `subtract` pathway laws ADR 0012 is retiring. A work gate's `module` block takes `action`: `multiply` (the default, so every existing gate is unchanged), `divide` (`F = k · Q_energy / max(Q_control, ε)`) or `subtract` (`F = max(0, k · (Q_energy − Q_control))`). Both new actions take exactly one control; an unknown action, a non-string one, or `action` on any module but an interaction is a load error. The subtracting action's crossing is located as an event, as a switch's is, so each side is solved exactly. Tests check each module form against its closed form and against the pathway law it replaces, and that its control is drawn under ADR 0017 — including that a clamped subtract draws nothing.
 
 - **`make dev`: run any example model in the browser, on the release toolchain.** Vite serves `dev/`, a page that runs `examples/*.json` through `dist/gssk.js` and charts and tabulates the result, from a long-lived container hosting Guix. Node comes from the pinned Guix (`guix/dev.scm`) and `gssk.wasm` from the release recipe (`make wasm-guix`), so the page runs the bytes a release ships; the host needs only the `container` CLI. This is the loader's first browser test: headless Chromium ran all 23 valid examples, and `invalid_model.json` showed the kernel's own error message. `package-lock.json` is now committed, pinning npm packages by hash.
 
@@ -46,7 +46,13 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
   **A module holds no carrier**, being a hyperedge drawn as a symbol rather than a stock, so it contributes no carrier class and is exempt from the pairwise cross-carrier check on pathways. Which of its legs must agree is the module's own rule, which also lifts a restriction that was never intended: a work gate metered by a price or a population is an ordinary model, and the pairwise check refused it.
 
+### Removed
+
+- **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
+
 ### Fixed
+
+- **`make test-linux` and `make test-linux-clang` run what CI runs.** Each spelled out its own suite list, and both had drifted: gcc was missing `test-limit-logic`, `test-reversible`, `test-node-type-enum`, `test-edge-flows`, `test-giannantoni`, `check-version` and `test-schema`; clang ran only `test` and `test-advanced`. They now share one list, `CI_TESTS`, so `make ci-local` is evidence of what it claims.
 
 - **The MOP ordinal step could move a system away from maximum ordinality, and never stop.** [ADR 0015](adr/0015-what-the-emergent-quality-closes.md). It wired `hub → E → open`, which closes `open` only if `open` already reaches the hub; for a dead end it closed nothing and added `E` as a new open component, so `a ⇄ b, a → c` went 0.667 → 0.500 → 0.400 → … while printing "closed the loop". Four of five measured models never terminated. It also chose what to close by array order.
 

@@ -1,6 +1,6 @@
 # ADR 0017 — A control input is a flow of energy, and its emergy reaches the product
 
-- **Status**: proposed
+- **Status**: accepted, implemented (task `control-use-ratio`)
 - **Date**: 2026-09-17
 - **Task**: `control-input-consumed`
 - **Supersedes**: the definition of `control` in [ADR 0013](0013-module-roles-not-position.md) decision 2
