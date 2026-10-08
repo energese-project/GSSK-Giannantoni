@@ -3106,7 +3106,44 @@ static bool loads_with_law(const char *law) {
     return loads(buf);
 }
 
+/* Load with `law` on a pathway and capture what the loader wrote to stderr,
+ * so a test can check the message a modeller actually sees -- not just that
+ * the load failed. */
+static bool load_error(const char *law, char *msg, size_t n) {
+    const char *path = "tests/results/gia_load_error.txt";
+    FILE       *f;
+    size_t      got;
+    int         saved;
+    bool        loaded;
+
+    msg[0] = '\0';
+    fflush(stderr);
+    saved = dup(fileno(stderr));
+    if (saved < 0 || !freopen(path, "w", stderr)) return false;
+    loaded = loads_with_law(law);
+    fflush(stderr);
+    dup2(saved, fileno(stderr));
+    close(saved);
+    f = fopen(path, "r");
+    if (!f) return false;
+    got = fread(msg, 1, n - 1, f);
+    msg[got] = '\0';
+    fclose(f);
+    return !loaded;
+}
+
 static void test_module_laws_leave_pathways(void) {
+    /* Each removed law, and the module its error must name. */
+    static const char *moved[][2] = {
+        { "interaction",           "`interaction` module" },
+        { "limit",                 "`loop_limited` module" },
+        { "ratio",                 "action divide" },
+        { "subtract",              "action subtract" },
+        { "gain",                  "`gain` module" },
+        { "threshold",             "`switch` module" },
+        { "exchange",              "`exchange` module" },
+        { "generative_production", "`interaction` module" },
+        { "ordinal_feedback",      "`interaction` module" } };
     static const char *gone[] = { "interaction", "limit", "ratio", "subtract",
                                   "gain", "threshold", "exchange",
                                   "generative_production", "ordinal_feedback" };
@@ -3124,6 +3161,16 @@ static void test_module_laws_leave_pathways(void) {
     for (i = 0; i < sizeof(kept) / sizeof(kept[0]); i++) {
         snprintf(what, sizeof(what), "'%s' on a pathway loads", kept[i]);
         ok(what, loads_with_law(kept[i]));
+    }
+
+    /* A refusal is only useful if it says what to write instead. */
+    for (i = 0; i < sizeof(moved) / sizeof(moved[0]); i++) {
+        char msg[512];
+        bool refused = load_error(moved[i][0], msg, sizeof(msg));
+        snprintf(what, sizeof(what), "'%s': the error names %s",
+                 moved[i][0], moved[i][1]);
+        ok(what, refused && strstr(msg, moved[i][1]) != NULL &&
+                 strstr(msg, "ADR 0012") != NULL);
     }
 }
 
