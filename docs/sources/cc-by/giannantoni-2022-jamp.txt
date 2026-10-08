@@ -1,0 +1,2204 @@
+                                                                   Journal of Applied Mathematics and Physics, 2022, 10, 2649-2689
+                                                                                               https://www.scirp.org/journal/jamp
+                                                                                                           ISSN Online: 2327-4379
+                                                                                                             ISSN Print: 2327-4352
+
+
+
+
+The Maximum Ordinality Principle (MOP) and
+Its Formal Language, Namely the “Incipient”
+Differential Calculus (IDC), Open, and at the
+Same Time Offer, A Radically New Perspective
+to Modern Science
+
+Corrado Giannantoni
+
+Ente Nazionale per le Energie Alternative, Rome, Italy
+
+
+
+
+How to cite this paper: Giannantoni, C.        Abstract
+(2022) The Maximum Ordinality Principle
+(MOP) and Its Formal Language, Namely          The aim of the paper, as explicitly indicated by its title, is to show that The
+the “Incipient” Differential Calculus (IDC),   Maximum Ordinality Principle (MOP) and its Formal Language, namely The
+Open, and at the Same Time Offer, A Rad-       “Incipient” Differential Calculus (IDC), open, and at the same time offer, a
+ically New Perspective to Modern Science.
+Journal of Applied Mathematics and Phys-       Radically New Perspective to Modern Science. The methodology adopted, in
+ics, 10, 2649-2689.                            this respect, is articulated in two parts: 1) firstly, by recalling the general cha-
+https://doi.org/10.4236/jamp.2022.109178       racteristics of the Self-Organizing Systems, whose behavior is described by
+                                               the Maximum Ordinality Principle and, at the same time, the reasons for the
+Received: August 3, 2022
+Accepted: September 11, 2022
+                                               introduction of a different Formal Language termed as IDC (“Incipient” Dif-
+Published: September 14, 2022                  ferential Calculus); 2) afterwards, by comparing the specific properties of the
+                                               MOP and IDC, and the Fundamental Differences they introduce in describ-
+Copyright © 2022 by author(s) and
+                                               ing the surrounding world, with respect to any Scientific Discipline based on
+Scientific Research Publishing Inc.
+This work is licensed under the Creative
+                                               TDC. Self-Organizing Systems, in fact, always show an unexpected “excess”
+Commons Attribution International              with respect to their phenomenological premises. An “excess” can be termed
+License (CC BY 4.0).                           as Quality (with a capital Q) because it is not a simple “property” of a given
+http://creativecommons.org/licenses/by/4.0/
+                                               phenomenon. In fact, it is never reducible to the usual categories of the Tra-
+                Open Access
+                                               ditional Science: efficient causality, logical necessity, functional relationships.
+                                               Consequently, the description of such an “Emerging Quality” requires new
+                                               mental categories (Generative Causality, Adherent Logic, Ordinal Relation-
+                                               ships) and, correspondingly, a new Formal Language, termed IDC. The result
+                                               of such a comparison is that the New Scientific Perspective, in spite of the
+                                               different ways of describing Physical, Biological and Human System, always
+                                               remains, by itself, a “com-possible” option with respect to the Traditional
+                                               one. The two Perspectives, in fact, are not in contrast between them. They
+
+
+
+DOI: 10.4236/jamp.2022.109178          Sep. 14, 2022             2649                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+
+                                  simply “co-exist”, because of the absence of Perfect Induction in their cor-
+                                  responding Logics. However, in spite of the fact that the two Perspectives are
+                                  “com-possible” in principle, their differences become significantly “marked”
+                                  at the operative level, as shown by the several study cases, analyzed in the
+                                  second part of the Paper, in the light of a General Methodology for Strategic
+                                  Decisions based on both MOP and IDC. The conclusions thus would (appar-
+                                  ently) be that TDC and IDC can be operatively adopted only separately (or, at
+                                  the most, both “in parallel”) in order to research for the optimal solutions,
+                                  according to their respective operative validity. Without forgetting, however,
+                                  that in all cases: 1) TDC “reflects” the presuppositions of the Traditional
+                                  Scientific Approach, so that, by itself, it is “self-referential”; 2) IDC, vice versa,
+                                  “reflects” the presuppositions of the New Scientific Approach, so that, by itself,
+                                  it is “hetero-referential”. In reality, the paper also shows that there exists an ul-
+                                  terior possibility, which represents an Over-Conclusion. In fact, in adherence
+                                  to the General Methodology for Strategic Decisions presented in the paper,
+                                  TDC and IDC can be “seen” as generating a Unique Feed-Back Logical
+                                  Process. Like “Two Brothers”, that cooperate between them. Consequently,
+                                  and surprisingly, TDC and IDC “reveal” that, in the context of the abovemen-
+                                  tioned Logical Structure, they are “nothing but” a unique “casket” of “precious
+                                  pearls”.
+
+                                  Keywords
+                                  IDC, TDC, Theoretical Com-Possibility, Operative In-Equivalence, Harmonious
+                                  Over-Ordinal Com-Possibility
+
+
+
+                                1. Introduction
+                                In order to show the various aspects anticipated in the Abstract, we will first
+                                present the Fundamental Characteristics of the Traditional Scientific Approach
+                                and, in parallel, those pertaining to the New Scientific Approach, based on both
+                                the Maximum Ordinality Principle (MOP) and the correlative “Incipient” Diffe-
+                                rential Calculus (IDC), which, as already anticipated, originate from the analysis
+                                of Self-Organizing Systems.
+
+                                2. Fundamental Characteristics of the Two Scientific
+                                   Approaches
+                                These characteristics, which will be illustrated and analyzed in more detail in the
+                                contest of the paper, are here synthetically shown, in parallel, in Table 1. A syn-
+                                optic picture that, at the same time, represents both the structure and the syn-
+                                thesis of the paper.
+
+                                2.1. Fundamental Characteristics of the Traditional Scientific
+                                     Approach
+                                Modern Science is characterized by a persistent and progressively ascendancy
+
+
+DOI: 10.4236/jamp.2022.109178                          2650                 Journal of Applied Mathematics and Physics
+                                                                                                           C. Giannantoni
+
+
+                          Table 1. Synoptic comparison between the fundamental characteristics of the two Scientific Ap-
+                          proaches.
+
+
+
+
+                                    toward ever more general Physical Laws and Principles.
+                                      However, before any formulation of a single hypothesis or a physical theory,
+                                    Modern Science (let us say, from Newton on) adopts three fundamental pre-sup-
+                                    positions (see Table 1): the causality principle (also termed as “efficient causali-
+                                    ty”), classical logic (also termed as “necessary logic”), and functional relation-
+                                    ships (between the various parts of any System analyzed).
+                                      On the basis of such fundamental presuppositions, and only after having de-
+                                    veloped a strictly conform consequential Formal Language, that is the Tradi-
+                                    tional Differential Calculus (TDC), Modern Science progressively ascends to-
+                                    ward ever more general Physical Laws and Principles:
+                                      1) from Phenomenological Laws (e.g. Kepler’s Laws); 2) to Physical Laws spe-
+                                    cific of each Discipline (e.g. Newton’s Laws, Maxwell’s Equations, etc.); 3) up to
+                                    the three well-known Thermodynamic Principles.
+                                      Such a progressive development has given origin to a hierarchy of a multiplic-
+                                    ity of quantitative Physical Laws and Principles, in particular as a consequence of
+                                    the first basic presupposition: the causality principle. This Principle, in fact, has
+                                    led Modern Science to introduce “different causes” in different Disciplines. The
+                                    Principle of causality, in fact, tends to “sub-divide” the entire phenomenology
+                                    (at present known) in different “branches”, precisely because, on the basis of
+                                    such a presupposition, it leads Scientists to research for the most “appropriate
+                                    causes” pertaining each specific set of phenomena each time considered.
+                                      In this way, Modern Science persistently propends to show that: “Every Sys-
+                                    tem is a mechanism”. Especially because of its Formal Language adopted.
+
+DOI: 10.4236/jamp.2022.109178                           2651                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                  Such a conclusion, however, although confirmed by experimental results, can
+                                be considered as being valid only from an operative point of view, but not from
+                                an absolute point of view. This is because “necessary logic” (adopted as a second
+                                basic presupposition) does not admit any form of “Perfect Induction” (see Pop-
+                                per’s Falsification Principle).
+                                  In fact, as synthetically illustrated in Table 1, in the strict contest of “neces-
+                                sary logic”:
+                                  1) after having formulated a single or more hypotheses (such as in the case of
+                                a Theory);
+                                  2) after having formalized them in the Formal Language adopted, faithfully
+                                conform to the three above-mentioned basic presuppositions;
+                                  3) after having drawn the consequential formal conclusions in terms of “ne-
+                                cessary” logic;
+                                  4) and after having also obtained experimental confirmations of the previous
+                                formal conclusions;
+                                  5) it is impossible, in any case whatsoever, to assert the uniqueness of the in-
+                                verse process. That is: it is impossible to show that the hypotheses adopted are
+                                the sole and unique hypotheses capable to explain those experimental results.
+                                  This is precisely because of the absence, in “necessary” logic, of any form of
+                                perfect induction.
+                                  In fact, only in the presence of a perfect induction it would be possible to as-
+                                sure the uniqueness of the inverse process and, thus, to transform the adopted
+                                hypotheses into an absolute perspective.
+                                  This means that Modern Science, precisely because based on necessary logic,
+                                should always be “open” to recognize that there always exist many other possible
+                                Approaches (in principle infinite) capable to interpret the same experimental
+                                results.
+                                  At this stage, after having synthetically recalled the basic characteristics of
+                                Modern Science, we can now analyze in more detail the fundamental properties
+                                of the New Perspective, synthetically indicated in parallel (for a better compari-
+                                son) in the right hand side of Table 1.
+
+                                2.2. Fundamental Characteristics of the New Scientific Approach
+                                The best way of illustrating such a New Scientific Approach is that of recalling,
+                                step by step, its Process of Genesis, synthetically summarized in the second
+                                “box” in the right column of Table 1.
+                                  Such a Scientific Approach, as already anticipated, originates from the analysis
+                                of Self-Organizing Systems.
+                                  These Systems and their “emerging properties” began to be studied by L.
+                                Boltzmann toward the end of XIX century. Several other Authors (e.g. A. Lotka)
+                                successively dealt with such a theme.
+                                  L. Boltzmann was in fact the first who attempted at describing Self-Organizing
+                                Systems in more appropriate formal terms, by proposing the adoption of a new
+
+
+DOI: 10.4236/jamp.2022.109178                         2652                Journal of Applied Mathematics and Physics
+                                                                                                                        C. Giannantoni
+
+
+                                Thermodynamic Principle: “The Principle of Maximum Exergy Inflow to the
+                                System” [1].Some years later, A. Lotka reformulated such a Principle in the form
+                                of: “The Principle of Maximum Exergy Flow through the System” [2] [3] [4].
+                                    Both such attempts, however, were not perfectly successful, because still based
+                                on the concept of Exergy, which is a quantity that is strictly pertaining to Clas-
+                                sical Thermodynamics. Consequently, it re-proposes the concepts of efficient cau-
+                                sality, logical necessity, functional relationships, which are not properly adequate
+                                to represent the “Emerging Quality of Self-Organizing Systems”.
+                                    Such an expression, in fact, wants to indicate that Self-Organizing Systems al-
+                                ways show an unexpected “excess” with respect to their phenomenological pre-
+                                mises. So that they usually say: “The Whole is much more than its parts”.
+                                    This is precisely the reason why such an “excess” can be termed as Quality,
+                                with a capital Q, to point out that it cannot be understood as being a simple
+                                “property” of a given phenomenon. This is because it is never reducible to its
+                                phenomenological premises in terms of traditional mental categories: efficient
+                                causality, logical necessity, functional relationships.
+                                   This evidently suggests a radically new gnosiological perspective, which cor-
+                                responds to recognize that: There are processes, in Nature, which cannot be con-
+                                sidered as being pure “mechanisms”.
+                                   This also leads, in adherence, to the adoption of “new mental categories”1 and,
+                                correspondently, to the development of a completely new formal language, so
+                                that the description of Self-Organizing Systems might result as being faithfully
+                                conform to their “Emerging Quality”.
+                                    A really new formal language only appears with H. T. Odum, with the genial
+                                introduction of Emergy (Em), defined as Exergy (Ex) by Transformity (Tr) [5]
+                                [6] [7]
+                                                                            Em
+                                                                             = Ex ⋅ Tr                                                (1)
+                                    Such a definition clearly shows that Emergy is still based on “Exergy”. How-
+                                ever:
+                                    1) Quality Factor Tr “Transforms” Ex into a new physical quantity: Emergy.
+                                    2) The latter in fact is not defined in “functional terms”, but only by “assigna-
+                                tion Rules” [8].
+                                    3) This is precisely because Tr is expressed by means of a non-conservative
+                                Algebra (ib.).
+                                    4) Thus the output “excess” of the three Fundamental Processes (Co-Production,
+                                Inter-Action, Feed-Back) is always understood as being “irreducible” to its cor-
+                                1
+                                 These “new mental categories” can no longer be termed as “pre-suppositions”, because they are not
+                                defined “a priori” (as in the case of Traditional Approach). In fact, they are chosen only “a posteri-
+                                ori”, on the basis of the “Emerging Quality” previously recognized. “Generative Causality”, in fact,
+                                refers to the capacity of a Self-Organizing System to manifest an “irreducible excess”; “Adherent Log-
+                                ic”, correspondently, refers to the capacity of our mind to draw “emerging conclusions”. That is, “con-
+                                clusions” whose information content is much higher than the information content corresponding to
+                                their logical premises, although persistently “adherent” to the latter. “Ordinal Relationships”, in
+                                turn, refer to particular relationships of genetic nature, which will be illustrated in more details later
+                                on, in the case of a Co-Production Process.
+
+
+DOI: 10.4236/jamp.2022.109178                            2653                         Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                relative inputs in mere functional terms.
+                                    This means that Emergy is able to represent the “Emerging Quality” of Self-
+                                Organizing Processes.
+                                    This is why Prof. Odum, on the basis of such a concept of Emergy, enunciated
+                                the Maximum Em-Power Principle [5] [6] [7], which asserts that: “All self-or-
+                                ganizing systems tend to maximize their rates of Emergy use or Empower, and
+                                those systems that maximize Empower will prevail” (Odum, 1988, Odum, 1996)
+                                [9] [10].
+                                    As a direct corresponding consequence, Prof. Odum proposed such a Prin-
+                                ciple as the Fourth Thermodynamic Principle, to be understood, however, in
+                                terms of Thermodynamics of Quality.
+                                  This is precisely because the general enunciation of the Maximum Em-Power
+                                Principle, given at a phenomenological level, can directly be referred, as a cor-
+                                responding tendency, to the “Emerging Quality” of Self-Organizing Systems.
+                                    However, in spite of such valid bases, the Maximum Em-Power Principle had
+                                not received a Mathematical Formulation corresponding to its general enuncia-
+                                tion, and this, for years, has prevented from considering such a Principle as a
+                                possible Fourth Thermodynamic Principle “of Quality”, as Prof. Odum usually
+                                asserted.
+                                   On the other hand, such a Mathematical Formulation could not be given in
+                                terms of the Traditional Differential Calculus, because traditional derivatives, as a
+                                consequence of their conceptual basic presuppositions (see Table 1), are not prop-
+                                erly apt at representing the “generative” behavior on behalf of “Self-Organizing
+                                Systems”.
+                                    At this stage, it is then worth synthetically recalling, in the next paragraphs,
+                                the logical and historical steps of the process that led us to the Mathematical
+                                Formulation of the Maximum Em-Power Principle (MEmPP) and, some years
+                                later, to its more general Mathematical Formulation, as the “Maximum Ordinal-
+                                ity Principle” (MOP), substantially based on the introduction of a new concept
+                                of Derivative: the “Incipient” Derivative.
+
+                                3. Historical Presuppositions of the Mathematical
+                                   Formulation of the Maximum Em-Power Principle
+                                As a simple introduction I would like to recall that I “became aware” of the “ex-
+                                istence” of Self-Organizing Systems only in 1993, by reading a scientific paper
+                                prepared for an official publication2, sent to me by Prof. Sergio Ulgiati (Univer-
+                                sity of Siena).
+                                    In fact, during my personal scientific training as a Nuclear Engineer, I had
+                                never heard of “Self-Organizing Systems” and, contextually, of the possibility of
+                                their description by means of a new physical quantity termed as “Emergy”.
+                                    Nonetheless, I was favorably surprised of that and, during the following months
+                                2
+                                 Ulgiati S., Odum H. T., Bastianoni S. Emergy use, environmental loading and sustainability. An
+                                emergy analysis of Italy. Ecological Modeling 73 (1994) 215-268 (received 9 December 1992, accepted
+                                10 August 1993).
+
+
+DOI: 10.4236/jamp.2022.109178                           2654                      Journal of Applied Mathematics and Physics
+                                                                                                       C. Giannantoni
+
+
+                                I had several email contacts with Prof. Sergio Ulgiati (first author of the paper),
+                                whom I continuously asked for additional documents to better understand the
+                                logical and physical formal origin of such a new physical concept, its rigorous
+                                definition, together with the concept of Self-Organizing Systems.
+                                  In this respect, I want to thank Prof. Ulgiati for his willingness to deal with
+                                such a fastidious interlocutor.
+                                  In fact, what first impressed me was the special Algebra adopted (termed as
+                                “Emergy Algebra”), which was very different from the traditional one, but at the
+                                same time so “similar” (in a certain sense) to the Differential Fractional Calculus
+                                I had begun to study six years before. In fact, the first time I met Prof. Ulgiati, I
+                                did not miss the opportunity of asking him: “Why don’t you adopt Fractional
+                                Calculus in Emergy Analysis?”
+                                  Some weeks later Prof. Ulgiati invited me to attend a special course on Emer-
+                                gy Analysis given by Prof. Mark T. Brown in Siena (September 1993), during
+                                which I had the opportunity of meeting another extremely important person in
+                                my life. My collaboration with Prof. Brown, in fact, started precisely there, in
+                                Siena: together we prepared a general scheme which reproduced, by means of
+                                the special System Diagrams adopted in Emergy Analysis, the Italian Energy
+                                Supply System in terms of Thermodynamics, Economics and Rights (Norms and
+                                Laws), which was successively presented at the International Workshop of Porto
+                                Venere in 1998 [11].
+                                  I must also thank Prof. Brown, in a particular way, because he encouraged my
+                                attempts at introducing the “mathematically Equivalent Source Terms” in Emer-
+                                gy Algebra, which represented one of the fundamental steps for the successive
+                                mathematical formulation of the Maximum Em-Power Principle.
+                                  In May 24, 1995 I personally met Prof. Howard T. Odum, who had been in-
+                                vited by our ENEA’s Energy Savings Division to give two Lectures (in reality two
+                                splendid Lectures) at ENEA’s Headquarters. On that occasion Prof. Odum was
+                                so kind as to spend the whole following day with me (in the presence of his Lady
+                                Prof. Elisabeth Odum and Prof. Ulgiati), answering my questions, dissolving my
+                                doubts, and suggesting possible new lines of research.
+                                  I cannot fail to mention that, among other things, he also gave me five of his
+                                most famous books as a present.
+                                  At the end of that day, after having experienced such a profound willingness
+                                shown by Prof. Odum, I frankly expressed my perplexity about the Maximum
+                                Em-Power Principle when termed as “Thermodynamic” Principle. In fact, I ob-
+                                served, without a general Mathematical Formulation of such a Principle it is ra-
+                                ther difficult to decide whether the Maximum Em-Power Principle is a “Ther-
+                                modynamic” Principle or not.
+                                  Prof. Odum, with a sweet and delicate smile, promptly answered: “You should
+                                do it”. “In fact I agree with you, and I believe you can succeed in this task”.
+                                  That hope, so openly manifested by Prof. Odum, indelibly marked the “offi-
+                                cial birth” of my research for a Mathematical Formulation of the Maximum
+
+DOI: 10.4236/jamp.2022.109178                        2655                  Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                Em-Power Principle.
+                                  For years, in fact, his paternal look encouraged me in this difficult task. His
+                                faithful invitation sustained me especially when the major difficulties arose, dur-
+                                ing the successive stages of the formulation.
+                                  Thank you Prof. Odum. Such a Mathematical Formulation is more your merit
+                                than mine. Without your sweet smile and your paternal trusting invitation, I
+                                would have never found the courage to face such a hard task.
+
+                                4. Mathematical Formulation of the Maximum
+                                   Em-Power Principle
+                                The Mathematical Formulation of the Maximum Em-Power Principle was given
+                                in 2001, and it was contextually presented at the 2nd Biennial Emergy Conference
+                                (September 20-22, 2001), [12].
+                                  The Mathematical Formulation is here synthetically reproduced
+                                                                d
+                                               ∫ Γϕ v d         emv d3V → Max , ∀D ( t ) ⊆ SU ( t )  ∗
+
+                                                           dt ∫
+                                                        ∗                      ∗
+                                                  =     3V                                                                (2)
+                                             D∗ ( t )               D∗ ( t )
+
+
+                                which faithfully translates in formal terms its corresponding verbal enunciation:
+                                “Every System tends to organize its internal structure to generate progressively
+                                increasing spring-Emergy levels in order to maximize the flow of processed (or
+                                “useful”) Emergy”.
+                                  In Equation (2) in fact:
+                                  ϕv∗ = the “equivalent” Source Term per unit volume.
+                                  Γ = the local structural amplification and re-normalization factor (corres-
+                                ponding to the product of the coefficients γ k∗ and γ k in the case of discrete
+                                form), which also accounts for the structural variations with time.
+                                                                emv∗ = emv , m + emv+, q + emv+, w                        (3)
+
+                                where
+                                   emv , m = C ⋅ ρ ⋅ ex is the Emergy per unit volume associated to the mass (thus
+                                transportable by mass flows).
+                                   emv+, q = the Emergy per unit volume associated to heat source terms.
+                                   emv+, w = the Emergy per unit volume associated to work source terms.
+                                  In this way, the formulation is valid for any Domain ( D∗ ) belonging to Uni-
+                                versal Space ( SU ( t ) ).
+                                  Additional details about such a formulation can be found in the paper pre-
+                                sented at the 2nd Biennial Emergy Conference [ib.], which is also directly availa-
+                                ble on the Author’s website http://www.ordinality.org/ and, even more, in the
+                                book titled “The Maximum Em-Power Principle as the basis for Thermodynam-
+                                ics of Quality” [13].
+                                  In fact, at the end of the 2nd Emergy Conference, Prof. Odum, who had appre-
+                                ciated such a formulation, invited me to write a book, that was effectively pub-
+                                lished the year after (2002).
+                                  In the preface of this book Prof. Mark Brown, after having pointed out the ba-
+
+DOI: 10.4236/jamp.2022.109178                           2656                       Journal of Applied Mathematics and Physics
+                                                                                                        C. Giannantoni
+
+
+                                sic characteristics of the book and the correlative fundamental results achieved,
+                                explicitly mention two aspects:
+                                  a) “The Center for Environmental Policy, through a generous gift from H.T.
+                                Odum has made funds available to help with the book’s publication”; b) “Un-
+                                fortunately, Odum died on September 11, 2002, before the publication of this
+                                book. During his last months, we discussed this work, and his feeling was that it
+                                represents a major contribution to the field, and that it was a very important
+                                next step in the formulation of his life work”.
+
+                                5. The Fundamental Results Presented in the Book on the
+                                   Maximum Em-Power Principle
+                                The Fundamental results presented in the book can be synthesized as follows:
+                                • The First Principle of Thermodynamics, The Second Principle of Thermody-
+                                   namics, The Third Principle of Thermodynamics, together with The Mini-
+                                   mum Action Principle have been reconsidered in the light of The Maximum
+                                   Em-Power Principle.
+                                • Such a Process has clearly shown that all these Principles can be “obtained”
+                                   from The Maximum Em-Power Principle. However, not by “deduction”, but
+                                   only by “reduction”.
+                                  These results thus confirm, sustain and reinforce Odum’s assertion that The
+                                Maximum Em-Power Principle has to be considered as The Fourth Thermody-
+                                namic Principle. However, not in terms of quantity, but in terms of Quality.
+
+                                6. Subsequent Researches on the Maximum Em-Power
+                                   Principle in the Years 2003-2009
+                                All the researches pertaining to this period were essentially devoted to two dif-
+                                ferent lines of research, analyzed in parallel, however strictly related:
+                                   A. The Relevance of The Maximum Em-Power Principle in several scientific
+                                fields.
+                                   B. The research for a more general formulation of the Rules of Emergy Alge-
+                                bra as Generative Rules.
+                                  As far as the results pertaining to point A), apart from that published by Ap-
+                                plied Mathematics [14], and those presented at the various Biennial Emergy
+                                Conferences [15] [16] [17], they were synthesized in two books (in Italian), titled
+                                “Lightness of Quality” (2007) [18] and “Ascendency of Quality” (2008) [19], re-
+                                spectively.
+                                  The first book presented the novelties introduced by The Maximum Em-Power
+                                Principle in the various Scientific Felds listed at column 1 of the following Table
+                                2, while the second book presented the correlative novelties in the fields listed at
+                                column 2.
+                                  At the same time, in parallel (sometimes also contextually) to the abovemen-
+                                tioned line of research, a particular attention was persistently devoted to a possible
+
+
+
+DOI: 10.4236/jamp.2022.109178                        2657                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                Table 2. Scientific Fields in which the MEmPP shows its Relevance.
+
+                                         “Lightness” of Quality                    “Ascendency” of Quality
+
+                                           Classical Mechanics                         Electromagnetism
+                                         Relativistic Mechanics                       Inorganic Chemistry
+                                          Quantum Mechanics                            Organic Chemistry
+                                                                                      Biological Chemistry
+                                                                                       Molecular Biology
+                                                                                      Ontogenetic Biology
+                                                                                      Phylogenetic Biology
+                                                                                           Cosmology
+
+
+                                improvement of the Formal Language adopted in the MEmPP, as it will be illu-
+                                strated in the next paragraph.
+
+                                7. The Research for a More Appropriate “Formal Language”
+                                   in the Context of the MEmPP
+                                Such a research was mainly focused on the cases in which The Maximum Em-
+                                Power Principle is adopted in order to describe a given System under transient
+                                conditions (see previous References [14] [15] [16] [17]).
+                                  This is because Emergy is an “Emerging Property” of Self-Organizing Systems.
+                                Consequently, when the System is analyzed under steady state conditions, the
+                                Rules of Emergy Algebra are faithfully accounted for by the Mathematical For-
+                                mulation of the Maximum Em-Power Principle.
+                                  Under transient conditions, however, the adoption of the Traditional Diffe-
+                                rential Calculus (TDC) tends to “filter”, in a more or less marked measure, the
+                                “Emerging Properties” of the System described by the concept of Emergy.
+                                  This is because the correlative Non-Conservative Algebra manifests that “Emer-
+                                gy” is an “Emerging Property” of Self-Organizing Systems, which cannot be ex-
+                                pressed in terms of the traditional mental categories, typical of the Traditional
+                                Differential Calculus (TDC): efficient causality, logical necessity, functional rela-
+                                tionships. Consequently, the “Emerging Properties” of the System cannot be de-
+                                scribed in terms of the traditional derivatives that, at the level of formal lan-
+                                guage, represent the perfect reflex of such “a priori” mental categories.
+                                   This evidently suggests the adoption of a Different Formal Language, so that
+                                the description of Self-Organizing Systems, by means of the Mathematical For-
+                                mulation of the Maximum Em-Power Principle, could possibly result as being
+                                faithfully conform to their “Emerging Quality”.
+                                   This is why the adoption of a new concept of derivative, the “Incipient Deriv-
+                                ative”, already developed during a couple of years before, as a possible contribu-
+                                tion to a further development of the Fractional Calculus [20] [21] [22] and, for
+                                completeness, contextually presented in Appendix 9 of the book devoted to Ma-
+                                thematical Formulation of the Maximum Ordinality Principle [13].
+
+DOI: 10.4236/jamp.2022.109178                        2658                   Journal of Applied Mathematics and Physics
+                                                                                                                C. Giannantoni
+
+
+                                  The introduction of a new concept of derivative, in fact, is suggested by the
+                                same formulation (2). This is because the presence (in it) of the sign (=) and that
+                                of the symbol of the traditional first order derivative, ends up by “describing” a
+                                “necessary” relationship between “efficient causes” (first member) and “conse-
+                                quential effects” (second member), while, in a context of Quality, we should only
+                                speak of “generative causes” and consequential “adherent effects”.
+                                  This suggests that the same formulation (2) should be thought of as better
+                                written as follows
+                                                              →   d
+                                                                 ∫ emv d3V → Max , ∀D ( t ) ⊆ SU ( t )
+                                                                                                  ∗
+                                                ∫ Γϕ
+                                                       ∗                        ∗
+                                                   = v d 3V                                                                (4)
+                                               ∗
+                                              D (t )
+                                                            d t        ∗
+                                                                       D (t )
+
+
+                                                     d
+                                where the symbol         represents the already mentioned “incipient” derivative
+                                                     
+                                                     dt
+                                and the symbol “ [→ ” represents either a logical consequence (second side) which
+                                is “adherent” to its premises (first side) or physical effects (second side) which
+                                are “adherent” to their “spring” causes (first side), or both.
+                                  Such a new formulation does not change, by itself, the quantitative aspects
+                                pertaining to the M. Em-P. Principle as formulated in Equation (2), because
+                                such a Mathematical Formulation only makes use of the first order derivative
+                                (see next par. 7.1).
+                                  In reality, such a formal-logical passage from an a posteriori mathematical
+                                description to a mathematical description conceived of as being “incipient” (that
+                                is capable of “following” the Emerging Quality in its continuous Process of Ge-
+                                nesis) represents one of the most important aspects concerning the Mathemati-
+                                cal Formulation of the M. Em-P. Principle.
+
+                                7.1. Definition of the “Incipient” Derivative of Ordinality q
+
+                                Such a new concept of “Incipient Derivative” is defined as follows
+                                                                                     q
+                                                    d 
+                                                          q                  ~ 
+                                                                              δ −1
+                                                      f ( t ) =  Lim+    f ( t ) for q = m n
+                                                                                                                          (5)
+                                                                   ∆t :0 → 0  ∆t 
+                                                    dt                           
+                                in which the sequence of the symbols is now interpreted according to the direct
+                                priority of the order of the three elements that constitute its definition (that is
+                                from left to right).
+                                   It is precisely such an inversion of “reading” that which transforms a “func-
+                                tional” definition into a “generative” definition.
+                                  Definition (5) in fact, as more widely illustrated both in the previously men-
+                                tioned References [20] [21] [22] and, especially in [14] [15], clearly shows that
+                                the “Incipient Derivative” is not an “operator”, like the derivative ( d dt ), that
+                                describes “necessary” processes according to the Traditional Differential Calcu-
+                                lus (TDC).
+                                  The “Incipient Derivative”, vice versa, could properly be termed as a “genera-
+                                tor”, because it describes a Generative Process, in its same act of being born, and
+
+DOI: 10.4236/jamp.2022.109178                          2659                         Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                this will represent the fundamental basis of the Mathematical Formulation of the
+                                Maximum Ordinality Principle [23], dealt with at par. 9.
+                                  Consequently:
+                                  1) The three symbols adopted acquire a completely different meaning with
+                                respect to the traditional ones.
+                                  2) Mainly because they do not represent “three” distinct operations, but a
+                                unique and sole Generative Process.
+                                   3) The symbol Lim  , in fact, whose etymological origin comes from the Latin
+                                word “Limen” (which means a “threshold”), represents the “threshold” of that
+                                “ideal window” from which we observe and describe the considered Generative
+                                Process, in its same act of being born.
+                                   4) The symbol ∆ t : 0 → 0+ now indicates not only the initial time of our reg-
+                                istration, but also the proper “origin” (in its etymological sense) of something
+                                new which we observe (and describe) in its proper act of being born.
+                                   5) It is then evident that the “operator” δ now registers the variation of the
+                                observed property f ( t ) , not only in terms of quantity, but also, and especially,
+                                in terms of Quality (as the symbol “tilde” would expressly remind). Thus the ra-
+                                tio which appears in Equation (5) indicates not only a quantitative variation in
+                                time, but both the variation in Quality and quantity.
+                                  6) Consequently, when we take the incipient (or “prior”) derivative of Ordi-
+                                nality q of any f ( t ) , the generative Exit of such a process will keep “memo-
+                                ry” of its genetic origin because it will result as being structured according the
+                                indication of such an exponent. The latter in fact is properly termed as Ordinal-
+                                ity, because it precisely expresses “how each part of the output is genetically Or-
+                                dered to the Whole and, at the same time, how each part is related to all the oth-
+                                ers in terms of Ordinal Relationships”.
+                                   7) In this way the “Incipient” Derivative represents the Generativity of the
+                                considered Process, that is the output “Excess” (per unit time) characterized by
+                                both its Ordinality and its related cardinality, while the sequence of the symbols,
+                                in definition (Equation (5)), can be interpreted as representing a unique in-
+                                ter-action process between the three correlative concepts.
+                                  8) The above-mentioned aspects clearly show why the “Incipient” Derivative
+                                is able to unify (and, at the same time, to specify) the description of the various
+                                Self-Organizing Processes, understood as the Exit of their Generative Nature.
+                                  9) This also means that the “Incipient” Derivative presents an Exit that is
+                                generally different from the “result” of the corresponding derivative in TDC,
+                                even when its Ordinality is reduced to a mere cardinality. For example, the tra-
+                                ditional derivative of order n of the function eα ( t ) , evaluated according to Faà
+                                di Bruno’s Formula [24], and the corresponding “Incipient” Derivative, respec-
+                                tively give
+                                                                                                       kn
+                                          n
+                                    d  α (t )  α (t )        n!
+                                                                              k1
+                                                                         α   α 
+                                                                                       k2
+                                                                                           α (n) 
+                                   =     e     e ∑                    ⋅                                  (5.1)
+                                   
+                                    dt                k1 ! k2 ! kn !  1!   2!       n ! 
+                                                                                                 
+
+
+DOI: 10.4236/jamp.2022.109178                        2660                  Journal of Applied Mathematics and Physics
+                                                                                                                C. Giannantoni
+
+
+                                and
+                                                                       n
+                                                                 d  α ( t ) ∗ α ( t )    n
+                                                                   e= e ⋅ α ( t )                                   (5.2)
+                                                                 dt                       
+                                        
+                                where α ( t ) represents the first order “Incipient” Derivative. And even if they
+                                in some cases coincide (for instance when α ( t ) is linear), such a “coincidence”
+                                                                                    ∗
+                                has to be seen in the light of the symbol = in Equation (5.2), which reminds us
+                                that any “Incipient” Derivative is always the Exit of a Generative Logical Process
+                                and not of a necessary logical process.
+
+                                7.2. The Rules of Emergy Algebra Formulated in Terms of the
+                                    “Incipient” Derivative
+                                The first fundamental attempt at adopting such a new form of Derivative was
+                                obviously focused on the possible reformulation of the Rules of Emergy Algebra
+                                in “incipient” differential terms. That is, in terms of the “Incipient” Derivative,
+                                when the latter is characterized by an appropriate Ordinality.
+                                  In this case, the Rules of Emergy Algebra can be reformulated as “Generative
+                                Rules” in Transient Conditions as follows (see [14] [15] [16]), now re-written
+                                with reference to the exponential function eα ( t ) , because they can be referred to
+                                any function f ( t ) , and thus they can always be written in such an exponential
+                                form:
+                                  An Inter-action Process can be represented by a “duet” Ordinal Relationship:
+                                                                  2
+                                                      d  α ( t )            
+                                                                                           α (t )
+                                                       e
+                                                     =              α1 ( t ) , α 2 ( t )  ⋅ e                            (6)
+                                                      dt                               
+
+                                where the brackets { } stand for a Whole. In fact, it is like a “Singing Duet”, whose
+                                “Exit” is much more than the “sum” of the contributions of the two singers.
+                                  A Co-production Process can be represented by a “binary” Ordinal Relation-
+                                ship:
+                                                                       1
+                                                                                           
+                                                                 d  2 α ( t ) α1 ( t )  α ( t )
+                                                                  e
+                                                                     =                     ⋅e                           (7)
+                                                                 dt             α 2 ( t ) 
+                                                                                            
+                                  It is like the Generation of “Two Brothers”, related between them by Ordinal
+                                Relationships of Generative Nature.
+                                  In fact, “brothers” are termed as such not because of their “direct reciprocal
+                                relationships” (that is, because they love each other, they respect each other, etc.),
+                                but because of their direct reference to the same genetic principle: their father
+                                (or their mother or both).
+                                  A Feed-back Process can be represented by a “duet-binary” Ordinal Relationship:
+                                                   2        
+                                                                                
+                                             d  2 α ( t ) α1 ( t )  α 2 ( t )  α ( t )
+                                            =
+                                                  e                  ,
+                                                                                    ⋅ e                               (8)
+                                             dt             α 2 ( t )  α1 ( t ) 
+                                                                                  
+
+
+DOI: 10.4236/jamp.2022.109178                        2661                           Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                that is, as “Two Brothers” that always cooperate between them, and always in the
+                                form of a “singing Duet”, even in both (possible) cases of their inverted “role of
+                                priority”.
+                                                                                                   
+                                  Contextually, in all the previous equations α ( t ) always represents the first
+                                order incipient derivative of α ( t ) .
+                                   It is then easy to recognize that, while the left hand sides of the previous equa-
+                                                                                                             (     )
+                                                                                                         q
+                                tions have an identical formal structure, always in the form d d t , where q
+                                indicates the Ordinality of the specific Generative Process (i.e. 2 , 1 2 , 2 2
+                                respectively), the right hand sides of Equations (6)-(8) represent, in “formal
+                                terms”, the specific Ordinal Structure of an Inter-action, a Co-production and a
+                                Feed-back Process, respectively, according to what previously said at paragraph
+                                7.1 (in particular items vi) and vii)), with reference to the components of each
+                                system, which, in these cases, are always 2 in number.
+                                  In such a way, the Rules of non-conservative Emergy Algebra have their direct
+                                correspondence with the three Generative Processes characterized by their spe-
+                                cific Ordinalities ( 2 , 1 2 , 2 2 , respectively), where the latter, apart from their
+                                formal expression and the “tilde” notation, always indicate that the number of
+                                components of each Generative Process equals 2.
+                                                                                        q              
+                                                                                d 
+                                  This suggested that the Incipient Derivative   (Equation (4)) could
+                                                                                d t 
+                                represent an appropriate Mathematical Concept in order to express the Genera-
+                                tive Activity of any Self-Organizing System.
+                                  In fact, the Rules of Emergy Algebra, reformulated in terms of the “Incipient”
+                                Derivative, could represent a valid basis for a possible generalization of the de-
+                                scription of any System, made up of an arbitrary number of components.
+
+                                8. Toward a Mathematical Formulation of the Maximum
+                                   Ordinality Principle
+                                As is well known, the Rules of Emegy Algebra refer to different possible Interac-
+                                tions between two sole sub-Systems and, as previously shown, they can all be
+                                represented in the general form
+
+                                                                         ( d d t ) {r}
+                                                                                   k l
+                                                                                                                              (9)
+                                                                                   s
+
+
+                                where k l stands for 2 , 1 2 , 2 2 , while {r} is the Relational Space of the
+                                considered System, which in Equations (6)-(8) is represented by eα ( t ) . This then
+                                suggests that is also possible to generalize such a description to a more articu-
+                                lated System, made up of an arbitrary number of sub-Systems. For example, it is
+                                possible to write
+
+                                                               ( d d t )(   )
+                                                                                  {e ( ) } = { 0}
+                                                                           11
+                                                                          11                 [→
+                                                                                       α t
+                                                                                                                            (10)
+                                                                          s
+
+
+                                which, as we will immediately see, it can represent the Evolution of the Solar
+                                System, even in explicit terms (as it will be shown later on), precisely because its
+
+
+DOI: 10.4236/jamp.2022.109178                         2662                             Journal of Applied Mathematics and Physics
+                                                                                                            C. Giannantoni
+
+
+                                description is formulated in terms of an “Incipient” derivative of a specific Or-
+                                dinality.
+                                  In fact, the number 11 can refer to the number of the bodies in the Solar Sys-
+                                                                                                       [→
+                                tems, that is: Sun + 9 Planets + asteroid belt, while the symbol = 0       { } indicates
+                                that the Solar System, during its time evolution, is always adherent to its initial
+                                and habitat conditions.
+                                  Equation (10) can then represent the Mathematical Formulation of the Max-
+                                imum Ordinality Principle [23], with specific reference to the Solar System. In
+                                fact, when formulated in this way, it allowed us to solve several problems that,
+                                up to now, are still considered as being unsolvable in Classical Mechanics. For
+                                example:
+                                  a) The distribution of the Planets in the Solar System
+                                  Such distribution, in fact, is still only approximately described by the semi-
+                                empirical Bode’s Law (1778), which, however, has never found a physical foun-
+                                dation, neither in Classical Mechanics nor in General Relativity. Even less, it is
+                                the result of a Mathematical “Explicit Solution”, because the dynamic descrip-
+                                tion of the Solar System is, by itself, intrinsically unsolvable. In fact, the problem,
+                                as demonstrated by H. Poincaré in 1889 [25], is intrinsically unsolvable even if
+                                the System is made up of three sole bodies.
+                                  Vice versa, if the Solar System is modeled as a Self-Organizing System ac-
+                                cording to Equation (10), the distribution of the Planets can easily be obtained as
+                                the Explicit Solution to the same Equation (10), which can also easily evaluated
+                                on the basis on an “Emerging Quality Simulator” (EQS), formally shown in [26].
+                                A Simulator that translates, in operative terms, the Maximum Ordinality Prin-
+                                ciple and, in particular, the Harmony Relationships of the same Maximum Or-
+                                dinality Principle, which are illustrated in detail in Appendix 1.
+                                  The corresponding results are represented in Table 3, where it is also possible
+                                to recognize the improvement of the description when the Solar System is more
+
+                                Table 3. Distribution of the planets in the solar system.
+
+                                 Planets    Bode’s Law     Astronomic Data       “Isolated” System    System + Habitat
+                                 Mercury      0.4 AU            0.39 AU                     0.39              0.39
+                                  Venus       0.7 AU            0.72 AU                     0.6               0.70
+                                  Earth       1.0 AU            1.00 AU                     0.9               0.98
+                                  Mars        1.6 AU            1.52 AU                     1.4               1.50
+                                  Ceres       2.8 AU            2.77 AU                     2.5               2.74
+                                  Jupiter     5.2 AU            5.20 AU                     4.7               5.05
+                                  Saturn      10.0 AU           9.54 AU                     8.0               9.50
+                                 Uranus       19.6 AU           19.2 AU                     16.0              19.0
+                                 Neptune      38.8 AU           30.1 AU                     24.0              28.9
+                                  Pluto                         39.5 AU                     34.0              38.0
+
+
+DOI: 10.4236/jamp.2022.109178                           2663                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                appropriately considered in relation with its proper Habitat. That is, when it is
+                                understood as a part of our Galaxy [27] (cap. 3).
+                                  b) The azimuthal angular distribution of the planetary orbital planes with re-
+                                spect to the Ecliptic
+                                  This phenomenon also has never found a satisfactory explanation, neither in
+                                Classical Mechanics nor in General Relativity. The main reason fundamentally
+                                depends on the fact that, in the absence of any explicit solution to the “Three-
+                                body Problem”, it is impossible to evaluate the exact influence between the reci-
+                                procal orbits of the Planets.
+                                  The various angles of the orbital planes, in fact, are distributed in a cone of a
+                                rather large width (20˚), which reduces to 10˚ only if the extreme Planets (Nep-
+                                tune and Pluto) are “excluded” (because the latter are usually considered as be-
+                                ing rather “anomalous”) (ib.).
+                                  c) Precessions of the Planets
+                                  The Maximum Ordinality Principle is also able to describe another “Irreduci-
+                                ble Excess” concerning the Solar System: The Precessions of the Planets (ib.).
+                                  General Relativity, in fact, which has given a preliminary answer to this phe-
+                                nomenology, asserts that their values are always “constant” in time and they can
+                                be evaluated in terms of a direct interaction between two sole celestial bodies,
+                                such as in the case of Sun and Mercury.
+                                  The MOP, on the contrary, shows that the Precession of any Planet is not
+                                “constant” in time and it has to be considered in the context of the Solar System
+                                understood as a Whole, that is, when modeled as one sole “Self-Organizing Sys-
+                                tem” (ib.).
+                                  On the basis of the Example of the Solar System, and the previous concept of
+                                “Incipient” Derivative, we gave the General Mathematical Formulation of the
+                                Maximum Ordinality Principle, which will be presented at the next paragraph 8,
+                                which was also adopted in several other fields of Analysis shown here below.
+                                  The MOP, in fact, do not “restrict” its valid applicability to the sole Solar Sys-
+                                tem. It is also able to give an elegant solution to several other problems (unsolv-
+                                able, intractable or both, as those shown in Table 4) concerning both non-Living
+                                Systems, Living Systems, and “Thinking” Systems (that is Human Systems), the
+                                majority of them dealt with as specific sections in [28] and [29].
+                                  At this stage it is then worth presenting the General Mathematical Formulation
+                                of the Maximum Ordinality Principle, enunciated for the first time in 2010 [23].
+
+                                9. Mathematical Formulation of the Maximum Ordinality
+                                   Principle
+                                Such a Formulation, as already anticipated, always leads to Explicit Solutions, as
+                                clearly shown in [27].
+
+                                9.1. First Fundamental Equation of the Maximum Ordinality Principle
+                                The First Fundamental Equation is formulated as follows
+
+DOI: 10.4236/jamp.2022.109178                           2664               Journal of Applied Mathematics and Physics
+                                                                                                                                               C. Giannantoni
+
+
+Table 4.Adoption of the MOP in other fields of analysis.
+
+Non-Living Systems                               Living Systems                                        Conscious Systems (Human Systems)
+
+i) The “Three-Body Problem”. Specific           i) Protein Folding. One of the                         i) The Three-good two-factor Problem in
+   section in [28]                                 most intractable problems in                           Economics [36], also dealt with as a specific
+ii) The azimuthal angular distribution of the      Biology [32]                                           section in [29]
+   planetary orbital planes with respect to the ii) Protein-Protein Interaction.                       ii) The research for equilibrium conditions in a
+   Ecliptic. Specific section in [28]           An analogous intractable                                  free-market economy. Specific section in [29]
+iii) Precessions of the Planets. Specific           problem as the previous case                       iii) The Stability of Smart Grids [37], also dealt
+   section in [28]                                  [33]                                                  with as a specific section in [29]
+iv) The angular velocities of the Stars in a iii) The Duchenne Muscular                                iv) Inter-Actions between Man and the
+   Galaxy, without “Dark Energy” and “Dark Dystrophyn (DMD) [34] [35]                                     Environment (for example, The
+   Matter” [30]                              iv) New oncological therapies.                                “unexplained” sea level rise over the period
+v) “The Accelerated Expansion of the                The immune-targeted                                    1900-2000, dealt with as a specific section in
+   Universe, in the light of the Maximum            therapies. As a pecific section                        [29])
+   Ordinality Principle, in the absence of          in [29]
+   “Dark Energy” and “Dark Matter” [31]
+
+
+                                                                                                                          [→
+                                                                                        ( d d t )
+                                                                                                       ( m n )
+                                                                                                       s
+                                                                                                                   {r} = { 0}                         (11)
+
+                                                                       ( m n ) → Max → { 2 2} ↑ { N N }                                          (11.1)
+
+                                            where {r} is the Relational Space of the System under consideration, while
+                                            ( m n ) represents its corresponding Ordinality, characterized by m Ordinal
+                                            Interactions and n Ordinal Co-productions, which reaches its maximum when
+                                                      { } {             }
+                                            it equals 2 2 ↑ N N (as indicated in Equation (11.1)).
+                                              In this respect, it is worth noting that:
+                                                                                    (          )
+                                              i) The underlined symbol d d t explicitly indicates that the Generative Ca-
+                                                                                                   s
+                                            pacity of the System (more appropriately termed as Generativity) is “internal” to
+                                            the same System. This is because it is precisely that which gives origin to its
+                                            Self-Organization as a Whole;
+                                                                 [→
+                                                                      {}
+                                              ii) The symbol “ = 0 ” represents a more general version of the simple figure
+                                            “zero”, as the latter systematically appears in the traditional differential equations.
+                                            In fact it now represents, at the same time:
+                                              - the specific “origin and habitat” conditions associated to the considered Or-
+                                            dinal Differential Equation (11);
+                                                                         [→
+                                               - while the symbol “ = ”, as already anticipated, indicates that the System,
+                                            during its Generative Evolution, is persistently “adherent” to its “origin and ha-
+                                            bitat” conditions.
+
+                                            9.2. The Second Fundamental Equation of the Maximum
+                                                 Ordinality Principle
+                                            This Equation is formulated as follows
+                                                                                 ( 2 2 )                ( 2 2 )        [→
+                                                                   ( d d t )             {r}  d d t (         {r} = 0
+                                                                                                                      )           {}                    (12)
+                                                                                                                        
+
+
+DOI: 10.4236/jamp.2022.109178                                     2665                                             Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                and it can be considered as representing a global Feed-Back Process of Ordinal
+                                Nature, which is internal to the same System. Equation (12), in fact, asserts that
+                                the Relational Space of the System {r} , which “emerges” as a solution from the
+                                First Equation, interacts in the form of the Relational Product  (defined in
+                                                                                     ( 2 2 )
+                                [26]) with its proper Generative Capacity ( d dt )           {r} . In such a way as to
+                                originate a comprehensive Generative Capacity, which is particular important
+                                for the Ordinal Stability of the System, especially when the latter interacts with
+                                other surrounding Systems understood as being its proper habitat.
+                                  The Maximum Ordinality Principle, formulated in its two fundamental equa-
+                                tions, then represents an Over-deduction with respect to MEmPP. In particular,
+                                when the MOP is formulated in such a form, it always presents an Explicit Solu-
+                                tion, which can also be structured in a more operative form by means of an
+                                “Emerging Quality Simulator” (EQS), formally shown in [26], and already adopted
+                                in all the various Examples pertaining to non-Living Systems, Living Systems,
+                                and “Thinking” Systems (Human Systems) previously recalled.
+
+                                10. The Radically New Perspective Opened by the Maximum
+                                    Ordinality Principle
+                                On the basis of what already anticipated in the previous paragraphs, we can
+                                surely assert that the Maximum Ordinality Principle “opens” (and at the same
+                                time offers) a Radically New Perspective to Modern Science. Not only because of
+                                the new Mental Categories adopted to describe the surrounding world but, espe-
+                                cially, for its new and specific Formal Language: in particular, the “Incipient”
+                                Derivative and its correlative Generative Consequences.
+                                   In fact, while all the Traditional Scientific Disciplines affirm that “Every Sys-
+                                tem is a mechanism” (at a phenomenological level), the New Approach affirms
+                                that “Every System is a Self-Organizing System” (always at a phenomenological
+                                level). Such two different conclusions are exactly the clear exit of the adoption of
+                                two corresponding different Formal Languages (as previously shown in Table
+                                1), which also lead to some other associated extremely important consequences.
+                                  In fact, as we have already seen, the adoption of TDC on behalf of the Tradi-
+                                tional Scientific Approaches leads to:
+                                  i) Unsolvable Problems (in explicit formal terms). Such as, for instance, the
+                                famous “Three body Problem” [25].
+                                  ii) Intractable Problems (even by using the most advanced computers). For
+                                example: Protein Folding [32] and Protein-Protein Interaction [33].
+                                  iii) Problems characterized by experimental “drifts”, which always represent
+                                an indication of possible “side effects”.
+                                  iv) In addition, it is worth pointing out that the description in terms of TDC
+                                can present some “side effects” even in the case of accurate experimental con-
+                                firmations. Such “side effects”, in fact, can result as being “masked” by the same
+                                fact that all the experimental confirmations are always based on the adoption of
+                                methods, instrumentation and measurements that are conceived (and designed)
+
+DOI: 10.4236/jamp.2022.109178                        2666                    Journal of Applied Mathematics and Physics
+                                                                                                        C. Giannantoni
+
+
+                                in a perfect conformity with the fundamental presuppositions of TDC [28].
+                                  Vice versa, the adoption of IDC in the context of the New Ordinal Approach
+                                does not present such problems, whereas, in turn, it presents several advantages.
+                                  In fact, the adoption of the Formal Language IDC, finalized to describe the
+                                “Emerging Quality” of “Self-Organizing Systems”, leads to the formulation of
+                                the MOP, which is precisely that Principle which is able to offer a radically New
+                                Perspective to Modern Science, that is: “Every System is a Self-Organizing Sys-
+                                tem” (see Table 1).
+                                  This is because IDC results as being the most appropriate language able to
+                                describe the fundamental characteristics of “Self-Organizing Systems”. In fact:
+                                  i) It is able to represent, in appropriate formal terms, the “Emerging Quality”
+                                of Self-Organizing Systems as an “Irreducible Excess”.
+                                  ii) In this way IDC “guides” to the formulation of a very general Principle, the
+                                Maximum Ordinality Principle (MOP), which can be understood as “One Sole
+                                Reference” Principle of General Validity [38].
+                                  iii) The Maximum Ordinality Principle, in fact, results as being valid in any
+                                Field of Analysis (from non-living Systems, to living Systems and human social
+                                Systems too).
+                                  iv) In addition, it always leads to explicit formal solutions in the Proper Space
+                                and Proper Time of the System [39].
+                                  v) At any topological scale (e.g. from atoms to galaxies).
+                                  vi) Both under steady state and variable conditions.
+                                  vii) What’s more, the corresponding Solution to any mathematical model
+                                based on the MOP always results as being an “Emerging Solution” [37]. That is,
+                                a Solution whose Ordinal Information content is always much higher than the
+                                Ordinal content corresponding to the initial formulation of the problem.
+                                  viii) And, as a direct consequence, this leads to the fact that any “Emerging
+                                Solution” can never be reduced to mere “functional relationships”.
+                                  xi) This is also means that the adoption of the MOP does not require any spe-
+                                cific reference to the traditional Physical Laws or to the well-known Thermody-
+                                namic Principles (precisely because the latter are always “conceived and formu-
+                                lated” in terms of “efficient causality”, “necessary logic” and “functional rela-
+                                tionships”).
+                                  xv) Finally, the adoption of the MOP (and its associated IDC) never leads to “side
+                                effects”. This is because, even when an “Emerging Solution” might manifest some
+                                related “Emerging Exits” (see [38]), the latter can always be interpreted as being
+                                corresponding “Extra Benefits”, initially not recognized as such [26] [27] [37].
+                                  xvi) “Emerging Solutions” that, in addition, manifest that each System evolves
+                                in its Proper Time and Proper Space. Or better, its Proper Space-Time [39].
+                                  It should be then easy to recognize the validity of what initially anticipated,
+                                that is: “the Maximum Ordinality Principle and its correlative Formal Language
+                                (IDC) open, and at the same time offer, a Radically New Perspective to Modern
+                                Science”.
+
+
+DOI: 10.4236/jamp.2022.109178                        2667                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                  And this not only for the New Mental Categories adopted, but especially, but
+                                in particular way, for the new faithfully corresponding Formal Language (i.e. the
+                                Incipient Derivative and its correlative IDC) which effectively enables us to speak,
+                                and even more to “think”, according to those Mental Categories.
+
+                                11. Two “Com-Possible” Formal Languages, Albeit “Not
+                                    Equivalent” between Them
+                                The two Formal Languages, TDC and IDC, respectively, when considered with
+                                reference to their corresponding “presuppositions”, result as being two different
+                                formal descriptive modalities which are always “com-possible” between them. In
+                                the sense that they do not exclude each other. They simply co-exist.
+                                  This is because, as already anticipated, the Traditional Scientific Approach, which
+                                leads to TDC, cannot exclude (in principle) the adoption of a different Formal
+                                Language (e.g. IDC), because of the absence in its presuppositions (especially its
+                                “necessary” logic) of any form of Perfect Induction.
+                                  On the other hand, the same happens in the case of the adoption of IDC, pre-
+                                cisely because of the same reason, although the latter is based on presuppositions
+                                characterized by a different form of Logic (the “Adherent” Logic).
+                                  Consequently, the two formal languages, TDC and IDC, can always be adopted
+                                independently from one another. Although this “com-possibility” in principle
+                                does not mean that they are “equi-valent” (in particular, from an operative point
+                                of view).
+                                  Their operative “in-equivalence”, in fact, can easily be shown by comparing
+                                the different consequences of their respective adoption, when such consequences
+                                are obviously considered in the light of their corresponding “pre-suppositions”,
+                                as previously shown at par. 10.
+                                  In this respect, in fact, it is worth mentioning some advantages, from an
+                                Operative point of view, on behalf of the MOP and its IDC (with respect to the
+                                Traditional Scientific Approach). For example, the particular and specific Stra-
+                                tegic Decision Process “they suggest” in any Field of Analysis.
+                                   In fact, apart from the advantages due to the availability of always Explicit So-
+                                lutions to such a Decisional Process, there are also, in addition, the specific ad-
+                                vantages of the same General Methodology for Strategic Decisions in itself con-
+                                sidered, which “reflects” its Generative Nature of “Quality Benefits” on all the
+                                specific Strategic Decisions in any Filed considered.
+                                   As an Ostensive Example of such a very particular aspect, we will consider
+                                some different case studies, pertaining to three substantially different Fields of
+                                Analysis.
+
+                                12. General Methodology for Strategic Decisions in any Field
+                                    of Analysis, based on both the Maximum Ordinality
+                                    Principle (MOP) and its Formal Language (IDC)
+                                In this respect, we will consider some specific case studies, as Ostensive Exam-
+
+
+DOI: 10.4236/jamp.2022.109178                       2668                   Journal of Applied Mathematics and Physics
+                                                                                                        C. Giannantoni
+
+
+                                ples of progressive ascending Generality and corresponding increasing levels of
+                                Ordinality.
+
+                                12.1. General Methodology for Strategic Decisions Able to “Extend”
+                                      the Validity of EMA to the Case of Transient Conditions
+                                We will here synthetically re-propose such a General Methodology, officially
+                                presented for the first time at the Emergy Conference held at University of Flor-
+                                ida [40] (on last June 29, 2022), already adopted in the past on the occasion of all
+                                the other case studies (of different nature) that will be presented later on.
+                                  Such a General Methodology, in fact, was explicitly and formally presented at
+                                such a Conference, precisely because understood as a specific contribution fina-
+                                lized to the main object of the same Conference: Advances in Emergy Analysis
+                                (EMA).
+                                  On that occasion we then showed how it is possible, on the basis of such Gen-
+                                eral Methodology, to “extend” the validity of Emergy Analysis (EMA) to tran-
+                                sient conditions. In fact, at present, it is substantially “limited” (we could also say
+                                “blocked”) to the sole case of steady state conditions. This is because, the correl-
+                                ative Analysis in transient conditions, if dealt with in term of TDC, the latter
+                                Formal Language will practically “filter” the “Emerging Quality” described by
+                                the Non-Conservative Rules of Emergy Algebra, typical and specific of EMA in
+                                steady state conditions, as a consequence of the basic presuppositions of TDC.
+                                  So that, in order to overcome such a situation of “impasse”, the General Me-
+                                thodology, in this specific case, is based on a joint adoption of EMA and MOP.
+                                In this respect, it is worth starting from a short premise.
+                                   We have already shown that the MEmPP (which under steady state conditions
+                                condition substantially “coincides” with EMA) and the MOP are intimately re-
+                                lated to each other, when they are considered in their Historical-Logical Origin
+                                (as shown in the first part of the paper). The MOP, in fact, is nothing but the
+                                Re-proposition (in terms of Generative “Incipient” Derivatives) of the MEmPP,
+                                formulated in terms of Non-Conservative Algebra.
+                                   Consequently, it is also possible, in principle, to adopt them jointly. However,
+                                not in “functional” terms, but in Ordinal Terms. In fact, in adherence to their
+                                subjacent Generative Adherent Logic, they can give origin to a Unique Ordinal
+                                Feed-Back Process of Generative Nature. That is, as a Self-Organizing Logical
+                                System of Ordinality 2 2 .
+                                   In this respect we will now present the Logical General Methodology for Stra-
+                                tegic Decisions when adopted in the Energy Field (understood in its widest
+                                meaning), and, as an Ostensive example, when, in particular, it is based on both
+                                EMA and MOP, in the form of a Feed-Back Logical and Generative Process of
+                                Ordinality 2/2. That is, as “Two Brothers” that cooperate between them, also
+                                even in the case of their successive phases of reciprocal Inverse Priority.
+                                   EMA, in fact, which (as we know) is nothing but the MEmPP in steady state
+                                conditions, in this case represents the first step and, at the same time, the last
+                                step of the considered Unique Ordinal Feed-Back Process of Generative Nature:
+
+DOI: 10.4236/jamp.2022.109178                        2669                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                                                              EMA   MOP  
+                                                             In Formal Terms        ,                                          (13)
+                                                                               MOP   EMA  
+
+                                        In order to show how the “Logical” General Methodology “reflects” (itself) in
+                                      operative terms, we will start from considering a given System whose corres-
+                                      ponding EMA has led to the Emergy Diagram represented in Figure 1.
+                                         In this respect, we will now preliminary show how the results of such an
+                                      Analysis can be made apt for a successive analysis in terms of the Maximum Or-
+                                      dinality Principle.
+                                         To this specific finality, the considered Emergy Diagram can preliminarily be
+                                      transformed into the corresponding Relational Space of the System, which is a
+                                      specific concept pertaining to the MOP, usually represented by the Ordinal Ma-
+                                      trix in Figure 2, as clearly shown in [26]. A Matrix which obviously is not a tra-
+                                      ditional matrix, because it does not represent “functional relationships” between
+                                      its elements, but only the specific Ordinal Relationships between them.
+                                         Such elements, in fact are, by themselves, already of Ordinal Nature (as expli-
+                                      citly indicated by the symbols of “tilde” and the adoption of “curly brackets”,
+                                      which, as usual, indicate that the System is understood as a Whole).
+                                         More precisely, the various sub-Systems of the Emergy Diagram, after having
+                                      been specifically numbered according to a given sequence, which, however is es-
+                                      sentially discretionary, they can be considered (and thus represented) in terms of
+                                      couples. This is because, in an Ordinal Context, the minimum form of Relation-
+                                      ship is represented by a “Couple”.
+                                        On these bases, the MOP furnishes, always in the form of an explicit formal
+                                      solution [26], all the Ordinal Relationships between the various couples of the
+
+
+
+
+                                Figure 1. Example of odum’s emergy diagram [5].
+
+                                                                    α12 ( t ) α12 ( t )        α1N ( t ) 
+                                                                                                              
+                                                                    α 21 ( t ) α 23 ( t )       α 2 N ( t ) 
+                                                                                                               
+                                                                                                     
+                                                                   α N 1 ( t ) α N 2 ( t )     α NN ( t ) 
+                                                                   
+                                               Figure 2. Ordinal matrix representing the relational space of the system.
+
+
+DOI: 10.4236/jamp.2022.109178                               2670                                Journal of Applied Mathematics and Physics
+                                                                                                                                             C. Giannantoni
+
+
+                                    System, when the latter has actually reached its corresponding Maximum Ordi-
+                                    nality.
+                                      Under these conditions, in fact, all the various couples that characterize the
+                                    Ordinal Space of the System become of Ordinality     2 2 , independently from           { }
+                                    their corresponding initial Ordinalities that they had in the basic Emergy Dia-
+                                    gram. In addition (and this, as we will see, represents extremely important aspect),
+                                    they satisfy the following Ordinal Relationships, which are the Faithfull “Reflex” of
+                                    a Diffusive Generativity that manifests inside the Self-Orgnizing System:
+                                                             { 2 2}
+                                                                           {              }{ 2 2} ∗
+                                                                                                        ( {1} )  {α (t )}{ } ⊕ {λ (t )}{ } (14)
+                                                                                                                                                2 2
+                                       {α              ( t )}
+                                                                                                                                2 2
+                                             i , j +1                   ⊕ λi , j +1 ( t )
+                                                                                   =                     N −1
+                                                                                                                         12             12
+                                                                                                                   j
+
+
+                                for j 1, 2, 3,  , N − 1 .
+                                =
+                                   Such Relationships (widely illustrated in Appendix 1) are properly termed as
+                                “Harmony Relationships” because, when the System is at its Maximum Ordinal-
+                                ity, they show that all the various couples are related between them in Generative
+                                Terms (and not in “functional terms”), on the basis of the reference to a unique
+                                                                                            { 2 2}
+                                and sole arbitrary couple, usually indicated as {α12 ( t )}         .
+                                       The various couples, in fact, are related on the basis of some additional corre-
+                                                                    {2 2}
+                                                                 {
+                                    lation factors λi , j +1 ( t )              }
+                                                                            , which are not of “functional nature” (see the sym-
+                                         ∗
+                                    bol = ). At the same, the various couples are also related in terms of the Ordinal
+                                    Roots of Unity                      ( {1} ) (illustrated in Appendix 2), where the Unity {1}
+                                                                         N −1
+                                                                                     j
+
+                                    does not indicate a simple “figure”, but it specifically indicates the “Unity” of the
+                                    System understood as a Whole.
+                                      As an immediately clear Ostensive Example of such an Ordinal Description, it
+                                    is sufficient to recall that it is exactly what happens in the case of the Solar Sys-
+                                    tem (previously illustrated), when as reference couple is assumed, for example,
+                                    Sun and Mercury. Nonetheless, the Ordinal Description of the Solar System is
+                                    always the same even if we assume whatever else couple as reference (for in-
+                                    stance Earth and Mars).
+                                      The Methodology here proposed clearly offers some Significant Advantages,
+                                    both in steady state and in transient conditions, especially for the properties of
+                                    the above-mentioned Harmony Relationships.
+                                      In fact such General Methodology clearly offers an increased rapidity of the
+                                    Strategic Decision Process, because the researched Optimal values for the opera-
+                                    tive Ordinal Re-Configuration of the System are co-instantaneously given by the
+                                    Simulator EQS, even in the case of hundreds of sub-Systems.
+                                      At the same time, the same General Methodology offers a correlative higher
+                                    reliability of the Re-Qualification Process of System analyzed, because the Deci-
+                                    sion Maker correlatively knows all the “optimal values” that are properly apt a
+                                    requalifying the Whole System in adherence to its Maximum Ordinality, this is
+                                    because they are precisely those furnished by the Harmony Relationships of the
+                                    System.
+
+DOI: 10.4236/jamp.2022.109178                                              2671                                 Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                  The same General Methodology, In addition, offers very decisive Ordinal and
+                                operative Advantages with reference to those particular transient conditions that,
+                                for the sake of brevity, can synthetically be termed as Perspective A and Perspec-
+                                tive B.
+                                  The latter, in fact, refers to the case in which the Habitat represents a “Distur-
+                                bance” to the System.
+                                  For example, sudden variations of external market conditions, scarcity of Ener-
+                                gy Resources, sometimes due to external political changes (for example the present
+                                war Russia-Ukraine), which “modify” the external conditions of the System, as
+                                initially assumed, described and represented in the specific and characteristic
+                                terms of EMA.
+                                   In such a case, the Methodology shows how it is possible to increase (accord-
+                                ing to a predetermined desired measure) the Resistance and, at the same time,
+                                the Resilience of the System against the considered Adversities.
+                                   Vice versa, when the Methodology is adopted in Perspective A, it suggests
+                                how to research for the Maximum Ordinality of the Relationship between the
+                                System and its pertaining Habitat, because Perspective A specifically refers to the
+                                case of a collaborating Inter-Action Process between them.
+                                   Such two latter particular transient conditions will be analyzed, in more detail,
+                                in the two successive paragraphs.
+
+                                12.2. Requalification Process of an Urban System, From a Seismic
+                                     Point of View, Against Calamities
+                                This second Ostensive example clearly refers to a completely different filed of
+                                analysis, which however, precisely because of its specific difference, can contri-
+                                bute to show the General Applicability of the Methodology, which is, by itself,
+                                deeply rooted on the Generality of MOP and its correlative Formal Language
+                                IDC.
+                                   Such an Example, which is carefully illustrated in all its details in [41], refers
+                                to a Requalification Process of an Urban System, from a Seismic point of view,
+                                against Calamities.
+                                   An Example that equally shows (in its specific context) the corresponding in-
+                                crease of Resistance and Resilience of the Urban System analyzed.
+                                   The description of the village is based on the so called “Minimum Urban
+                                Structure” which, as analyzed by V. Fabietti and Others [42], is composed by 39
+                                elements (buildings, roads, utilities) that, according to the available data [ib.],
+                                can be characterized by means of three Fundamental Indicators: Vulnerability,
+                                Index of Urban Complex, Strategic Valence. Consequently, it is describable by
+                                means of 29 × 3 Indicators. More precisely:
+                                • The “Vulnerability” is the probability that a threat event can induce a more
+                                   or less marked loss of integrity.
+                                • The “Index of Urban Complex” (or, more simply, “Index of Complex”)
+                                   represents the level of physical and functional interconnections with neigh-
+                                   boring elements.
+
+DOI: 10.4236/jamp.2022.109178                       2672                   Journal of Applied Mathematics and Physics
+                                                                                                          C. Giannantoni
+
+
+                                • The “Strategic Valence”, according to a conventional scale from 1 to 12, in-
+                                   dicates the relevance of the role assigned to each specific element, for exam-
+                                   ple: administrative center, hospital, commercial center and so on. It is worth
+                                   adding that, for practical reasons, in our analysis we have also adopted the
+                                   inverse concept of “Vulnerability”, defined as “Persistence to Integrity” (or,
+                                   more synthetically, “Persistence”).
+                                  The results of the analysis, synthetically shown in Table 5, refer to the Final
+                                Configuration of the System as a consequence of the hypothesized earthquake. It
+                                is then possible to recognize that such an Ordinal Exit represents a clear manife-
+                                station of the recovery of the Internal Stability on behalf of the System, as expli-
+                                citly foreseen by Equation (12), that is the Second Fundamental Equation of the
+                                MOP.
+                                  In fact, on the basis of the results of the analysis, although here represented in
+                                an extremely synthetic form with respect to that widely shown in [41], it is
+                                possible to immediately recognize the reduction and mitigation of the effects of
+                                the earthquake, with reference to the values of the three fundamental Indicators.
+                                Both with respect to their maximum values and their minimum values respec-
+                                tively.
+                                  For the sake of brevity, but also for clarity, the corresponding “mitigations” of
+                                the effects are reproduced in Table 5 in the form of percentage changes.
+                                  The values in Table 5 clearly shows how, on the basis of the same General
+                                Methodology, it is possible to requalify the structures of an Urban System, in
+                                order to increase its resistance and its correlative resilience against natural ca-
+                                lamities (earthquakes, hurricanes, etc.), by always adopting as reference funda-
+                                mental criterion the Maximum Ordinality Principle (MOP) and its correlative
+                                IDC.
+                                  In fact, in the specific study case adopted as an Ostensive Example, we have a
+                                reduction of the earthquake foreseen effects of a little more than 50%.
+                                  In this sense we can surely assert that the MOP, especially for its Formal Lan-
+                                guage, opens a radically New Perspective also in this field.
+                                  In fact the village assumed as a case study was modelled as a Self-Organizing
+                                System. This is because, although the village is usually considered as being solely
+
+                                Table 5. Reduction and mitigation of the effects of the earthquake.
+
+                                                                      Initial Value              Final value with
+                                   Indicator of Reference
+                                                                 without Requalification      Ordinal Requalification
+
+                                  High Values of Persistence              −4.82%                      −2.30%
+                                   High Values of Complex                −11.54%                      −5.82%
+                                    High Values of Valence                −5.49%                      −2.68%
+
+                                  Low Values of Persistence               −9.92%                      −4.95%
+                                   Low Values of Complex                  −6.53%                      −3.19%
+                                    Low Values of Valence                 −5.50%                      −2.68%
+
+
+
+DOI: 10.4236/jamp.2022.109178                         2673                    Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                made of buildings, streets, places and so on, in reality it has been conceived,
+                                planned and realized by human beings during several centuries. In addition, the
+                                people who actually leave in such an urban center, systematically deal with its
+                                maintenance, in order to possibly increase its functionality. This justifies the as-
+                                sumption of the village as being a Self-Organizing System and, consequently, it has
+                                been analyzed in the light of the MOP, which, as we already know, represents a va-
+                                lid and General Reference Principle for analyzing both “non-living”, “living” and
+                                “conscious” Self-Organizing systems.
+                                   All such results were obtained, as usual, by adopting the same Emerging Qual-
+                                ity Simulator (EQS), described in [26], which, as already anticipated, represents
+                                the operative version of the MOP in terms of IDC.
+                                  As far as the specific Methodology pertaining to the Perspective A is con-
+                                cerned, that is the case of a positive cooperation between the System and its sur-
+                                rounding Habitat, it is also illustrated, from a general point of view, in the same
+                                Reference previously mentioned [ib.]. In which it is also shown how the General
+                                Methodology can even be adopted at successive increasing Levels of Generality
+                                and associated Higher Levels of Ordinality.
+                                   However, in order to illustrate such increasing Level of Ordinality, always
+                                based on the adoption of the MOP (and especially of its Formal Language IDC),
+                                it is surely much more meaningful to show such an increasing Role of the Gen-
+                                eral Methodology for Strategic Decisions, with reference to the Concept of “Em-
+                                powering Communities”, which will be presented at the next paragraph.
+
+                                12.3. Empowering Communities in the Light of the Maximum Or-
+                                dinality Principle, Well Beyond Energy Scarcity
+                                This section, in fact, is a synthesis of the paper presented at the European Round
+                                Table on Sustainable Consumption and Production Graz (September 8-10, 2021)
+                                [43]. It was specifically finalized to show how Empowering Communities may
+                                progressively increase their role by adopting the Maximum Ordinality Principle
+                                (MOP) and its correlative Formal Language (IDC) as basic reference criterion to
+                                this specifically finality.
+                                   Such an adoption on behalf of a given Community, in fact, generates an in-
+                                creasing sense of being a real Community, at successive and progressively higher
+                                levels, together with the corresponding responsibilities of Role.
+                                   This aspect will be here synthetically re-proposed by considering the following
+                                different Levels of Analysis:
+                                   a) As an introductory and preliminarily stage of the Ascending Process pre-
+                                viously mentioned, we will consider the case of external adverse conditions, such
+                                as, for instance, the case of “energy scarcity”.
+                                   However, the Process previously mentioned becomes much more intensive
+                                when the MOP and its IDC are adopted to deal with aspects that go well beyond
+                                “energy scarcity”. For example, the following cases:
+                                   b) Energy Saving and Renewable Energy Sources. The role of Smart Grids.
+                                  c) Economics Stability of a System of Nations and their increasing conscious-
+
+DOI: 10.4236/jamp.2022.109178                       2674                   Journal of Applied Mathematics and Physics
+                                                                                                          C. Giannantoni
+
+
+                                ness as being a real Community.
+                                  d) Increase of Ordinality and Consciousness of a “Community” with reference
+                                to both its Internal and External Relationships.
+                                  e) Relationships between Man and Environment. Climate change forecasts. For
+                                example, the Sea Level Rise over the Period 1900-2000.
+                                  However, taking into account the “practical” impossibility of presenting all
+                                the various Ascending cases, we will limit to present that could be termed as the
+                                basic level. This in order to show how the General Methodology can be adopted
+                                in those selected case studies well beyond energy scarcity and, in the end, it will
+                                also enable us to recall the General Conclusions of the their corresponding Ana-
+                                lyses.
+                                  In all the considered study cases, the System assumed as “Reference System” is
+                                always the same, made up of five European Countries (more precisely, Italy,
+                                France, Spain, Germany, Austria), which were modelled as a unique and sole
+                                Self-Organizing System, that is, understood as being a Real Community.
+                                  On the basis of such an assumption, as a preliminary stage the above men-
+                                tioned “ascending” General Methodology, we will consider the case study cha-
+                                racterized by a given amount of energy scarcity, in order to show the increase
+                                of Resistance and Resilience of such an Ordinal Community adverse such a
+                                hypothesized even.
+
+                                12.3.1. General Methodology in the Case Study Pertaining to a Given
+                                        Adverse Energy Scarcity
+                                In this perspective, each Nation is characterized by three indicators, shown in
+                                Table 6, whose values were taken from World Data Bank (2020).
+                                  As far as the energy crisis is concerned, this is thought of as an energy scarcity,
+                                which may be due either to a reduction of fossil fuels production or to an in-
+                                crease of their prices (or both) and, as a work hypothesis, it was supposed cha-
+                                racterized by an “incidence” of the order of 20% on the values of Indicator 1.
+                                  The incidence on the values of the other two Indicators is strictly correlative
+                                to the Ordinal Reconfiguration of the System (shown in Table 6).
+                                  Consequently, the corresponding effects on the System, simulated by means of
+
+                                Table 6. Ordinal Requalification of the System in operative terms (elaboration of data
+                                from World Bank).
+
+                                                                             2. Imported equiv.
+                                                             1. Imported                          3. GDP per person/
+                                 Progressive                                   oil per person/
+                                               Nation       equiv. oil per                        1000/Occupational
+                                  Number                                        Occupational
+                                                            person (ton)                               level (%)
+                                                                                   level (%)
+
+                                         1      France           1.8                2.53                  0.570
+                                         2       Italy        2.0 * (−)          3.21 * (−)            0.533 * (+)
+                                         3     Germany        2.4 * (−)          3.03 * (−)            0.586 * (+)
+                                         4      Spain         2.5 * (−)          3.81 * (−)           0.452 * (++)
+                                         5     Austria           2.5                3.35                  0.734
+
+
+
+DOI: 10.4236/jamp.2022.109178                        2675                     Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                EQS, in this case show an incidence of the order of 10% on the values of Indica-
+                                tor 2 and an incidence of the order of 5% on the values of Indicator 3.
+                                  More precisely, Table 7 sows that while the resulting “incidence” on the val-
+                                ues of Indicator 1 is equal to 20%, as precisely supposed by hypothesis, the cor-
+                                relative “incidence” on the values of Indicator 2 is equal to 9.75%, while the “in-
+                                cidence” on the values of Indicator 3 evenly ranges from 5.10% and to 5.16%.
+                                  It is then easy to recognize the corresponding reduction and mitigation of the
+                                effects due to the reduction of imported energy, with reference to all the values of
+                                the three Indicators, both with respect to their maximum and minimum values.
+                                  For the sake of synthesis, but also for clarity, the corresponding “mitigations”
+                                of the effects are given in Table 7 in the form of percentage changes.
+                                   Such results unable us to surely affirm that the System manifests a higher Re-
+                                sistance with respect to the corresponding conditions of a total absence of an
+                                Ordinal Requalification.
+                                  At the same time, it is also possible to recognize a correlative increase of its
+                                Resilience.
+                                  In fact, in the presence of a prior Ordinal Requalification, the System, after
+                                having mitigated the effects of the energy scarcity, still keeps an Ordinality level
+                                sufficiently high to adequately, and progressively, reacquire its specific Role,
+                                both in terms of Ordinal Relationships within itself and, even more, with respect
+                                to its Ordinal Relationships with its surrounding Habitat.
+                                  The general conclusions of this (for the moment) preliminarily step of analy-
+                                sis can be synthesized as follows:
+                                • In view of a possible energy scarcity (or, more in general, energy crises), any
+                                   System of Nations should provide, in advance, to improve its Ordinal Requa-
+                                   lification, appropriately commensurate to the “foreseeable” energy crises
+                                   pertaining to its specific case.
+                                • This is because, from such an Ordinal Requalification, it will result a “Re-
+                                   bound” of its “Resistance” and at the same time, of its correlative level of
+                                   “Resilience”.
+                                  This evidently becomes even truer, for example, in the case of the European
+                                Community (made up of 27 Nations) and, even more, in the case of USA (made
+
+                                Table 7. “Mitigations” of the effects in the form of percentage changes.
+
+                                                                      Initial Value               Final value with
+                                   Indicator of Reference
+                                                                 without Requalification       Ordinal Requalification
+
+                                  High Values of Indicator 1              −20.0%                           −10.0%
+                                  High Values of Indicator 2              −9.75%                           −4.67%
+                                  High Values of Indicator 3              −5.16%                           −2.18%
+
+                                  Low Values of Indicator 1               −20.0%                       −10.10%
+                                  Low Values of Indicator 2               −9.74%                           −4.67%
+                                  Low Values of Indicator 3               −5.10%                           −2.67%
+
+
+
+DOI: 10.4236/jamp.2022.109178                         2676                    Journal of Applied Mathematics and Physics
+                                                                                                        C. Giannantoni
+
+
+                                up of 50 States), with particular reference to their relevant specific Role in the
+                                World.
+                                  In these cases, in fact, there is a progressive increase of the corresponding Or-
+                                dinality of the Systems, because it is directly associated to the increasing number
+                                of their States, as clearly shown by Eq. (1.1), which is formulated, of course, in
+                                Ordinal Terms.
+                                  As far as a synthetic exposition of the results obtained in correspondence of
+                                the successive higher levels of analysis, we can briefly recall that.
+
+                                12.3.2. Energy Saving and Renewable Energy Sources. The Role of Smart
+                                        Grids
+                                The diffusion of the Smart Grids should be uniform between the various Nations
+                                and, contextually, among their pertinent Regions, always for the respect of the
+                                above mentioned Harmony Relationships and the correlative reduction of the
+                                “vulnerability” to energy scarcity.
+
+                                12.3.3. Economics Stability of a System of Nations and Their Increasing
+                                        Consciousness as Being a Real Community
+                                The results pertaining to this aspect clearly shows that a free market economy
+                                cannot be considered as being a simple “mechanism”, as it is usually supposed as
+                                being on behalf all the Traditional Theories of Economics.
+                                  A “free market”, in fact, is characterized by “Initiative”, “Inventiveness” (un-
+                                derstood as a “continuous development of new products”), without considering
+                                that any transaction always generates “Extra” Benefits of Ordinal Nature [44],
+                                which are irreducible to a traditional description in terms of causality, necessity,
+                                functionality.
+                                  All these conditions then suggest that a “free market” between Nations can be
+                                more appropriately modelled as a “Self-Organizing System”. In fact, when “The
+                                three-good two factor Problem” is interpreted in the light of the MOP and its
+                                ITC [36], the Problem can be solved for an arbitrary number of goods (Ng), in
+                                the presence of Three Productive Factors: Capital (K), Labour (L) and Natural
+                                Resources (N) [29].
+
+                                12.3.4. Increase of Ordinality and Consciousness of a “Community” both
+                                        in Its Internal and External Relationships
+                                The analysis of this aspect, performed in the light of MOP and its correlative
+                                Formal Language (IDC), shows that:
+                                • when a System of Nations (for example the European Community) has reached
+                                   its Maximum Level of Ordinality;
+                                • characterized by its corresponding internal Stability;
+                                • and, consequently, a much deeper “Consciousness” of being an effective Com-
+                                   munity;
+                                • all these aspects can have a direct reflex on the improvement of its Ordinal
+                                   Relationships. Both internal to the single Nations and between them.
+                                  In addition, a further improved level of Relationships can manifest when such
+
+DOI: 10.4236/jamp.2022.109178                        2677                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                Communities will establish New Ordinal Relationships with other countries.
+                                  The abovementioned aspects also suggest that, in addition, any considered
+                                Ordinal System of Nations could also play a more decisive role in the respect of
+                                the Environment, by assuming Strategic Decisions always in the light of the
+                                MOP and its IDC.
+
+                                12.3.5. Relationships between Man and Environment. For Example:
+                                        Climate Change Forecasts and the Sea Level Rise over the Period
+                                        1900-2000
+                                In this case the “Empowering Communities” may manifest their increase of
+                                consciousness and their particular role with reference to the Environment, only
+                                in the respect, however, of the following conditions:
+                                • The “prior condition” is that they have reached a sufficiently high level of
+                                   Ordinality as Self-Organizing Systems, by adopting as a “Reference Guide”
+                                   the Maximum Ordinality Principle and its correlative Formal Language (IDC).
+                                • Afterwards, they know very well the Environmental Phenomenology pertain-
+                                   ing to the aspects of specific interest.
+                                • This means that they are able to recognize the “Emerging Quality” of the
+                                   Processes they are going to deal with.
+                                • And, as a fundamental aspect, they are systematically oriented at the research
+                                   for a possible Syntony with such an “Emerging Quality”.
+                                • Finally, under these achieved conditions, even in the case of potential adverse
+                                   events, they can mitigate the associated undesired “effects”, always in adhe-
+                                   rence to the MOP and its Formal Language (IDC).
+                                  In order to illustrate the importance of the previous conditions, we can recall,
+                                as an Ostensive example, the Sea Level Rise over the Period 1900-2000, as de-
+                                scribed in [29].
+                                  It is evident that such a process is difficult to contrast if its specific “origin” is
+                                not deeply known.
+                                  At a first glance, in fact, the process “seems to be inexplicable”, because the
+                                correlative “causes” are still unknown [45].
+                                  However, this is simply due to the fact that the specific “causes” are systemat-
+                                ically researched for in terms of efficient causality, logical necessity, functional
+                                relationships, that is they are researched for as the various processes involved
+                                were pure “mechanisms” (as illustrated at par. 2.1).
+                                  In reality the Process of Sea Level Rise can be analyzed in the light of the MOP
+                                by means of its associated Ordinal Simulator EQS (ib.), which operatively trans-
+                                lates and faithfully represents the various Harmony Relationships between all
+                                the different Physical Systems involved in the process (sea, ice, hearth, sun, etc.).
+                                  Such Inter-Actions in fact, because of their Ordinal Nature, are precisely those
+                                that represent the real “generative cause” of that registered “unexpected” trend.
+                                Which, according to such an interpretation, is nothing but an “Emerging Exit”
+                                of a Unique “Self-Organizing System”.
+                                  Consequently, “Empowering Communities” should correspondently modify
+
+
+DOI: 10.4236/jamp.2022.109178                        2678                     Journal of Applied Mathematics and Physics
+                                                                                                       C. Giannantoni
+
+
+                                their way of “Thinking, Decision Making, and Acting” so as to research for
+                                the maximum Syntony with the “Emerging Quality” shown by the considered
+                                Processes, so as to minimize both present and future effects with respect to the
+                                Environment.
+                                  With specific reference to this latter respect, we will now consider a particular
+                                “in-equivalence” between the Formal Languages TDC and IDC.
+
+                                12.3.6. A Particular “In-Equivalence” between the Formal Languages
+                                        TDC and IDC, in the Case of Strategic Decisions with Reference to
+                                        the Relationships between Man and the Environment
+                                As anticipated in the title, the “in-equivalence” between the Formal languages
+                                TDC and IDC becomes particularly evident when the General Methodology for
+                                Strategic Decisions involves the Relationships between Man and the Environ-
+                                ment and, more specifically, when the latter are focused in the Light of the
+                                well-known categories of “Thinking, Decision Making, and Acting”.
+                                  In fact when the Methodology based on the Formal Language IDC, is com-
+                                pared, in this specific context, with other more traditional Strategic Decision
+                                Processes (such as, for instance, those that deal with Environmental Accounting
+                                and Management in prevailingly (or essentially) “cardinal terms”), the Ordinal
+                                Methodology reveals its Maximum Significant Contribution to the Radically New
+                                Perspective offered to Modern Science.
+                                  In fact, with specific reference to the Verbal Enunciation of the MOP, in which
+                                the term “System” now plays the Role of “Man” (or “Human System”) and the
+                                term “Habitat” now plays the Role of the “Environment”, it is possible to recog-
+                                nize that:
+                                  At the level of “Thinking”:
+                                  Traditional Methodologies for Strategic Decisions, in spite of some specific
+                                conceptual progresses during the last decades, always intrinsically “reflect” the
+                                general idea that “every system is a mechanism”. Consequently, at the level of
+                                “Thinking”, the Environment is nothing but a Set of “Mechanisms”, and conse-
+                                quently it is always considered as an “object”, that can be “used” as such, in
+                                “functional terms”, mainly to economic finalities.
+                                   The New Ordinal Perspective, on the contrary, is always orientated at de-
+                                scribing the Environment as One sole and Unique “Self-Organizing System”,
+                                even when considered in the specific contest of Economics. Consequently, and as
+                                it usually happens, The Ordinal Perspective always tends to Maximize both the
+                                Ordinality of the “Economic” System and that of its correlative Environment.
+                                   Such a specific difference, at the level of “Thinking”, evidently leads to a cor-
+                                relative “in-equivalence” at the level of “Decision Making and Acting”.
+                                  At the level of “Decision Making”:
+                                  In the case of The Traditional Methodologies, the powerful expressive capaci-
+                                ty of the formal language adopted (namely TDC), systematically “forces” the De-
+                                cision toward the research for specific “functional” solutions and their subse-
+                                quent practical implementation.
+
+
+DOI: 10.4236/jamp.2022.109178                       2679                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                  Whereas in the case of The Ordinal Perspective, the specific capacity of its
+                                corresponding and completely different formal language adopted (namely IDC),
+                                is that which systematically “guides” toward the research for specific practical
+                                solutions. Which are now, and in all cases, of “Ordinal Nature”, as well as their
+                                subsequent and “adherent” actual implementation. In this case with particular
+                                reference to the Environment, which always manifests, also in the Economic
+                                Field, its correlative, specific and proper “Emerging Quality”.
+                                  At the level of Action:
+                                  It is exactly where the profound differences become particularly evident.
+                                  This is precisely because, in the case of The Traditional Perspectives, the cor-
+                                responding formal solutions, which are of “functional nature”, become corres-
+                                ponding “necessary” consequential facts.
+                                  Vice versa, the New Ordinal Approach, precisely because of its specific Or-
+                                dinal Formal Language (IDC), always researches for the actual Maximum Ordi-
+                                nality (that is the Maximum Synthony) between the “System” (Man) and its sur-
+                                rounding “Habitat” (Environment).
+                                  In such a case, in fact, the corresponding formal solutions, which are always of
+                                “Ordinal Nature”, become perfectly and faithfully adherent consequential facts,
+                                that manifest the achieved researched Syntony.
+
+                                13. Conclusions
+                                We have already shown the Fundamental Role of the “Formal Languages” TDC
+                                and IDC, respectively, and, at the same time, their com-possibility of adoption,
+                                at a Logical level.
+                                  This is because, in the absence of any form of Perfect Induction, by nature in
+                                both the two different typologies of “subjacent” Logic respectively adopted, they
+                                result as being always “com-possible”, in the sense that they do not exclude each
+                                other. Precisely because (as already said) none of the two has the property of the
+                                Perfect Induction.
+                                  Consequently, they cannot exclude each other, in an absolute sense, simply
+                                because they cannot do it, in any case whatsoever. They simply co-exist.
+                                  At the same time, however, we have also seen their “in-equivalence” from an
+                                operative point of view.
+                                  This means that, precisely because of their “com-possibility” at a Logical
+                                Level, the “operative” conclusion would be that it is always possible to adopt
+                                the one or the other or, even better, both together. That is, at the same time
+                                (although in parallel), in order to possibly choose, in such a way, the optimal
+                                operative solutions, according to the validity (and confirmation) of their re-
+                                spective conclusions, when the latter are assured by their corresponding expe-
+                                rimental results.
+                                  In such a case, however, it is fundamental to remember that, always in con-
+                                formity to the Absence of Perfect Induction, which is precisely that particular
+                                logical condition which, in any case, allows such a third possible option:
+
+DOI: 10.4236/jamp.2022.109178                         2680                 Journal of Applied Mathematics and Physics
+                                                                                                       C. Giannantoni
+
+
+                                • TDC is the Formal Language that faithfully “reflects” the presuppositions of
+                                   the Traditional Scientific Approach, which is “self-referential”
+                                • While IDC is the Formal Language that faithfully “reflects” the presupposi-
+                                   tions of the New Scientific Approach, which is “hetero-referential”.
+                                  The Fundamental Reference of the latter in fact is the “Emerging Quality” of
+                                Self-Organizing Systems. With respect to which, the New Ordinal Approach
+                                firstly modifies its mental categories, then adopts a faithfully corresponding For-
+                                mal Language, which allows to formulate a General Reference Principle, the
+                                Maximum Ordinality Principle, in the light of which it always seeks for the Best
+                                Synthony with the “Emerging Quality” that manifests itself in the surrounding
+                                world.
+                                  A Synthony is revealed (albeit always not less than, as shown in [26]) by the
+                                Maximum Level of Ordinality each time possibly attainable. Obviously, because
+                                always in the respectful and faithful adherence to the initial conditions of the
+                                System as well as those of its surrounding Habitat.
+                                  Nonetheless, in reality there exists another possible Option, of Higher Ordi-
+                                nality with respect to the three options previously presented. An Option that, in
+                                Generative Logic, represents an Over-Conclusion.
+                                   Over-Conclusion
+                                   Such an Option of Higher Ordinality, in fact, is actually possible, because the
+                                General Methodology for Strategic Decisions previously shown has a very gener-
+                                al validity. Consequently, it can be also adopted in an even more general case
+                                (with respect the ones previously considered): that is, it can also be adopted with
+                                Reference to the Field of “Formal Languages”.
+                                   Consequently, there exists (at least) another possible Option, of Higher Ordi-
+                                nality with respect to the three options previously presented.
+                                   In fact, as already shown in the first Ostensive Example (par. 12.1) pertaining
+                                to EMA and MOP, it is always possible to adopt the Two Formal Languages
+                                jointly. However, not in “parallel” or in reciprocal “functional” terms, but in Or-
+                                dinal Terms. In fact, in the respectful adherence to their specific subjacent Logics,
+                                the two Formal Languages TDC and IDC can give origin to a Unique Ordinal Feed-
+                                Back Process of Generative Logical Nature. That is, a Logical Self-Organizing Sys-
+                                tem of Ordinality { 2 2} .
+                                   In other terms, the General Methodology for Strategic Decisions, when adopted
+                                in the Formal Field of Mathematical Logic, clearly shows that TDC and IDC are
+                                similar to “Two Brothers”, which cooperate between them, also in the case of the
+                                successive phases of their reciprocal Inverse Priority.
+                                   In such a case, in fact, TDC will represent the first step and, at the same time,
+                                the last step of the considered Unique Ordinal Feed-Back Process of Generative
+                                Nature. In Formal Terms:
+                                                                 TDC   IDC  
+                                                                       ,                                  (15)
+                                                                  IDC   TDC  
+
+                                  This consequently leads to the following Over-Conclusion:
+
+
+DOI: 10.4236/jamp.2022.109178                       2681                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                     The Maximum Ordinality Principle (MOP) and its Formal Language, namely
+                                 The “Incipient” Differential Calculus (IDC), are really open, and at the same
+                                 time offer, a Very Radically New Perspective to Modern Science because, when
+                                 the General Methodology for Strategic Decisions, deeply “rooted” in them, is
+                                 adopted at such a General Logical-Formal Level, it surprisingly “reveals”, and at
+                                 the same time “reflects”, at an operative level, that:
+                                   TDC and IDC, precisely because considered in the context of such a General
+                                 Logical Structure, are “nothing but” a unique “Casket” of “Precious Pearls”3.
+
+                                 Conflicts of Interest
+                                 The author declares no conflicts of interest regarding the publication of this pa-
+                                 per.
+
+                                 References
+                                 [1]    Boltzmann, L. (1905) Der zweite Haupsatz der mechanishen warme Theorie. Al-
+                                        manach der K. Acad. Wiss Mechanishe, Wien, 36, 225-299.
+                                 [2]    Lotka, A.J. (1922) Contribution to the Energetics of Evolution. Proceedings of the
+                                        National Academy of Sciences of the United States of America 8, 147-150.
+                                        https://doi.org/10.1073/pnas.8.6.147
+                                 [3]    Lotka, A.J. (1922) Natural Selection as a Physical Principle. Proceedings of the Na-
+                                        tional Academy of Sciences of the United States of America, 8, 151-154.
+                                        https://doi.org/10.1073/pnas.8.6.151
+                                 [4]    Lotka, A.J. (1945) The Law of Evolution as a Maximal Principle. Human Biology,
+                                        17, 167-194.
+                                 [5]    Odum, H.T. (1994) Ecological and General Systems. An Introduction to Systems
+                                        Ecology. Reviesd Edition, University Press of Colorado, Boulder.
+                                 [6]    Odum, H.T. (1994) Environmental Accounting. Environ. Engineering Sciences. Uni-
+                                        versity of Florida, Gainesville.
+                                 [7]    Odum, H.T. (1994) Self-Organization and Maximum Power. Environ. Engineering
+                                        Sciences. University of Florida, Gainesville.
+                                 [8]    Brown, M.T. and Herendeen, R.A. (1996) Embodied Energy Analysis and EMERGY
+                                        Analysis: A Comparative View. Ecological Economics, 19, 219-235.
+                                        https://doi.org/10.1016/S0921-8009(96)00046-8
+                                 [9]    Odum, H.T. (1988) Self-Organization, Transformity and Information. Science, 242,
+                                        1132-1139. https://doi.org/10.1126/science.242.4882.1132
+                                [10]    Odum, H.T. (1995) Energy Systems and the Unification of Science. From Maximum
+                                        Power. The Ideas and Applications of H.T. Odum. Hall, C.A.S., Ed., University
+                                        Press of Colorado, Boulder.
+                                [11]    Giannantoni, C. (1998) Environment, Energy, Economy, Politics and Rights. Pro-
+                                        ceedings of Advances in Energy Studies, Porto Venere, 27-31 May 1998, 541-558.
+                                [12]    Giannantoni, C. (2001) Mathematical Formulation of the Maximum Em-Power Prin-
+                                        ciple. 2nd Biennial International Emergy Conference, Gainesville, 20-22 September
+                                        2001, 15-33.
+                                [13]    Giannantoni, C. (2002) The Maximum Em-Power Principle as the basis for Ther-
+
+                                 Or more simply, but analogously, a Duet Musical Chord of Ordinal Nature, as illustrated in the
+                                 3
+
+                                 Third Part of [46].
+
+
+DOI: 10.4236/jamp.2022.109178                           2682                    Journal of Applied Mathematics and Physics
+                                                                                                           C. Giannantoni
+
+
+                                       modynamics of Quality. Ed. SGE, Padua.
+                                [14]   Giannantoni, C. (2006) Mathematics for Generative Processes: Living and Non-Living
+                                       Systems. Journal of Computational and Applied Mathematics, 189, 324-340.
+                                       https://doi.org/10.1016/j.cam.2005.03.032
+                                [15]   Giannantoni, C. (2004) Differential Bases of Emergy Algebra. 3rd Emergy Evalua-
+                                       tion and Research Conference, Gainesville, 29-31 January 2004, 45-62.
+                                [16]   Giannantoni, C. (2006) Emergy Analysis as the First Ordinal Theory of Complex
+                                       Systems. Proceedings of the 4th Emergy Conference 2006, Gainesville, 17-22 Janu-
+                                       ary 2006, 15.1-15.14.
+                                [17]   Giannantoni, C. (2008) From Transformity to Ordinality, or Better: From Genera-
+                                       tive Transformity to Ordinal Generativity. Proceedings of the 5th Emergy Confe-
+                                       rence, Gainesville, 31 January-2 February 2008, 581-598.
+                                [18]   Giannantoni, C. (2007) Armonia delle Scienze (vol. I). La Leggerezza della Qualità.
+                                       Ed. Sigraf, Pescara.
+                                [19]   Giannantoni, C. (2008) Armonia delle Scienze (vol. II). L’Ascendenza della Qualità.
+                                       Ed. Sigraf, Pescara.
+                                [20]   Giannantoni, C. (2001) Advanced Mathematical Tools for Energy Analysis of Com-
+                                       plex Systems. Proceedings of the International Workshop on “Advances in Energy
+                                       Studies”, Porto Venere, 23-27 May 2000, 563-572.
+                                [21]   Giannantoni, C. (2003) The Problem of the Initial Conditions and Their Physical
+                                       Meaning in Linear Differential Equations of Fractional Order. Applied Mathematics
+                                       and Computation, 141, 87-102. https://doi.org/10.1016/S0096-3003(02)00323-5
+                                [22]   Giannantoni, C. (2001) Mathematics for Quality. Living and Non-Living Systems.
+                                       2nd Paper Presented at the 2nd Biennial International Emergy Conference, 20-22
+                                       September 2001, 185-201.
+                                [23]   Giannantoni, C. (2010) The Maximum Ordinality Principle. A Harmonious Dis-
+                                       sonance. Proceedings of the 6th Emergy Conference, Gainesville, 14-16 January 2010,
+                                       55-72.
+                                [24]   Oldham, K.B. and Spanier, J. (1974) The Fractional Calculus. Mathematics in Science
+                                       and Engineering Vol. 111, Academic Press, Inc., South California, 92-101.
+                                [25]   Poincaré, H. (1952) Science and Hypothesis. Dover, New York.
+                                [26]   Giannantoni, C. (2022) The MOP, from the “Incipient” Derivative to EQS Simula-
+                                       tor. http://www.ordinality.org
+                                [27]   Giannantoni, C. (2017) L’Eccedenza della Qualità e il, P.d.M.O.
+                                       http://www.ordinality.it
+                                [28]   Giannantoni, C. (2016) The “Emerging Quality” of Self-Organizing Systems, When
+                                       Modeled According to the Maximum Ordinality Principle, Offers a Radically New
+                                       Perspective to Modern Science. Proceedings of the 9th Biennial Emergy Research
+                                       Conference, Gainesville, 6-7 January 2016, 281-298.
+                                [29]   Giannantoni, C. (2019) Energy, Economy, Environment, Well-Being. The Role of
+                                       Formal Languages for Finding and Implementing Solutions. Journal of Environ-
+                                       mental Accounting and Management, 7, 139-153.
+                                [30]   Giannantoni, C. (2020) The Evolution of the Universe as a Self-Organizing System
+                                       in the Light of the Maximum Ordinality Principle, in the Absence of “Dark Energy”
+                                       and “Dark Matter”. Paper Prepared for the 11th Biennial Emergy Research Confe-
+                                       rence University of Florida, Gainesville, 23-25 April 2020.
+                                       http://www.ordinality.it
+
+
+DOI: 10.4236/jamp.2022.109178                          2683                    Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                [31]   Giannantoni, C. (2022) The Accelerated Expansion of the Universe, in the Light of
+                                       the Maximum Ordinality Principle, in the Absence of “Dark Energy” and “Dark
+                                       Matter”. http://www.ordinality.org
+                                [32]   Giannantoni, C. (2010) Protein Folding, Molecular Docking, Drug Design. The Role
+                                       of the Derivative “Drift” in Complex Systems Dynamics. Proceedings of the 3rd In-
+                                       ternational Conference on Bioinformatics, Valencia, 20-24 January 2010, 244-250.
+                                [33]   Giannantoni, C. (2015) Protein-Protein Interaction in the Light of the Maximum
+                                       Ordinality Principle. Proceedings of the 7th International Conference on Bioinfor-
+                                       matics, Bio-Computational Systems and Biotechnologies (BIOTECHNO 2015), 24-29
+                                       May 2015, Rome, 33-37.
+                                [34]   Giannantoni, C. (2011) The “Case of Duchenne Muscular Dystrophy”. Proceedings
+                                       of the 4th International Conference on Bioinformatics, Rome, 26-29 January 2011,
+                                       244-250.
+                                [35]   Giannantoni, C. (2018) A Unique Method for Skipping any Exon in Duchenne Mus-
+                                       cular Dystrophy. http://www.ordinality.org
+                                [36]   Giannantoni, C. (2011) Oeco-Nomics in the Light of the Maximum Ordinality Prin-
+                                       ciple. The N-Good Three-Factor Problem. 3rd International Workshop Advances in
+                                       Cleaner Production, Sao Paulo, 12-15 May 2011, 1-9.
+                                       http://www.advancesincleanerproduction.net
+                                [37]   Giannantoni, C. (2012) Oeco-Nomics in the Light of the Maximum Ordinality
+                                       Principle. The N-Good Three-Factor Problem. 3rd International Workshop Ad-
+                                       vances in Cleaner Production, Sao Paulo, 12-15 May 2011, 1-9.
+                                       http://www.advancesincleanerproduction.net
+                                [38]   Giannantoni, C. (2014) Toward One Sole Reference Principle Generating “Emerg-
+                                       ing Solutions” of Progressively Ascending Ordinality. Proceedings of the 8th Bi-
+                                       ennial Emergy Research Conference, University of Florida, Gainesville, 16-18 Janu-
+                                       ary 2014, 33-50.
+                                [39]   Giannantoni, C. (2018) Self-Organizing Systems, When Modeled According to the
+                                       Maximum Ordinality Principle, Always Present Explicit Formal Solutions, in Their
+                                       Proper Time and Proper Space. Proceedings of the 10th Biennial Emergy Confe-
+                                       rence, University of Florida, Gainesville, 25-27 January 2018, 137-156.
+                                [40]   Giannantoni, C. (2022) 5th Emergy Mini-Conference, University of Florida (via
+                                       Zoom), 29 June 2022. https://cep.ees.ufl.edu>conferences
+                                [41]   Giannantoni, C. and Cennini, L. (2021) Increasing of Resistance and Resilience of
+                                       an Urban System against Calamities in the Light of the Maximum Ordinality Prin-
+                                       ciple. Journal of Applied Mathematics and Physics, 9, 1926-1945.
+                                [42]   Samuele Biondi, S., Valter Fabietti, V. and Vanzi, I. (2011) Modelli di valutazione
+                                       per la vulnerabilita sismica urbana. Magazine Urbanistica, No. 147, University “G.
+                                       d’Annunzio”, Chieti.
+                                [43]   Giannantoni, C. (2021) 290 Empowering Communities in the Light of the Maxi-
+                                       mum Ordinality Principle. Selected Case Studies Well beyond Energy Scarcity. Pro-
+                                       ceedings of the 20th European Round Table on Sustainable Consumption and Pro-
+                                       duction, Graz, 8-10 September 2021.
+                                [44]   Giannantoni, C. and Zoli, M. (2010) The Four-Sector Diagram of Benefits (FSDOB)
+                                       as a Method for Evaluating Strategic Interactions between Humans and the Envi-
+                                       ronment. The Case Study of Hydrogen Fuel Cell Buses. Ecological Economics, 69,
+                                       486-494.
+                                [45]   Meier, F.M. and Wahr, M.J. (2002) Sea Level Is Rising: Do We Know Why? Pro-
+                                       ceedings of the National Academy of Sciences of the United States of America, 99,
+
+
+DOI: 10.4236/jamp.2022.109178                          2684                   Journal of Applied Mathematics and Physics
+                                                                                                           C. Giannantoni
+
+
+                                       6524-6526.
+                                [46]   Giannantoni, C., Rossi, R. (2014) Dal Multiverso all’Uni-Verso Tendenziale. Ed. Si-
+                                       graf, Pescara.
+
+
+
+
+DOI: 10.4236/jamp.2022.109178                          2685                   Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                  Appendix 1. Process of Genesis of the Harmony
+                                              Relationships
+                                  In this Appendix we want to point out that the Harmony Relationships represent
+                                  an “Emerging Solution” with respect to the Solution to the First Fundamental
+                                  Equation and, at the same time, a corresponding “Exceeding” Solution.
+                                     Let us then recall the basic elements that will enable us to show that the Har-
+                                  mony Relationships represent an “Emerging Extra” of Generative Nature, [23]
+                                  [26] [27] [28].
+                                     The Solution to the First Fundamental Equation, in fact, allow us to write the
+                                  following topological “Assignation Relationships”
+                                                             {2 2} ∗              {2 2}               {2 2}
+                                {α12 ( t )}{ } ⊕ {λ12 ( t )}       = {α1 j ( t )}           {        }
+                                           2 2
+                                                                                            ⊕ λ1 j ( t )         for j = 3, 4,  , N (A1.1)
+
+                                  which, when re-written in terms of “Incipient” Derivatives, up to the order N −
+                                  1, they represent the “Diffusive Generativity” inside the Self-Organising System,
+                                  and assume the form
+                                                                      k                           k
+                                                               
+                                                                     ∗             
+                                                                                         
+                                                    α
+                                                    12 ( t ) ⊕ 
+                                                                λ12  =  α
+                                                                         1j ( t ) ⊕ 
+                                                                                     λ1j  =
+                                                                                           for k 1, 2,  , N − 1                   (A1.2)
+                                                                                      
+                                  in which, for simplicity of notation, the Ordinalities                      {2 2} , which appear in
+                                  Equation (A1.1), are thought as being included in the symbols of the quantities
+                                  to which they refer to, and λ1 j represent N − 1 associated Correlating Factors.
+                                     Equation (A1.2) cannot be interpreted as a “necessary consequence” of Equa-
+                                  tion (A1.1), because the latter are obtained on the basis of “Incipient” Deriva-
+                                  tives. Consequently, they are all of Generative Nature.
+                                     In fact, if rewritten in the following form
+
+
+                                                                                     k
+                                                                          
+                                                                               
+                                                            α12 ( t ) ⊕ λ12 
+                                                                              
+                                                                                     k
+                                                                                          = 1 for
+                                                                                             =     k 1, 2,  , N − 1               (A1.3)
+                                                                           
+                                                                                 
+                                                            α1 j ( t ) ⊕ λ1 j 
+                                                                                
+                                  they allow to assert that the considered System is already characterized by a
+                                  proper and specific “Interior Unit”, of Generative Nature, formally represented
+                                  by the symbol “ 1 ”.
+                                     Such a “Unity”, however, is still in the form of “Not Less Than”. This is be-
+                                  cause:
+                                  • in a Generative Contest, they are certainly not the parts that, through the
+                                      Relationships “between” them, give “Origin” to the “Excess of Unity”;
+                                  • because it is exactly true the opposite: in fact, it is the Generative Unit of the
+                                      System that, with its proper “Excess”, Qualifies the Relationships “between”
+                                      the parts.
+                                     Consequently, the most Adherent Formulation of the Self-Organizing Diffu-
+                                  sive Generative Process is that which can be obtained by re-proposing Equation
+
+DOI: 10.4236/jamp.2022.109178                               2686                               Journal of Applied Mathematics and Physics
+                                                                                                                                C. Giannantoni
+
+
+                                (A1.3) in the form
+                                                                                               k
+                                                                                    
+                                                                                         
+                                                                      α12 ( t ) ⊕ λ12 
+                                                                                                  ∗
+
+                                                                                               k
+                                                                                                    = 1{ } for ∀k                     (A1.4)
+                                                                                     
+                                                                                           
+                                                                      α1 j ( t ) ⊕ λ1 j 
+                                                                                          
+                                or better, even more properly, as follows
+                                                                             
+                                                                                   
+                                                              α12 ( t ) ⊕ λ12  ∗
+                                                                                              1
+                                                                                            ~ 
+                                                                                  
+                                                                             
+                                                                                   
+                                                                                          {}
+                                                                                            N − 1
+                                                                                     = 1   , j = 2,  , N                         (A1.5)
+                                                              α1 j ( t ) ⊕ λ1 j 
+                                                                                  
+                                in which the symbol                  {1} now formally represents the Generative Whole,
+                                which, at the same time, is Self-Organizing and of Ordinal Nature, while its
+                                                                  ~ 
+                                unique and sole exponent 1  N − 1 explicitly represents the fundamental
+                                                                       
+                                concept previously anticipated, that is: it is the “Whole”, with its proper Genera-
+                                tivity “Excess”, the one that properly “Qualifies” the Relationships “Between” the
+                                parts.
+                                      This is obviously true not in the sense of Relationships understood “two by
+                                two”, but as the specific Reflex of an Ordinal Unit, which, in any case, represents
+                                an “Irreducible Excess” with respect to the simple “composition” of the single
+                                “parts”.
+                                      Consequently, Relation (A1.5), can also be written in the form
+                                                                                  1
+                                                                                ~
+                                                               
+                                                                     ∗      N − 1 
+                                                                                                  
+                                                                                                     
+                                                                         {}
+                                                                                        
+                                                α1 j ( t ) ⊕
+                                                    =          λ1 j  1    α12 ( t ) ⊕ λ12  for j = 2, 3,  , N             (A1.6)
+                                                                                                  
+                                which, when reinterpreted in terms of “Progenitor Relationships”, finally leads
+                                to the formal expression of the Harmony Relationships. The latter, in fact, when
+                                written in the form
+
+                                                                 (            )
+                                                             ∗
+                                {α         ( t ) ⊕ λ1, j +1 ( t )} =   {}  {α12 ( t ) ⊕ λ12 ( t )} for
+                                                                     ~
+
+                                  1, j +1
+                                                                     N −1 1                            =     j 1, 2,  , N − 1 (A1.7)
+                                                                                  j
+
+
+                                clearly show that the Diffusive Generativity “updates”, by Assignation, the same
+                                reference couple “12”.
+                                  Equation (A1.7) then show that all the elements of the Ordinal Matrix in Fig-
+                                ure 2, can be obtained on the basis of one sole couple α12 ( t ) assumed as ref-
+                                erence and N − 1 associated Correlating Factors.
+                                      In this respect, it is also worth noting that condition (A1.2) is properly that
+                                which represent the fundamental presupposition of what could be termed as an
+                                Intensive Whole, precisely because of the “consonance” between all the genera-
+                                tive derivatives up to the order N − 1, which are the “Reflex” of the Diffusive
+                                Generativity inside the System.
+                                      This is the specific reason why, by means of the MOP, and its correlative
+
+DOI: 10.4236/jamp.2022.109178                               2687                                    Journal of Applied Mathematics and Physics
+C. Giannantoni
+
+
+                                Harmony Relationships, it was possible to reconsider some “particular” prob-
+                                lems that, in the Traditional Scientific Literature, are generally known as being
+                                “unsolvable”, “intractable”, “with drift”. Whose solutions ended up by showing
+                                that the Maximum Ordinality Principle has an extremely general validity [46].
+
+                                Appendix 2. The Ordinal Roots of Unity                                                             {1}
+                                In this respect it is worth observing that Relationships (A1.7) are written in such
+                                a form only for reasons of clarity and exposition simplicity. In such a form, in
+                                fact, it could seem that the various elements that characterize the System are
+                                “still” related, “between” them, according to Relationships of the type “two by
+                                two”.
+                                   In reality, if one makes explicit the term                                          ( {1} ) according to its more
+                                                                                                                        N −1
+                                                                                                                            ~
+
+
+                                                                                                                                        j
+                                                                                                                   1                          1
+                                                                                                                ~                       ~  
+                                specific and proper meaning, that is as                                 {1}     N − 1
+                                                                                                                        ≡ 1{}    N −1,  N − 1 
+                                                                                                                                                      , in which N − 1
+
+                                                                    ~ 
+                                refers to the cardinality, while  N − 1 refers to the Internal Ordinal “(N −1)-
+                                                                       
+                                ary” Relationship, it is possible to more appropriately write (by also pointing out
+                                the Ordinalities 2,      { }
+                                                    2 , previously underwritten)
+
+                                                                                                    1
+                                                                                                   ~  
+                                                                      { }                                                                             { 2 2}
+                                    {α ( t )}{ } ⊕ {λ ( t                                                                      {2 2}
+                                                                                 ∗
+                                                            )} {1}                                                                                {           }
+                                                 2 2                   2 2
+                                                                                                                    {α12 ( t )}
+                                                                                            N −1,  N − 1 
+                                        1j         =         1j                                                                    ⊕ λ12 ( t )          (A2.1)
+
+                                that is, even more explicitly, in the form
+                                                                                 N −1 1
+                                                                                
+                                                                                
+                                                                                         ( { })
+                                                                                            1
+                                                                                                
+                                                                                                
+                                                                                                
+                                                 { 2 2}
+                                                         {
+                                {αi, j +1 ( t )} ⊕ λi, j +1 ( t
+                                                          =       )
+                                                                    {
+                                                                     }
+                                                                      2 2 } ∗ 
+                                                                                
+                                                                                   N −1 1
+                                                                                         ( { })
+                                                                                               
+                                                                                            2   {α
+                                                                                                   12 ( t )}
+                                                                                                             { 2 2}
+                                                                                                                      ⊕ λ12 ( t )
+                                                                                                                                   {2 2}
+                                                                                                                                           (A2.2)      {           }
+                                                                                              
+                                                                                               
+                                                                                 N −1 
+                                                                                
+                                                                                
+                                                                                       1 ( { }) 
+                                                                                                
+                                                                                           N −1 
+
+
+                                from which it is possible to recognize that the single “cardinal” values that in
+                                Equation (A1.7) appear as they were “distinct”, and, in addition, as being “sepa-
+                                rated”, in reality they are the Reflex of an Ordinal Unit that transcends them,
+                                and it relates them in the form of an (N − 1)-ary Relationship.
+                                   This is the aspect that (more than others) clearly manifests that the Harmony
+                                Relationships represent an “Excess” with respect the initial Assignation Rela-
+                                tionships (A1.1) and (A1.2).
+                                   As far as the “explicit” meaning of the Ordinal Routs of Unity is concerned,
+                                previously synthetically indicated in the form
+
+                                                                  ( {1}=
+                                                                    N −1
+                                                                        ) for j 1, 2, 3, , N −1
+                                                                                     j
+                                                                                                                                                                       (A2.3)
+
+                                it is worth expressly pointing out that the symbol                                              {1} represents the Unity of
+DOI: 10.4236/jamp.2022.109178                                2688                                        Journal of Applied Mathematics and Physics
+                                                                                                               C. Giannantoni
+
+
+                                the System (understood as a Whole), with specific reference to the Unity of its
+                                Proper Space (as well as its Relational Space).
+                                    Such a Fundamental Unit can be then expressed by the following Relationship
+                                                                           α  i ⊕ β  j + γ ⊕ k}
+                                                                  {1} = e{                                           (A2.4)
+
+                                    Consequently, the Ordinal Roots           ( {1} ) will be represented in the fol-
+                                                                               N −1
+                                                                                             l
+
+                                lowing form
+                                                                            {α  i ⊕ β  j +γ ⊕ k}
+                                                                 {1} = e
+                                                                     l
+                                                                                      N −1
+                                                                                                                      (A2.5)
+
+                                where:
+                                • i, j , k are the fundamental spinors of the Relational Space [26] [38], which
+                                                                        
+                                  replace the traditional versors i , j , k , understood in their more general
+                                    sense, that is, as the specific foundation of any given System;
+                                •    α , β , γ are respectively equal to
+                                                              4π ⋅ l            2π ⋅ l            2π ⋅ l
+                                                    α= ε1 +          , β= ε 2 +        e γ= ε 3 +                     (A2.6)
+                                                              N −1              N −1              N −1
+                                • where the “periodicity” of the “spinor” i is equal to 4π , because expressed
+                                  in steradians;
+                                • while the periodicity of the spinors j e k are both equal to 2π radiants
+                                  (each), because these spinors are always “orthogonal”, both between them,
+                                  and with respect to the spinor i (an orthogonality that can be understood,
+                                    inter alia, as a form of reciprocal “irreducibility”);
+                                • the quantities ε1 , ε 2 , ε 3 represent specific “parameters” of the Relational Space
+                                    each time considered, with specific reference to the “couple 12”.
+                                    Sometimes (for example in the case of Protein Folding), for an easier “topo-
+                                logical” representation Equation (A2.6) can also represented as
+                                               α    ε + 4π ⋅ l    β    ε + 2π ⋅ l    γ    ε + 2π ⋅ l
+                                                   = 1         ,      = 2         ,      = 3                          (A2.7)
+                                              N −1     N −1      N −1     N −1      N −1     N −1
+                                which however can always re-proposed in the previous form (A2.6) through an
+                                appropriate choice of the parameters ε1 , ε 2 , ε 3 .
+                                    On the basis of the previous exposition, it should be even clearer that the
+                                Harmony Relationships represent an “Irreducible Excess”, that is an “Exceeding”
+                                Manifestation of a Generative System, which, at the same time, is Self-Organizing,
+                                of Ordinal Nature, and, above all, is understood as a Whole from the very begin-
+                                ning, and not vice versa.
+
+
+
+
+DOI: 10.4236/jamp.2022.109178                         2689                         Journal of Applied Mathematics and Physics
+

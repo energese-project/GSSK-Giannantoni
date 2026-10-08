@@ -56,3 +56,7 @@ __pycache__/
 # Academic Press and this repository is public.
 docs/*.pdf
 tools/
+
+# Third-party sources that are not openly licensed (text extracts, OCR,
+# page renders). Kept locally beside docs/sources/cc-by/; see docs/sources/README.md.
+docs/sources/local/
