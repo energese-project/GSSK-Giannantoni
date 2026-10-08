@@ -287,6 +287,19 @@ typedef enum {
 
 const char *gia_role_name(gia_role r);
 
+/* What an interaction module computes (ADR 0016). Odum's Fig. 2.6 draws one
+ * glyph with different arithmetic inside it, so these are actions of the one
+ * module, not separate symbols. Parsed once at load; past the loader every
+ * site switches on the enum, so a missed case is a build failure. */
+typedef enum {
+    GIA_ACTION_MULTIPLY,  /* (a), (c): F = k Q_energy prod(Q_control) -- default */
+    GIA_ACTION_DIVIDE,    /* (d): F = k Q_energy / max(Q_control, eps)          */
+    GIA_ACTION_SUBTRACT   /* (e): F = max(0, k (Q_energy - Q_control)), with the
+                           * crossing located as an event                        */
+} gia_action;
+
+const char *gia_action_name(gia_action a);
+
 /* ---- forcing ----
  *
  * ADR 0006's vocabulary: one set of waveforms, attachable in two places. A
@@ -389,6 +402,7 @@ typedef struct {
     double        mod_capacity;  /* C, for a cycling receptor                  */
     double        mod_threshold; /* switching level, for a switch              */
     double        mod_price;   /* P, for a transactor: goods per unit counter  */
+    gia_action    mod_action;  /* what an interaction module computes          */
     bool          is_module; /* hosts a law over its neighbourhood (ADR 0012) */
     bool          integrates;/* false for source/constant: Q is held, not solved */
     bool          on_cycle;  /* filled in by gia_mark_cycles() */

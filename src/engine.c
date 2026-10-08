@@ -273,6 +273,15 @@ bool gia_node_is_module(const gia_model *m, int node_idx) {
     return m->nodes[node_idx].is_module;
 }
 
+const char *gia_action_name(gia_action a) {
+    switch (a) {
+        case GIA_ACTION_MULTIPLY: return "multiply";
+        case GIA_ACTION_DIVIDE:   return "divide";
+        case GIA_ACTION_SUBTRACT: return "subtract";
+    }
+    return "?";
+}
+
 const char *gia_logic_name(gia_logic l) {
     switch (l) {
         case GIA_LOGIC_LINEAR:      return "linear";
@@ -735,9 +744,9 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
      * gate is not a stock. */
     for (i = 0; i < n; i++) {
         const gia_node *nd = &m->nodes[i];
-        int    j, ae = -1, ctrl = -1, col;
-        double g = 0.0, W = 0.0, konst = 0.0, coef;
-        bool   affine = false, drain;
+        int    j, t, nt, ae = -1, ctrl = -1, col[2];
+        double g = 0.0, W = 0.0, konst = 0.0, coef[2];
+        bool   affine = false, subtract = false, drain;
 
         if (!nd->is_module) continue;
 
@@ -783,19 +792,39 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
         if (ae < 0 || W <= 0.0) continue;
 
         switch (nd->kind) {
-            case GIA_NODE_INTERACTION: {
-                /* F = k Q_energy * prod(Q_control). Every control folds into
-                 * the conductance, which is the n-ary case of the same move the
-                 * binary work gate already used (ADR 0012). */
-                g = nd->mod_k;
-                for (j = 0; j < m->n_edges; j++) {
-                    const gia_edge *e = &m->edges[j];
-                    if (e->to == i && e->role == GIA_ROLE_CONTROL &&
-                        e->from >= 0 && q)
-                        g *= q[e->from];
+            case GIA_NODE_INTERACTION:
+                switch (nd->mod_action) {
+                    case GIA_ACTION_MULTIPLY:
+                        /* F = k Q_energy * prod(Q_control). Every control folds
+                         * into the conductance, the n-ary case of the same move
+                         * the binary work gate already used (ADR 0012). */
+                        g = nd->mod_k;
+                        for (j = 0; j < m->n_edges; j++) {
+                            const gia_edge *e = &m->edges[j];
+                            if (e->to == i && e->role == GIA_ROLE_CONTROL &&
+                                e->from >= 0 && q)
+                                g *= q[e->from];
+                        }
+                        break;
+                    case GIA_ACTION_DIVIDE: {
+                        /* Fig. 2.6(d): linear in Q_energy with a conductance
+                         * set by the control. ADR 0002's floor keeps it finite
+                         * as the control goes to zero. */
+                        double qc = (ctrl >= 0 && q) ? q[ctrl] : 1.0;
+                        if (qc < GIA_EPS) qc = GIA_EPS;
+                        g = nd->mod_k / qc;
+                        break;
+                    }
+                    case GIA_ACTION_SUBTRACT:
+                        /* Fig. 2.6(e): linear in two quantities while open, and
+                         * nothing while the clamp holds. The crossing is an
+                         * event (module_gap), so each side is exact. */
+                        if (ctrl < 0 || !q || q[ae] - q[ctrl] <= 0.0) continue;
+                        g        = nd->mod_k;
+                        subtract = true;
+                        break;
                 }
                 break;
-            }
             case GIA_NODE_LOOP_LIMITED: {
                 double qe = q ? q[ae] : 0.0;
                 double C  = (nd->mod_capacity > GIA_EPS) ? nd->mod_capacity : 1.0;
@@ -820,48 +849,55 @@ bool gia_build_flow_matrix(const gia_model *m, const double *q, double t,
                 continue;
         }
 
-        /* F = coef * Q[col]: in the energy input's column for a work gate or
-         * a cycling receptor, the control's for an amplifier, and the
-         * augmented column for an open switch's fixed rate. Every leg below is
-         * a multiple of F, so each is one entry in that column. */
-        if (affine)                        { col = dim - 1; coef = konst;     }
-        else if (nd->kind == GIA_NODE_GAIN) { col = ctrl;   coef = nd->mod_k; }
-        else                               { col = ae;      coef = g;         }
+        /* F = sum of coef[t] * Q[col[t]]: the energy input's column for a work
+         * gate or a cycling receptor, the control's for an amplifier, the
+         * augmented column for an open switch's fixed rate, and two columns
+         * for a subtracting action, k Q_energy - k Q_control. Every leg below
+         * is a multiple of F, so each is the same entries scaled. */
+        nt = 1;
+        if (affine)                         { col[0] = dim - 1; coef[0] = konst;     }
+        else if (nd->kind == GIA_NODE_GAIN) { col[0] = ctrl;    coef[0] = nd->mod_k; }
+        else                                { col[0] = ae;      coef[0] = g;         }
+        if (subtract) { col[1] = ctrl; coef[1] = -g; nt = 2; }
 
         drain = m->nodes[ae].integrates && m->nodes[ae].kind != GIA_NODE_SINK;
 
-        /* Drained once, from the energy input. */
-        if (drain) out->a[(size_t)ae*(size_t)dim+(size_t)col] -= coef;
+        for (t = 0; t < nt; t++) {
+            /* Drained once, from the energy input. */
+            if (drain) out->a[(size_t)ae*(size_t)dim+(size_t)col[t]] -= coef[t];
 
-        /* Filled per product pathway, in proportion to its weight (ADR 0013
-         * decision 4). Equal weights give an even split. */
-        for (j = 0; j < m->n_edges; j++) {
-            const gia_edge *e = &m->edges[j];
-            int    b2;
-            if (e->from != i || e->to < 0 || e->role == GIA_ROLE_USED) continue;
-            b2 = e->to;
-            if (!m->nodes[b2].integrates) continue;
-            out->a[(size_t)b2*(size_t)dim+(size_t)col] +=
-                coef * fabs(e->weight) / W;
-        }
+            /* Filled per product pathway, in proportion to its weight (ADR 0013
+             * decision 4). Equal weights give an even split. */
+            for (j = 0; j < m->n_edges; j++) {
+                const gia_edge *e = &m->edges[j];
+                int    b2;
+                if (e->from != i || e->to < 0 || e->role == GIA_ROLE_USED) continue;
+                b2 = e->to;
+                if (!m->nodes[b2].integrates) continue;
+                out->a[(size_t)b2*(size_t)dim+(size_t)col[t]] +=
+                    coef[t] * fabs(e->weight) / W;
+            }
 
-        /* ADR 0017: each control draws s F from its source, and that leaves on
-         * the used leg holding the control's carrier -- dissipated, never
-         * added to the product. Load guarantees the used leg exists. */
-        for (j = 0; j < m->n_edges; j++) {
-            const gia_edge *e = &m->edges[j];
-            int c, k, sink = -1;
-            if (e->to != i || e->role != GIA_ROLE_CONTROL ||
-                e->use_ratio <= 0.0 || e->from < 0) continue;
-            c = e->from;
-            for (k = 0; k < m->n_edges; k++)
-                if (m->edges[k].from == i && m->edges[k].role == GIA_ROLE_USED &&
-                    gia_node_carrier(m, m->edges[k].to) == gia_node_carrier(m, c))
-                    sink = m->edges[k].to;
-            if (m->nodes[c].integrates && m->nodes[c].kind != GIA_NODE_SINK)
-                out->a[(size_t)c*(size_t)dim+(size_t)col] -= e->use_ratio * coef;
-            if (sink >= 0 && m->nodes[sink].integrates)
-                out->a[(size_t)sink*(size_t)dim+(size_t)col] += e->use_ratio * coef;
+            /* ADR 0017: each control draws s F from its source, and that leaves
+             * on the used leg holding the control's carrier -- dissipated,
+             * never added to the product. Load guarantees the used leg. */
+            for (j = 0; j < m->n_edges; j++) {
+                const gia_edge *e = &m->edges[j];
+                int c, k, sink = -1;
+                if (e->to != i || e->role != GIA_ROLE_CONTROL ||
+                    e->use_ratio <= 0.0 || e->from < 0) continue;
+                c = e->from;
+                for (k = 0; k < m->n_edges; k++)
+                    if (m->edges[k].from == i && m->edges[k].role == GIA_ROLE_USED &&
+                        gia_node_carrier(m, m->edges[k].to) == gia_node_carrier(m, c))
+                        sink = m->edges[k].to;
+                if (m->nodes[c].integrates && m->nodes[c].kind != GIA_NODE_SINK)
+                    out->a[(size_t)c*(size_t)dim+(size_t)col[t]] -=
+                        e->use_ratio * coef[t];
+                if (sink >= 0 && m->nodes[sink].integrates)
+                    out->a[(size_t)sink*(size_t)dim+(size_t)col[t]] +=
+                        e->use_ratio * coef[t];
+            }
         }
     }
     return true;
@@ -919,28 +955,42 @@ bool gia_flow_matrix_is_constant(const gia_model *m) {
 /* Does this model contain a pathway that switches on or off? Those are solved
  * piecewise: there is no smooth alpha across a crossing, so persistence of form
  * holds on each side and not through it. */
+/* A module whose law switches regime at a located crossing: a switch at its
+ * threshold, and a subtracting action where the difference reaches zero. */
+static bool module_switches(const gia_node *nd) {
+    return nd->is_module &&
+           (nd->kind == GIA_NODE_SWITCH ||
+            (nd->kind == GIA_NODE_INTERACTION &&
+             nd->mod_action == GIA_ACTION_SUBTRACT));
+}
+
 static bool has_switching(const gia_model *m) {
     int i;
     for (i = 0; i < m->n_edges; i++)
         if (m->edges[i].logic == GIA_LOGIC_THRESHOLD ||
             m->edges[i].logic == GIA_LOGIC_SUBTRACT) return true;
     for (i = 0; i < m->n_nodes; i++)
-        if (m->nodes[i].is_module && m->nodes[i].kind == GIA_NODE_SWITCH)
-            return true;
+        if (module_switches(&m->nodes[i])) return true;
     return false;
 }
 
-/* Signed distance to a switch module's boundary: > 0 while it is conducting.
- * Its sensor is the control input, found by ROLE — the same rule the law uses,
- * so the crossing located is the one the law acts on. */
+/* Signed distance to a switching module's boundary: > 0 while it conducts.
+ * For a switch, the sensor (its control) against the threshold; for a
+ * subtracting action, the energy input against the control. Inputs are found
+ * by ROLE -- the same rule the law uses, so the crossing located is the one
+ * the law acts on. */
 static double module_gap(const gia_model *m, int ni, const double *q) {
-    int j;
+    int j, ae = -1, ctrl = -1;
     for (j = 0; j < m->n_edges; j++) {
         const gia_edge *e = &m->edges[j];
-        if (e->to == ni && e->role == GIA_ROLE_CONTROL && e->from >= 0)
-            return q[e->from] - m->nodes[ni].mod_threshold;
+        if (e->to != ni || e->from < 0) continue;
+        if (e->role == GIA_ROLE_CONTROL) ctrl = e->from;
+        if (e->role == GIA_ROLE_ENERGY)  ae   = e->from;
     }
-    return 1.0;
+    if (ctrl < 0) return 1.0;
+    if (m->nodes[ni].kind == GIA_NODE_INTERACTION)
+        return (ae >= 0) ? q[ae] - q[ctrl] : 1.0;
+    return q[ctrl] - m->nodes[ni].mod_threshold;
 }
 
 /* One smooth advance: Q(t+h) = exp(A h) Q(t), with A frozen at `q`.
@@ -1126,8 +1176,7 @@ static double locate_event(const gia_model *m, const double *q0, double span,
         double lo, hi, glo, ghi, mid, gmid;
         int    it, side = 0;
 
-        if (!m->nodes[i].is_module || m->nodes[i].kind != GIA_NODE_SWITCH)
-            continue;
+        if (!module_switches(&m->nodes[i])) continue;
 
         glo = module_gap(m, i, q0);
         if (!advance(m, q0, earliest, work)) continue;
@@ -1682,6 +1731,34 @@ bool gia_model_load(gia_model *m, cJSON *root) {
                 nd->mod_k         = num_field(mj, "k", 1.0);
                 nd->mod_capacity  = num_field(mj, "capacity", 1.0);
                 nd->mod_threshold = num_field(mj, "threshold", 0.0);
+                {   /* ADR 0016: the interaction glyph's arithmetic. Absent
+                     * means multiply, so every work gate written before this
+                     * means what it meant. */
+                    const cJSON *aj = cJSON_GetObjectItemCaseSensitive(mj, "action");
+                    nd->mod_action = GIA_ACTION_MULTIPLY;
+                    if (aj && nd->kind != GIA_NODE_INTERACTION) {
+                        fprintf(stderr, "engine: module '%s' (%s): `action` "
+                                        "belongs to an interaction module "
+                                        "(ADR 0016)\n", nd->id ? nd->id : "?",
+                                gia_node_kind_name(nd->kind));
+                        gia_model_free(m);
+                        return false;
+                    }
+                    if (aj) {
+                        const char *a = cJSON_IsString(aj) ? aj->valuestring : NULL;
+                        if      (a && !strcmp(a, "multiply")) nd->mod_action = GIA_ACTION_MULTIPLY;
+                        else if (a && !strcmp(a, "divide"))   nd->mod_action = GIA_ACTION_DIVIDE;
+                        else if (a && !strcmp(a, "subtract")) nd->mod_action = GIA_ACTION_SUBTRACT;
+                        else {
+                            fprintf(stderr, "engine: module '%s': unknown action "
+                                            "(expected multiply, divide or "
+                                            "subtract, Odum Fig. 2.6)\n",
+                                    nd->id ? nd->id : "?");
+                            gia_model_free(m);
+                            return false;
+                        }
+                    }
+                }
                 /* Neutral name first, the money-specific one as an alias — the
                  * same order PR 3 established, because naming it price is what
                  * made an earlier revision rule out barter. */
@@ -2106,7 +2183,11 @@ bool gia_model_load(gia_model *m, cJSON *root) {
         }
 
         switch (nd->kind) {
-            case GIA_NODE_INTERACTION:  want_control = -1; break;  /* any */
+            case GIA_NODE_INTERACTION:
+                /* A quotient or a difference of three things is not in the
+                 * figure, so divide and subtract take exactly one (ADR 0016). */
+                want_control = (nd->mod_action == GIA_ACTION_MULTIPLY) ? -1 : 1;
+                break;
             case GIA_NODE_GAIN:         want_control =  1; break;
             case GIA_NODE_SWITCH:       want_control =  1; break;
             case GIA_NODE_LOOP_LIMITED: want_control =  0; break;
@@ -2274,13 +2355,26 @@ static double module_flow(const gia_model *m, int ni, const double *q) {
     switch (nd->kind) {
         case GIA_NODE_INTERACTION:
             if (ae < 0) return 0.0;
-            g = nd->mod_k;
-            for (j = 0; j < m->n_edges; j++) {
-                const gia_edge *e = &m->edges[j];
-                if (e->to == ni && e->role == GIA_ROLE_CONTROL && e->from >= 0)
-                    g *= q[e->from];
+            switch (nd->mod_action) {
+                case GIA_ACTION_MULTIPLY:
+                    g = nd->mod_k;
+                    for (j = 0; j < m->n_edges; j++) {
+                        const gia_edge *e = &m->edges[j];
+                        if (e->to == ni && e->role == GIA_ROLE_CONTROL &&
+                            e->from >= 0)
+                            g *= q[e->from];
+                    }
+                    return g * q[ae];
+                case GIA_ACTION_DIVIDE: {
+                    double qc = (ctrl >= 0) ? q[ctrl] : 1.0;
+                    if (qc < GIA_EPS) qc = GIA_EPS;
+                    return nd->mod_k * q[ae] / qc;
+                }
+                case GIA_ACTION_SUBTRACT:
+                    if (ctrl < 0 || q[ae] - q[ctrl] <= 0.0) return 0.0;
+                    return nd->mod_k * (q[ae] - q[ctrl]);
             }
-            return g * q[ae];
+            return 0.0;
         case GIA_NODE_LOOP_LIMITED: {
             double C;
             if (ae < 0) return 0.0;

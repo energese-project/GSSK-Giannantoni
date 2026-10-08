@@ -1,9 +1,10 @@
 # ADR 0016 — Divide and subtract are actions of the interaction module
 
-- **Status**: proposed
+- **Status**: accepted, implemented (task `control-use-ratio`, with ADR 0017)
 - **Date**: 2026-09-16
 - **Task**: `adr-0016-interaction-actions`
 - **Supersedes**: nothing
+- **Amended by**: [ADR 0017](0017-what-a-control-input-is.md) — the control of every action is drawn at its `use_ratio`, not read and never consumed (decision 1's roles)
 - **Depends on**: [ADR 0008](0008-nary-interaction-and-subtracting-action.md) — the subtracting action;
   [ADR 0012](0012-where-a-law-lives.md) — module laws leave pathways;
   [ADR 0013](0013-module-roles-not-position.md) — roles, never position

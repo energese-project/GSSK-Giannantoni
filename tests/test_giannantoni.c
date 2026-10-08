@@ -2955,6 +2955,217 @@ static void test_drawn_control_closes_no_pathway(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 60-63. Divide and subtract are actions of the interaction module
+ * (ADR 0016)
+ *
+ * Odum's Fig. 2.6 draws one glyph five ways; (d) divides the left input by
+ * the control and (e) subtracts the control from it. Until now only the
+ * pathway laws `ratio` and `subtract` could say so, which left ADR 0012's
+ * migration with nowhere to put them.
+ * ------------------------------------------------------------------ */
+
+/* A store `a` feeding `b`, with `c` as the second input, written either as a
+ * pathway law or as a work gate with an action. `leak` adds a linear drain on
+ * `a` so a subtracting action can cross zero. */
+static cJSON *action_model(bool module, const char *law, const char *c_node,
+                           const char *leak) {
+    static char buf[1800];
+    if (module)
+        snprintf(buf, sizeof(buf),
+            "{\"nodes\":["
+            "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+            "  {\"id\":\"c\",%s},"
+            "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
+            "  {\"id\":\"z\",\"type\":\"storage\",\"current_level\":0.0},"
+            "  {\"id\":\"gate\",\"type\":\"interaction\","
+            "   \"module\":{\"k\":0.5,\"action\":\"%s\"}}],"
+            " \"edges\":["
+            "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
+            "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\","
+            "   \"use_ratio\":0},"
+            "  {\"source\":\"gate\",\"target\":\"b\"}%s],"
+            " \"simulation_params\":{\"t_val\":6.0,\"derivative_order\":1,"
+            "                       \"generative_mode\":false}}",
+            c_node, law, leak);
+    else
+        snprintf(buf, sizeof(buf),
+            "{\"nodes\":["
+            "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+            "  {\"id\":\"c\",%s},"
+            "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
+            "  {\"id\":\"z\",\"type\":\"storage\",\"current_level\":0.0}],"
+            " \"edges\":["
+            "  {\"source\":\"a\",\"target\":\"b\",\"logic\":\"%s\","
+            "   \"control_node\":\"c\",\"weight\":0.5}%s],"
+            " \"simulation_params\":{\"t_val\":6.0,\"derivative_order\":1,"
+            "                       \"generative_mode\":false}}",
+            c_node, law, leak);
+    return cJSON_Parse(buf);
+}
+
+#define C_CONST "\"type\":\"constant\",\"value\":2.0"
+#define C_FOUR  "\"type\":\"constant\",\"value\":4.0"
+#define LEAK    ",{\"source\":\"a\",\"target\":\"z\",\"logic\":\"linear\",\"weight\":0.2}"
+
+static void test_action_validation(void) {
+    char buf[1400];
+    const char *fmt =
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"c\",\"type\":\"constant\",\"value\":2.0},"
+        "  {\"id\":\"d\",\"type\":\"constant\",\"value\":3.0},"
+        "  {\"id\":\"gate\",\"type\":\"%s\",\"module\":{\"k\":0.1%s}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0}%s,"
+        "  {\"source\":\"gate\",\"target\":\"b\"}]," CTL_SIM;
+    const char *two = ",{\"source\":\"d\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0}";
+
+    printf("\n[60] an interaction states its action; the others have none\n");
+
+    snprintf(buf, sizeof(buf), fmt, "interaction", "", "");
+    ok("no action is multiply, as before", loads(buf));
+    snprintf(buf, sizeof(buf), fmt, "interaction", ",\"action\":\"multiply\"", two);
+    ok("multiply takes any number of controls", loads(buf));
+    snprintf(buf, sizeof(buf), fmt, "interaction", ",\"action\":\"divide\"", "");
+    ok("divide with one control loads", loads(buf));
+    snprintf(buf, sizeof(buf), fmt, "interaction", ",\"action\":\"subtract\"", "");
+    ok("subtract with one control loads", loads(buf));
+    snprintf(buf, sizeof(buf), fmt, "interaction", ",\"action\":\"divide\"", two);
+    ok("divide with two controls is refused", !loads(buf));
+    snprintf(buf, sizeof(buf), fmt, "interaction", ",\"action\":\"subtract\"", two);
+    ok("subtract with two controls is refused", !loads(buf));
+    snprintf(buf, sizeof(buf), fmt, "interaction", ",\"action\":\"min\"", "");
+    ok("an action beyond Fig. 2.6 is refused", !loads(buf));
+    snprintf(buf, sizeof(buf), fmt, "interaction", ",\"action\":3", "");
+    ok("an action that is not a string is refused", !loads(buf));
+    snprintf(buf, sizeof(buf), fmt, "gain", ",\"action\":\"divide\"", "");
+    ok("action on a gain is refused", !loads(buf));
+}
+
+static void test_action_divide(void) {
+    cJSON     *root;
+    gia_model  m, p;
+    double     q[5], qp[4], t;
+    int        k;
+
+    printf("\n[61] divide: F = k Q_energy / max(Q_control, eps)  (Fig. 2.6d)\n");
+
+    root = action_model(true, "divide", C_CONST, "");
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads", &m, root)) return;
+    ok("solves", gia_network_state(&m, 6.0, q, NULL));
+    /* Q_c held at 2, so F = 0.25 a and a decays exactly. */
+    close_to("a(6) = 10 e^(-k t / Q_c)", q[0], 10.0 * exp(-0.25 * 6.0), 1e-9);
+    close_to("b takes what a lost", q[2], 10.0 - q[0], 1e-9);
+    {
+        cJSON *pr = action_model(false, "ratio", C_CONST, "");
+        if (!pr || !gia_model_load(&p, pr)) { ok("pathway form loads", false); return; }
+        for (k = 1; k <= 3; k++) {
+            t = 2.0 * k;
+            gia_network_state(&m, t, q, NULL);
+            gia_network_state(&p, t, qp, NULL);
+            close_to("the module reproduces the ratio pathway", q[0], qp[0], 1e-9);
+        }
+        gia_model_free(&p); cJSON_Delete(pr);
+    }
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_action_subtract(void) {
+    cJSON     *root;
+    gia_model  m, p;
+    double     q[5], qp[4], ts, t, eq = 2.0 / 0.7;
+    int        k;
+
+    printf("\n[62] subtract: F = max(0, k (Q_energy - Q_control))  (Fig. 2.6e)\n");
+
+    /* Q_c = 4, and a also leaks at 0.2. While a > 4,
+     *   da/dt = -0.5 (a - 4) - 0.2 a = -0.7 a + 2,
+     * so a = eq + (10 - eq) e^(-0.7 t) until it reaches 4 at ts. Past that
+     * the clamp holds F at zero and a only leaks: a = 4 e^(-0.2 (t - ts)). */
+    ts = log((10.0 - eq) / (4.0 - eq)) / 0.7;
+
+    root = action_model(true, "subtract", C_FOUR, LEAK);
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("loads", &m, root)) return;
+    ok("solves before the crossing", gia_network_state(&m, 1.0, q, NULL));
+    close_to("a(1) on the open branch", q[0], eq + (10.0 - eq) * exp(-0.7), 1e-9);
+    ok("solves past the crossing", gia_network_state(&m, 6.0, q, NULL));
+    ok("the crossing is located as an event", gia_count_events(&m, 6.0) == 1);
+    close_to("a(6) on the clamped branch", q[0], 4.0 * exp(-0.2 * (6.0 - ts)), 1e-7);
+    close_to("conserved across the event",
+             q[0] + q[2] + q[3], 10.0, 1e-9);
+    {
+        cJSON *pr = action_model(false, "subtract", C_FOUR, LEAK);
+        if (!pr || !gia_model_load(&p, pr)) { ok("pathway form loads", false); return; }
+        for (k = 1; k <= 3; k++) {
+            t = 2.0 * k;
+            gia_network_state(&m, t, q, NULL);
+            gia_network_state(&p, t, qp, NULL);
+            close_to("the module reproduces the subtract pathway", q[0], qp[0], 1e-7);
+        }
+        gia_model_free(&p); cJSON_Delete(pr);
+    }
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+static void test_action_draws_control(void) {
+    cJSON     *root;
+    gia_model  m;
+    double     q[5];
+
+    printf("\n[63] divide and subtract draw their control like multiply (ADR 0017)\n");
+
+    /* Divide, control a stock drawn at s = 0.1: F = 0.5 a / c, and what c
+     * loses is exactly what the heat sink gains. */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"c\",\"type\":\"storage\",\"current_level\":2.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\","
+        "   \"module\":{\"k\":0.5,\"action\":\"divide\"}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0.1},"
+        "  {\"source\":\"gate\",\"target\":\"b\"},"
+        "  {\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}]," CTL_SIM);
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("divide with a drawn control loads", &m, root)) return;
+    ok("solves", gia_network_state(&m, 1.0, q, NULL));
+    ok("the control is drawn down", q[1] < 2.0);
+    close_to("a + b = 10", q[0] + q[3], 10.0, 1e-9);
+    close_to("c + heat = 2", q[1] + q[4], 2.0, 1e-9);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* Subtract held shut from the start: c exceeds a, F = 0, so the control
+     * draws nothing either (ADR 0017's consequence for ADR 0016). */
+    root = cJSON_Parse(
+        "{\"nodes\":["
+        "  {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+        "  {\"id\":\"c\",\"type\":\"storage\",\"current_level\":20.0},"
+        "  {\"id\":\"gate\",\"type\":\"interaction\","
+        "   \"module\":{\"k\":0.5,\"action\":\"subtract\"}},"
+        "  {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.0},"
+        "  {\"id\":\"heat\",\"type\":\"sink\"}],"
+        " \"edges\":["
+        "  {\"source\":\"a\",\"target\":\"gate\",\"role\":\"energy\"},"
+        "  {\"source\":\"c\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0.5},"
+        "  {\"source\":\"gate\",\"target\":\"b\"},"
+        "  {\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}]," CTL_SIM);
+    if (!root) { ok("parse", false); return; }
+    if (!load_ok("subtract with a drawn control loads", &m, root)) return;
+    ok("solves", gia_network_state(&m, 1.0, q, NULL));
+    close_to("clamped: nothing moves", q[3], 0.0, 1e-12);
+    close_to("and the control is not drawn", q[1], 20.0, 1e-12);
+    close_to("so the sink receives nothing", q[4], 0.0, 1e-12);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
@@ -3017,6 +3228,10 @@ int main(void) {
     test_used_leg_validation();
     test_control_draw_opens_the_boundary();
     test_drawn_control_closes_no_pathway();
+    test_action_validation();
+    test_action_divide();
+    test_action_subtract();
+    test_action_draws_control();
 
     printf("\n%s\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT");
     printf("failures: %d\n", failures);
