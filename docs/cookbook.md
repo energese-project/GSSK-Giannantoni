@@ -332,8 +332,6 @@ target `r` are redirected to `r__buf`.
 make               # build native library and CLI
 make test          # regression suite against expected CSVs
 make test-update   # regenerate expected CSVs after model changes
-make test-python   # Python ctypes binding tests
-swift test         # Swift binding tests
 make test-asan     # re-run regression under AddressSanitizer
 make coverage-check  # lcov coverage gate (≥85%)
 ```

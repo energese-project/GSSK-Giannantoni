@@ -36,7 +36,7 @@ time,biomass,environment
 === Household model (4-carrier ecological-economy) ===
 time,salary,bank_account,super_fund,...
 0.0000,1.000000,5000.000000,50000.000000,...
-... (241 data rows, 24 columns)
+... (241 data rows, 25 columns)
 ```
 
 The decay model follows Q(t) = 100·exp(−0.05·t). The household model has 23 state nodes across money, energy, material, and information carriers.
@@ -96,7 +96,7 @@ make wasm       # WebAssembly: dist/gssk.wasm + dist/gssk.js (fetches the pinned
 make dev        # http://localhost:5173/ — any example model, run through gssk.js + gssk.wasm
 ```
 
-Needs only the Apple `container` CLI. Node and the toolchain come from the pinned Guix (`guix/`), and `gssk.wasm` is the release build, so the page runs the bytes a release would ship. The first run fetches Guix packages (about 15 minutes); after that, `make wasm-guix` takes a second when the kernel is unchanged. `make guix-down` stops the container and keeps its store.
+Needs only the Apple `container` CLI. `gssk.wasm` is built natively by `make wasm` (the pinned WASI SDK) and Vite runs in a Node container. To run the page on the bytes a release would ship instead, `make dev-guix` takes Node and `gssk.wasm` from the pinned Guix (`guix/`); its first run fetches Guix packages (about 15 minutes), and `make guix-down` stops that container and keeps its store.
 
 ## Testing
 

@@ -19,7 +19,11 @@ name: Guix release build
 on:
   pull_request:
     branches: [ main, 'feat/**', 'fix/**', 'docs/**' ]
-    paths: [ 'guix/**', 'Makefile', '.github/workflows/guix.yml' ]
+    # Not 'Makefile': every Makefile edit then waited 22-27 minutes on two cold
+    # Guix builds, for changes that almost never reach the wasm rule. A change
+    # that does is caught by the monthly run, by workflow_dispatch, or at the
+    # latest by the tag build, which gates the release.
+    paths: [ 'guix/**', '.github/workflows/guix.yml' ]
   schedule:
     - cron: '17 3 1 * *'
   workflow_dispatch:
