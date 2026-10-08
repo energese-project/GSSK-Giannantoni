@@ -767,17 +767,25 @@ general-purpose ODE library. The wedge is:
       as a module it could close nothing under ADR 0014 — so it is now
       emitted as `storage`, and its `ordinal_ascent` / `emergent_feedback_loop`
       legs load as SecIII `linear`, which survives the pathway-law removal.
-- [ ] Migrate the test models and both `examples/giannantoni/` seeds to write
-      modules explicitly. NOT by having the loader rewrite edge laws into
-      hidden gate nodes: that is desugaring, and a bookkeeping node would count
-      toward ordinality, which is what decides whether emergence happens.
-- [ ] Remove the seven module laws from the pathway vocabulary once nothing
-      writes them.
-- [ ] Projection: translate GSSK edge-level `interaction`, `limit`,
+- [x] Migrate the test models and both `examples/giannantoni/` seeds to write
+      modules explicitly (PR #31). The seeds are Odum's work gate — sun as
+      energy, biomass and the consumer's feedback as controls, the feedback
+      drawn into a heat sink — the decision ADR 0014 left to the migration.
+      Each of the seven laws was checked against its module form at `4ebedf0`
+      before removal: identical trajectories and events.
+- [x] Remove the seven module laws from the pathway vocabulary (PR #31). A
+      module type without its `module` block is refused too.
+- [x] Projection: translate GSSK edge-level `interaction`, `limit`,
       `threshold`, `ratio` and `subtract` into gate components, and report
-      each as a translation in the coverage output.
-- [ ] Report the n-ary and processing-node findings as ONE finding in the
-      coverage report; they are one limitation seen from two syntaxes.
+      each as a translation in the coverage output (PR #31).
+- [x] ADR 0016: divide and subtract as interaction actions (PR #30).
+- [x] ADR 0017: a control input is drawn at `use_ratio` and dissipated to a
+      `used` leg; its emergy reaches the product (PR #30).
+- [x] ~~Report the n-ary and processing-node findings as ONE finding.~~ Moot:
+      an n-ary `interaction` edge is now carried as a multi-control gate
+      (PR #31), so only the processing-node finding remains — a GSSK
+      processing node finds its legs by position, which ADR 0013 will not
+      guess.
 - [ ] More seed graphs under `examples/giannantoni/` — the vocabulary is
       separate from `gssk.schema.json` by design, which is why the seeds live
       one directory down and out of both regression globs.
