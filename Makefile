@@ -439,6 +439,24 @@ test-wasm-container: all $(TARGET_DUMP_FORCING) container-start
 	@test -f $(DIST_DIR)/gssk.wasm -a -f $(DIST_DIR)/gssk.js || { echo "dist/gssk.wasm or dist/gssk.js missing — run 'make wasm' first"; exit 1; }
 	$(CONTAINER_BIN) run --rm -v $(shell pwd):$(CWORKDIR) -w $(CWORKDIR) $(NODE_IMAGE) node --test "tests/wasm/*.test.js"
 
+# The "Documentation builds" CI job, run locally with Node from a container.
+# It mirrors deploy.yml step for step: Node 20 (the job's node-version, not
+# NODE_IMAGE's 22), `npm install`, the VitePress build, then the two checks
+# that the theme's design tokens were inlined rather than left as an @import.
+# node_modules/ ends up holding Linux builds; it is .gitignored and the host
+# never uses it. The token checks run on the host, against the built CSS.
+DOCS_NODE_IMAGE := docker.io/library/node:20-slim
+
+.PHONY: docs-build-container
+docs-build-container: container-start
+	$(CONTAINER_BIN) run --rm -v $(shell pwd):$(CWORKDIR) -w $(CWORKDIR) $(DOCS_NODE_IMAGE) \
+		sh -c 'npm install --no-audit --no-fund && npm run docs:build'
+	@if grep -rq "@import" docs/.vitepress/dist/assets/*.css; then \
+		echo "FAIL: an @import survived the build; the token file did not inline"; exit 1; fi
+	@if ! grep -rq -- "--e-accent" docs/.vitepress/dist/assets/*.css; then \
+		echo "FAIL: energese tokens are absent from the built docs CSS"; exit 1; fi
+	@echo "Docs build OK; design tokens are inlined in the built docs CSS."
+
 # Stage times — the solver must hand each derivative evaluation the right time.
 # Pinned BEFORE anything consumes t, so the rest of the suite can hold "nothing
 # changed at all" as its criterion. Builds the sources directly with the probe

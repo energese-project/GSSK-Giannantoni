@@ -83,6 +83,10 @@ npm install && npm run docs:build     # the docs must build; the theme @import m
 npm run docs:preview                  # then open it in both colour schemes
 ```
 
+The host is not assumed to have Node. `make docs-build-container` runs the CI "Documentation builds"
+job locally — Node 20 in a container, the build, and the token-inlining checks — so a docs change can
+be verified before it is pushed rather than left for CI.
+
 For the demo, serve `web/` alongside a built `dist/gssk.js` and `dist/gssk.wasm`. The deploy workflow
 has a step that asserts every local asset `web/index.html` references reached the
 Pages artifact — that catches a forgotten `cp`, which is otherwise invisible
