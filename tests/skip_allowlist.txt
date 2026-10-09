@@ -1,0 +1,7 @@
+# Models under examples/ that `make test` may run without a golden file.
+#
+# One per line: `<model name>  # <reason>`. The reason is required; an entry without one, or an entry
+# for a model that has a golden file in tests/expected/, fails `make test` (ADR 0018 rule 1).
+# Never add a Giannantoni model here: their oracles are equations, not files (ADR 0018 rule 1, G1).
+
+invalid_model  # deliberately malformed (an edge to a missing node); the kernel refuses it, so there is no trajectory to pin

@@ -230,19 +230,35 @@ RESULTS = $(patsubst examples/%.json,tests/results/%.csv,$(MODELS))
 # the annotated twin describe a model that is no longer running.
 ANNOTATED = $(wildcard examples/*_annotated.json)
 
+# A model with no golden file used to print SKIPPED and pass (PLAN.md §1 B1),
+# so a model could "pass" by having no expected output. Now it fails, unless
+# tests/skip_allowlist.txt names it with a reason (`name  # why`). An entry for
+# a model that does have a golden file is stale and also fails, so the list
+# cannot outgrow what it needs. ADR 0018 rule 1; self-tested by
+# tests/guard_no_skip.sh. EXPECTED_DIR and SKIP_ALLOWLIST exist for that
+# self-test; nothing else should set them.
+EXPECTED_DIR   ?= tests/expected
+SKIP_ALLOWLIST ?= tests/skip_allowlist.txt
+
 test: all check-version test-schema
 	@echo "Running Regression Tests..."
 	@mkdir -p tests/results
 	@for model in $(MODELS); do \
 		name=$$(basename $$model .json); \
+		why=$$(awk -v n="$$name" '$$1 == n { r = $$0; sub(/^[^#]*#?[ \t]*/, "", r); print (r == "" ? "-" : r); exit }' $(SKIP_ALLOWLIST) 2>/dev/null); \
 		echo -n "Testing $$name... "; \
 		./bin/gssk $$model tests/results/$$name.csv > /dev/null 2>&1; \
-		if [ -f tests/expected/$$name.csv ]; then \
-			./bin/csv_compare tests/expected/$$name.csv tests/results/$$name.csv; \
+		if [ -f $(EXPECTED_DIR)/$$name.csv ]; then \
+			if [ -n "$$why" ]; then echo "FAILED (stale entry: $(SKIP_ALLOWLIST) allowlists $$name, which has a golden file)"; exit 1; fi; \
+			./bin/csv_compare $(EXPECTED_DIR)/$$name.csv tests/results/$$name.csv; \
 			if [ $$? -eq 0 ]; then echo "PASSED"; \
 			else echo "FAILED"; exit 1; fi; \
+		elif [ -n "$$why" ] && [ "$$why" != "-" ]; then \
+			echo "SKIPPED (allowlisted: $$why)"; \
+		elif [ "$$why" = "-" ]; then \
+			echo "FAILED (no expected output, and the $(SKIP_ALLOWLIST) entry gives no reason after '#')"; exit 1; \
 		else \
-			echo "SKIPPED (No expected output found. Run 'make test-update' to generate)"; \
+			echo "FAILED (no expected output, and $$name is not in $(SKIP_ALLOWLIST); a new kernel model needs 'make test-update', ADR 0018)"; exit 1; \
 		fi; \
 	done
 	@echo "Checking annotated twins against their plain models..."
@@ -254,6 +270,11 @@ test: all check-version test-schema
 		if [ $$? -eq 0 ]; then echo "PASSED"; \
 		else echo "FAILED (an annotated variant has drifted from the model it documents)"; exit 1; fi; \
 	done
+
+# The guard above, tested: a removed golden file must turn `make test` red.
+.PHONY: test-guard-no-skip
+test-guard-no-skip: all
+	@sh $(TEST_DIR)/guard_no_skip.sh
 
 # Quick demo — run two models and print the head of each CSV. Pure C: the
 # Python plotting step went with the python/ tree, which this fork does not
@@ -918,7 +939,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop-cli check-trace check-version test-schema
+           test-gnp-loop test-giannantoni test-mop-cli test-guard-no-skip check-trace check-version test-schema
 
 # Full native build + CI's suites under real GCC with -Werror.
 test-linux: container-image-linux
