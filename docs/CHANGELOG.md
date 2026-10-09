@@ -50,6 +50,13 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **ADR 0019: the MOP's two Fundamental Equations, as the engine solves them** ([docs/adr/0019](adr/0019-mop-fundamental-equations.md)). It records three decisions:
+  - **First Equation:** solved per couple with the solution derived from [23 Eq 5.5.6]. The printed [23 Eq 5.5.7–5.5.8] leave residuals 1.25 and −0.625 at t = 1 (erratum X1).
+  - **Second Equation:** implemented as its printed solution [23 Eq 6.1–6.3], tested against the Riccati equation `u' + u² = 0` that the solution satisfies. That oracle is labelled reconstructed.
+  - **Harmony:** reported as `transported`, `imposed` or `absent` from a measured residual, never assumed by the solver. The sources determine the three verdicts: the First Equation transports harmony, and the Second Equation and the EQS impose it.
+
+  Emergence of harmony is recorded as not reproducible from the sources. No behaviour changes.
+
 - **Every Giannantoni API function must be called by a test, and none may be a stub** (PLAN.md W1 `guard-api-called`, NFR-API-001, ADR 0018 rule 3). `make check-api-called` (`scripts/check_api_called.sh`) parses every function declared in `gia_status.h`, `idc.h`, `relational.h` and `mop.h`, plus the functions IF-API-005 adds to `engine.h`. A declaration that no test names fails, and so does a not-implemented marker in `idc.c`, `relational.c`, `mop.c` or `harmony.c`. `AGENTS.md`'s `(void)`-stub allowance never covered these headers, and now cannot. `make test-api-called` runs the check against the C blocks of `docs/requirements/icd.md` itself: it must find exactly the 27 functions declared there, and must name each one when it is left uncalled. Both run in CI.
 
 - **Reentrancy, memory and separation checks for the Giannantoni units** (PLAN.md W1 `guard-reentrancy`). Four checks, all in CI:
