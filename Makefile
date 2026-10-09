@@ -294,7 +294,7 @@ test: all check-version test-schema
 	@for model in $(MODELS); do \
 		name=$$(basename $$model .json); \
 		why=$$(awk -v n="$$name" '$$1 == n { r = $$0; sub(/^[^#]*#?[ \t]*/, "", r); print (r == "" ? "-" : r); exit }' $(SKIP_ALLOWLIST) 2>/dev/null); \
-		echo -n "Testing $$name... "; \
+		printf "Testing %s... " "$$name"; \
 		./bin/gssk $$model tests/results/$$name.csv > /dev/null 2>&1; \
 		if [ -f $(EXPECTED_DIR)/$$name.csv ]; then \
 			if [ -n "$$why" ]; then echo "FAILED (stale entry: $(SKIP_ALLOWLIST) allowlists $$name, which has a golden file)"; exit 1; fi; \
@@ -313,7 +313,7 @@ test: all check-version test-schema
 	@for ann in $(ANNOTATED); do \
 		name=$$(basename $$ann .json); \
 		plain=$${name%_annotated}; \
-		echo -n "Twin $$name == $$plain... "; \
+		printf "Twin %s == %s... " "$$name" "$$plain"; \
 		./bin/csv_compare tests/results/$$plain.csv tests/results/$$name.csv; \
 		if [ $$? -eq 0 ]; then echo "PASSED"; \
 		else echo "FAILED (an annotated variant has drifted from the model it documents)"; exit 1; fi; \
