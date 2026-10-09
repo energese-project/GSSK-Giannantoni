@@ -50,6 +50,8 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **ADR 0022: the kernel's matrix-exponential method is named `expm`** ([docs/adr/0022](adr/0022-kernel-method-expm.md)). `"method": "incipient"` runs a Padé matrix exponential, not Giannantoni's incipient calculus (PLAN.md §2 E2). Under ADR 0011 the kernel is the classical engine. `"expm"` becomes the documented name. `"incipient"` stays a deprecated alias with byte-identical output and a one-line notice. This is not a schema break. No behaviour changes until `kernel-method-label` lands.
+
 - **ADR 0021: ordinality as Giannantoni defines it, and a generative step under Maximum Em-Power** ([docs/adr/0021](adr/0021-ordinality-and-the-generative-step.md)). It supersedes the cycle-coverage definition of ordinality in ADRs 0014 and 0015, and ADR 0015's emergent component. ADR 0014's leg rules stand.
   - Each couple of components is classified as 2/2, 2, ½ or unrelated from the exponents in [10] and [22 Eq 6–8]. Maximum Ordinality is "every couple 2/2" [22 §12.1], which is strong connectivity of the component graph. Boundary nodes are habitat, not components.
   - The generative step adds one linear pathway at a time, from a sink to a source of the condensation, choosing the candidate that maximises total empower [02 Eq 5.3]. It repeats until the graph is strongly connected.
