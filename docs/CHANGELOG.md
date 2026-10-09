@@ -50,6 +50,8 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The nonlinear equation of [02 Eq 14.10.1], `gia_nl1410_roots`** (PLAN.md W2 `idc-nonlinear-14-10`, FR-IDC-009). Substituting `F = e^{ut}` reduces `F·(d̃²/dt²)F² + A F²·(d̃/dt)F + B F³ = 0` to `4u² + Au + B = 0`. The solutions are its two roots, not the "triplet" [02 Eq 14.10.2] prints (erratum X8). The test forms the equation's incipient residual with `gia_idc_of` for each root, and checks that no third candidate solves it.
+
 - **The incipient Taylor projection, `gia_idc_taylor`, validated against Giannantoni & Zoli 2009** (PLAN.md W2 `idc-taylor`, FR-IDC-010, VAL-01). `f*(t₀+Δ) = f(t₀) Σ_{k≤n} (aΔ)ᵏ/k!` with `a = f'/f` [09 Eq 10], evaluated by Horner. With n = 2 it reproduces [09]'s published 16.4, 3.01, 178.0, 172.06 and the 15–17 cm range. The tests also pin errata X4 (Eq 19 at τ₀ = 2 gives 156.0, not the printed 154.3) and X5 (the minimum scenario's net increase is 2.6125, not 1.91).
 
 - **The Riccati equation by linearisation, and named refusals** (PLAN.md W2 `idc-riccati`, FR-IDC-008 and FR-IDC-013).
