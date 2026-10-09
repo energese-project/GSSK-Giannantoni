@@ -249,6 +249,16 @@ test-mop-asan: directories
 check-symbols: all
 	@sh scripts/check_symbols.sh
 
+# NFR-API-001 (ADR 0018 rule 3): every function idc.h, relational.h and mop.h
+# declare (and IF-API-005's engine.h additions) is called by a test, and no
+# unit carries a not-implemented stub. The self-test runs the check against
+# icd.md's own API blocks.
+.PHONY: check-api-called test-api-called
+check-api-called:
+	@sh scripts/check_api_called.sh
+test-api-called:
+	@sh $(TEST_DIR)/api_called_selftest.sh
+
 # Requirements traceability (docs/requirements/README.md): every requirement
 # is verified by a catalogued entry, every `implemented` claim is backed by a
 # `Verifies:` tag in tests/ or scripts/, and no tag names something that does
@@ -1041,7 +1051,8 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
            test-gnp-loop test-giannantoni test-mop-cli test-mop-threads check-symbols \
-           test-guard-no-skip test-coverage-gate check-trace check-version test-schema
+           test-guard-no-skip test-coverage-gate check-api-called \
+           test-api-called check-trace check-version test-schema
 
 # Full native build + CI's suites under real GCC with -Werror.
 test-linux: container-image-linux
