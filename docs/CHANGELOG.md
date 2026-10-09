@@ -50,6 +50,13 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The second-order incipient LDE with variable coefficients, `gia_lde2_*`** (PLAN.md W2 `idc-lde2`, FR-IDC-006). It solves `f̃'' + a₁(t) f̃' + a₀(t) f = 0` as `Σ cᵢ exp(∫₀ᵗ rᵢ)`, with `rᵢ(t)` the roots of the incipient characteristic [06 Eq 3.3–3.6], labelled by continuity in t.
+  - **Method** (numerics N3): the stable root form, plus an adaptive Gauss–Legendre sweep that accepts a step only when its integral agrees with two half-steps to 1e-12 and no root moves more than half the root separation.
+  - **Double root:** a root that is double throughout gives the single family `c·e^{∫r}`. Initial conditions inconsistent with that family are refused, and [06 Eq 3.7] is not used (erratum X12).
+  - **Coincident or colliding roots:** roots that coincide at t = 0 only are refused, because the initial conditions cannot fix both constants. Roots that collide later are refused with the collision time.
+
+  Tests check the solution by hand for `a₀ = −(1+t)²`, `−(1+sin t)²` and complex `−(1+it)²`. They also check the termwise incipient residual (0), the traditional residual (`c₊e^{φ} − c₋e^{−φ}`, not 0), the worked example of [10 App. Eq 28–34] (VAL-05), and linearity in the initial conditions. The baseline's T-IDC-04 (i) is amended, because its roots coincided at t = 0 where N3 itself refuses (PLANLOG).
+
 - **The incipient derivative of a general function, `gia_idc_of`** (PLAN.md W2 `idc-general-f`, FR-IDC-002). New units:
   - `include/gia_status.h` carries the Giannantoni status codes and the `why` contract (IF-API-001).
   - `include/idc.h` and `src/idc.c` hold the single-variable incipient calculus. `gia_idc_of` computes `(f'/f)^n f` [02 Eq 14.9.5] over ℂ, with integer powers by multiplication. It refuses `f = 0` as outside the domain and an overflow as out of range, and never returns a non-finite value.
