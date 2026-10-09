@@ -88,6 +88,25 @@ for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.js
     ok "$name: classical, proxy and assumed outputs say so" "$st"
 done
 
+# ---------------------------------------------------------------------------
+# Verifies: NFR-DET-001 (T-DET-01)
+#
+# The same binary on the same input writes byte-identical output: CSV, generated
+# graph and report. Both runs use the same paths, since the report names them.
+# ---------------------------------------------------------------------------
+for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.json; do
+    name=$(basename "$model" .json)
+    st=0
+    for r in 1 2; do
+        run det "$model"
+        for x in out csv json; do cp "$tmp/det.$x" "$tmp/det$r.$x"; done
+    done
+    for x in out csv json; do
+        cmp -s "$tmp/det1.$x" "$tmp/det2.$x" || { echo "    .$x differs between runs" >&2; st=1; }
+    done
+    ok "$name: two runs are byte-identical (report, CSV, graph)" "$st"
+done
+
 echo
 if [ "$failures" -eq 0 ]; then echo "ALL PASS"; else echo "FAILURES PRESENT"; fi
 echo "failures: $failures"

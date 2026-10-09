@@ -14,7 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static const char *RULE =
+static const char RULE[] =
     "============================================================";
 
 static int array_len(const cJSON *root, const char *key) {

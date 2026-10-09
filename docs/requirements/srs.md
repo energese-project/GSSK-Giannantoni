@@ -406,7 +406,7 @@ to keep them "physical"; `AGENTS.md`'s clamp applies to the GSSK kernel only.
 ### NFR-DET-001 — Bit-identical repeats
 The same binary on the same input shall produce byte-identical output.
 - **Source:** ADR 0013; BR-011
-- **Verification:** T-DET-01 · **Priority:** Must · **Status:** planned · **Task:** guard-reentrancy
+- **Verification:** T-DET-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-reentrancy
 
 ### NFR-DET-002 — Agreement across toolchains
 Every catalogue test shall pass, at its stated tolerance, on every CI toolchain (macOS clang, Linux
@@ -419,19 +419,19 @@ The Giannantoni units shall hold no file-scope or static mutable state; two mode
 threads shall give the same results as processed sequentially. (Defect at baseline: `src/engine.c:2830`
 `static const gia_model *sort_model` feeds a `qsort` comparator.)
 - **Source:** `AGENTS.md` §Architecture ("No global or static variables")
-- **Verification:** T-REE-01, T-REE-02 · **Priority:** Must · **Status:** planned · **Task:** guard-reentrancy
+- **Verification:** T-REE-01, T-REE-02 · **Priority:** Must · **Status:** implemented · **Task:** guard-reentrancy
 
 ### NFR-MEM-001 — Memory
 Every allocation shall have a matching free reachable from the public API; the Giannantoni tests shall
 run clean under AddressSanitizer and LeakSanitizer.
 - **Source:** `AGENTS.md` §Architecture
-- **Verification:** T-MEM-01 · **Priority:** Must · **Status:** planned · **Task:** guard-reentrancy
+- **Verification:** T-MEM-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-reentrancy
 
 ### NFR-ERR-001 — No process exits in the library
 No library unit shall call `exit`, `abort` or `assert`-to-abort; every failure shall be a returned
 `gia_status`.
 - **Source:** IF-API-001
-- **Verification:** T-ERR-01 · **Priority:** Must · **Status:** planned · **Task:** guard-reentrancy
+- **Verification:** T-ERR-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-reentrancy
 
 ### NFR-LIM-001 — No silent truncation
 Exceeding any fixed limit shall be refused with `GIA_E_LIMIT`. (Defect at baseline: `combine_inflows`
@@ -461,7 +461,7 @@ The kernel shall solve the First Equation for N = 64 (4,032 couples) at 1,000 ou
 ### NFR-SEP-001 — Two engines stay separate
 No Giannantoni unit shall include `gssk.h`.
 - **Source:** ADR 0011
-- **Verification:** INS-SEP-01 · **Priority:** Must · **Status:** planned · **Task:** guard-trace
+- **Verification:** INS-SEP-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-trace
 
 ### NFR-TRC-001 — Traceability is enforced
 `make check-trace` shall run in CI and fail on any of the conditions in README.md §The trace check.
