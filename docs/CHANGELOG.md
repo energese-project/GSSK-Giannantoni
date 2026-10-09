@@ -50,6 +50,8 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The incipient Taylor projection, `gia_idc_taylor`, validated against Giannantoni & Zoli 2009** (PLAN.md W2 `idc-taylor`, FR-IDC-010, VAL-01). `f*(t₀+Δ) = f(t₀) Σ_{k≤n} (aΔ)ᵏ/k!` with `a = f'/f` [09 Eq 10], evaluated by Horner. With n = 2 it reproduces [09]'s published 16.4, 3.01, 178.0, 172.06 and the 15–17 cm range. The tests also pin errata X4 (Eq 19 at τ₀ = 2 gives 156.0, not the printed 154.3) and X5 (the minimum scenario's net increase is 2.6125, not 1.91).
+
 - **The Riccati equation by linearisation, and named refusals** (PLAN.md W2 `idc-riccati`, FR-IDC-008 and FR-IDC-013).
   - `gia_riccati_solve` and `gia_riccati_eval` solve `f' + Qf + Rf² = P` with the substitution `f = y'/(R y)`, taking y from the incipient LDE solver ([06 Eq 3.16–3.18], PLAN R11). They report the traditional Riccati residual of the result.
   - The printed substitution of [06 Eq 3.17] is inverted. A test shows that it leaves an Eq 3.18 residual of 18.3 against a tolerance of 1e-6 (erratum X2).

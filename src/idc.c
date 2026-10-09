@@ -544,6 +544,31 @@ gia_status gia_riccati_eval(const gia_lde2_sol *sol, double t,
     return GIA_OK;
 }
 
+/* FR-IDC-010 — [09 Eq 10], numerics.md N9: Horner in x = a dt,
+ * sum_{k=0}^{n} x^k/k! = 1 + x(1 + x/2(1 + x/3(... (1 + x/n)))). */
+gia_status gia_idc_taylor(double f0, double df0, double dt, int n,
+                          double *out, const char **why) {
+    double x, acc = 1.0, r;
+    int    k;
+    if (!out)  return fail(GIA_E_ARG, "gia_idc_taylor: out is NULL", why);
+    if (n < 0) return fail(GIA_E_ARG, "gia_idc_taylor: the order n must be >= 0", why);
+    if (n > 170)
+        return fail(GIA_E_LIMIT, "gia_idc_taylor: n > 170 exceeds the factorial range (numerics N9)",
+                    why);
+    if (!isfinite(f0) || !isfinite(df0) || !isfinite(dt))
+        return fail(GIA_E_DOMAIN, "gia_idc_taylor: inputs must be finite", why);
+    if (f0 == 0.0)
+        return fail(GIA_E_DOMAIN, "gia_idc_taylor: a = f'(t0)/f(t0) needs f(t0) != 0 ([09 Eq 10])",
+                    why);
+    x = (df0 / f0) * dt;
+    for (k = n; k >= 1; k--) acc = 1.0 + acc * x / (double)k;
+    r = f0 * acc;
+    if (!isfinite(r))
+        return fail(GIA_E_RANGE, "gia_idc_taylor: result overflows (NFR-NUM-003)", why);
+    *out = r;
+    return GIA_OK;
+}
+
 /* FR-IDC-013 — PLAN §6. */
 gia_status gia_idc_refuse(const char *feature, const char **why) {
     if (!feature) return fail(GIA_E_ARG, "gia_idc_refuse: feature is NULL", why);

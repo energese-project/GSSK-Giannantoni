@@ -634,6 +634,78 @@ static void test_idc_refusals(void) {
                                           gia_idc_refuse(NULL, &why) == GIA_E_ARG);
 }
 
+/* Source: [09 Eq 10], [10 Eq 13]; PLAN R10; numerics.md N9.
+ * Oracle: the direct sum f0 sum (a dt)^k/k!, evaluated independently of the
+ * function's Horner scheme, for n = 0..20 over a spread of a dt. */
+/* Verifies: FR-IDC-010 (T-IDC-09) */
+static void test_idc_taylor(void) {
+    static const double adt[] = { -3.0, -0.5, 0.0, 0.1, 0.8, 2.0, 7.5 };
+    const char *why = NULL;
+    double      out = 0.0;
+    size_t      i;
+    int         n, all = 1;
+
+    printf("\n[T-IDC-09] incipient Taylor projection\n");
+    for (i = 0; i < sizeof adt / sizeof adt[0]; i++)
+        for (n = 0; n <= 20; n++) {
+            double f0 = -1.7, dt = 2.0, a = adt[i] / dt, sum = 0.0, term = 1.0;
+            int k;
+            for (k = 0; k <= n; k++) { sum += term; term *= adt[i] / (double)(k + 1); }
+            if (gia_idc_taylor(f0, a * f0, dt, n, &out, &why) != GIA_OK ||
+                !near_c(out, f0 * sum, TOL_CLOSED)) all = 0;
+        }
+    ok("Horner = direct sum, 7 values of a dt x n = 0..20, 1e-12", all);
+    ok("f(t0) = 0 is refused (GIA_E_DOMAIN)", gia_idc_taylor(0.0, 1.0, 1.0, 2, &out, &why) == GIA_E_DOMAIN);
+    ok("n > 170 is GIA_E_LIMIT; n < 0 is GIA_E_ARG",
+       gia_idc_taylor(1.0, 1.0, 1.0, 171, &out, &why) == GIA_E_LIMIT &&
+       gia_idc_taylor(1.0, 1.0, 1.0, -1, &out, &why) == GIA_E_ARG);
+    ok("overflow is GIA_E_RANGE", gia_idc_taylor(1e300, 1e300, 1e6, 2, &out, &why) == GIA_E_RANGE);
+}
+
+/* Agreement with a number printed to `digits` decimal places: within one
+ * unit of the last printed digit (the source truncates as often as it
+ * rounds: 172.0667 is printed 172.06). */
+static int printed_as(double got, double printed, int digits) {
+    return fabs(got - printed) < pow(10.0, -digits);
+}
+
+/* Source: [09 Eq 16-22] (Giannantoni & Zoli 2009), with n = 2 (PLAN R10);
+ * errata X4, X5. Inputs are those of probes/zoli_2009_reproduction.py. */
+/* Verifies: BR-001, BR-002, BR-008, FR-IDC-010 (VAL-01) */
+static void test_val_zoli_2009(void) {
+    const char *why = NULL;
+    double      v16 = NAN, v17 = NAN, v21 = NAN, v19a = NAN, v19b = NAN, v22a = NAN, v22b = NAN;
+
+    printf("\n[VAL-01] [09] Giannantoni & Zoli 2009, n = 2\n");
+    (void)gia_idc_taylor(0.4, 0.32, 10.0, 2, &v16, &why);
+    (void)gia_idc_taylor(0.4, 0.11, 10.0, 2, &v17, &why);
+    (void)gia_idc_taylor(18.0, 6.0, 10.0, 2, &v21, &why);
+    (void)gia_idc_taylor(6.0 * 1.8, 6.0, 10.0 - 1.8, 2, &v19a, &why);
+    (void)gia_idc_taylor(6.0 * 2.0, 6.0, 10.0 - 2.0, 2, &v19b, &why);
+    (void)gia_idc_taylor(0.6 * 2.0, 0.6, 10.0 - 2.0, 2, &v22a, &why);
+    (void)gia_idc_taylor(0.6 * 1.8, 0.6, 10.0 - 1.8, 2, &v22b, &why);
+    printf("    Eq16 %.10g  Eq17 %.10g  Eq21 %.10g  Eq19(1.8) %.10g  Eq19(2) %.10g\n"
+           "    Eq22(2) %.10g  Eq22(1.8) %.10g\n", v16, v17, v21, v19a, v19b, v22a, v22b);
+    ok("[09 Eq 16] max scenario: 16.4", printed_as(v16, 16.4, 1));
+    ok("[09 Eq 17] min scenario: 3.01 (3.0125)", printed_as(v17, 3.01, 2) &&
+                                               near_c(v17, 3.0125, TOL_CLOSED));
+    ok("[09 Eq 21] sea level L1: 178.0", printed_as(v21, 178.0, 1));
+    ok("[09 Eq 19] tau0 = 1.8: 172.06 (172.0667)", printed_as(v19a, 172.06, 2) &&
+                                                  near_c(v19a, 172.0 + 1.0 / 15.0, TOL_CLOSED));
+    ok("[09 Eq 22] 15-17 cm: 15.6 and 17.2067, each 15..17 to the printed digit",
+       near_c(v22a, 15.6, TOL_CLOSED) && near_c(v22b, 17.2 + 1.0 / 150.0, TOL_CLOSED) &&
+       floor(v22a + 0.5) >= 15.0 && floor(v22a + 0.5) <= 17.0 &&
+       floor(v22b + 0.5) >= 15.0 && floor(v22b + 0.5) <= 17.0);
+    /* X4: the same formula at tau0 = 2 gives 156.0, not the printed 154.3. */
+    ok("X4: [09 Eq 19] at tau0 = 2 is 156.0", near_c(v19b, 156.0, TOL_CLOSED));
+    ok("X4: the printed 154.3 does not follow (|156.0 - 154.3| > 100x tol)",
+       near_c(v19b, 156.0, TOL_CLOSED) && fabs(v19b - 154.3) > 100.0 * TOL_CLOSED * 156.0);
+    /* X5: the min scenario's net increase is f* - f0 = 2.6125; the printed
+     * 1.91 subtracts 1.1 where the max scenario subtracts 0.4. */
+    ok("X5: min-scenario net increase is 2.6125, not the printed 1.91",
+       near_c(v17 - 0.4, 2.6125, TOL_CLOSED) && fabs((v17 - 0.4) - 1.91) > 0.5);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -645,6 +717,8 @@ int main(void) {
     test_binary_linear_in_ics();
     test_riccati();
     test_idc_refusals();
+    test_idc_taylor();
+    test_val_zoli_2009();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);
