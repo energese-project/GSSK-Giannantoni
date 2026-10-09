@@ -818,7 +818,7 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
 - [x] W2 `idc-general-f` — `gia_idc_of`, (f'/f)^n f (FR-IDC-002); `gia_status` (IF-API-001)
 - [x] W2 `idc-lde2` — second-order incipient LDE, variable coefficients (FR-IDC-006, 012)
 - [x] W2 `idc-binary` — the binary function (FR-IDC-007)
-- [ ] W2 `idc-riccati` — Riccati by linearisation; refusals (FR-IDC-008, 013)
+- [x] W2 `idc-riccati` — Riccati by linearisation; refusals (FR-IDC-008, 013)
 - [ ] W2 `idc-taylor` — incipient Taylor projection, [09] validation (FR-IDC-010, VAL-01)
 - [ ] W2 `idc-nonlinear-14-10` — [02 Eq 14.10.1] (FR-IDC-009)
 - [ ] W2 `idc-drift-coupled` — solution drift and output-projection drift (FR-IDC-011, 014)

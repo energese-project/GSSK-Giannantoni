@@ -95,4 +95,37 @@ gia_status gia_binary_eval(const gia_binary_sol *sol, double t,
                            double complex f[2], double complex fhalf[2],
                            const char **why);
 
+/* FR-IDC-008 — the Riccati equation f' + Q f + R f^2 = P by linearisation
+ * ([06 Eq 3.16-3.18], PLAN R11, numerics.md N5). f = y'/(R y), where y solves
+ *
+ *     R y'' - (R' - Q R) y' - P R^2 y = 0,   y(0) = 1,   y~'(0) = R(0) f0,
+ *
+ * as an incipient LDE (FR-IDC-006). The printed substitution of [06 Eq 3.17],
+ * y = f'/(f R), is inverted and is not used (PLAN X2). R' is supplied by the
+ * caller, never differenced. R must not vanish. The solution is a
+ * gia_lde2_sol of y; free it with gia_lde2_free. t_fail is as for
+ * gia_lde2_solve. */
+gia_status gia_riccati_solve(gia_cfn Q, gia_cfn R, gia_cfn dR, gia_cfn P, void *ctx,
+                             double complex f0, double t_max,
+                             gia_lde2_sol **sol, double *t_fail, const char **why);
+
+/* f(t) and the traditional Riccati residual f' + Q f + R f^2 - P of the same
+ * terms (either may be NULL). Zero to rounding for constant coefficients,
+ * where the incipient and traditional solutions of the LDE coincide; for
+ * variable coefficients it is reported, not assumed (FR-IDC-008). A pole of
+ * f (y = 0) or R = 0 is GIA_E_RANGE (N5). */
+gia_status gia_riccati_eval(const gia_lde2_sol *sol, double t,
+                            double complex *f, double complex *trad_residual,
+                            const char **why);
+
+/* FR-IDC-013 — what the sources do not define is refused by name, with the
+ * reason (PLAN §6). `feature` is one of:
+ *   "riccati_duet"     the direct duet form [06 Eq 3.22] (PLAN X3)
+ *   "abel_net"         Abel's n-et [06 Eq 3.25-3.27]
+ *   "solution_drift"   solution drift on a network whose flow matrix is not
+ *                      constant (FR-IDC-011)
+ * Always GIA_E_UNSUPPORTED with a reason naming the source; an unknown name
+ * is GIA_E_ARG. */
+gia_status gia_idc_refuse(const char *feature, const char **why);
+
 #endif /* GIA_IDC_H */

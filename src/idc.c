@@ -11,6 +11,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* gia_status_str lives with the first unit that returns a gia_status; mop.c
  * and relational.c link idc.o for it. */
@@ -96,6 +97,8 @@ struct gia_lde2_sol {
     double         *t;
     double complex *r;              /* labelled roots at t[k]: r[2k], r[2k+1] */
     double complex *Ic;              /* int_0^{t[k]} r_i: Ic[2k], Ic[2k+1]       */
+    void           *owned;          /* freed with the solution (a Riccati's
+                                     * coefficient context), or NULL         */
 };
 
 /* The coefficients and roots at t. The stable form of N3:
@@ -193,7 +196,7 @@ static int push_node(gia_lde2_sol *sl, double t, const double complex r[2],
 
 void gia_lde2_free(gia_lde2_sol *sol) {
     if (!sol) return;
-    free(sol->t); free(sol->r); free(sol->Ic);
+    free(sol->t); free(sol->r); free(sol->Ic); free(sol->owned);
     free(sol);
 }
 
@@ -455,4 +458,108 @@ gia_status gia_binary_eval(const gia_binary_sol *sol, double t,
     }
     for (s = 0; s < 2; s++) { f[s] = fv[s]; if (fhalf) fhalf[s] = hv[s]; }
     return GIA_OK;
+}
+
+/* ================================================================== *
+ * FR-IDC-008 — Riccati by linearisation (numerics.md N5)
+ * ================================================================== */
+
+typedef struct { gia_cfn Q, R, dR, P; void *ctx; } ric_ctx;
+
+/* y'' + p1 y' + p0 y = 0 with p1 = -(R' - Q R)/R and p0 = -P R: [06 Eq 3.18]
+ * divided by R. A vanishing R makes these non-finite, which the sweep refuses. */
+static double complex ric_p1(double t, void *c) {
+    const ric_ctx *rc = (const ric_ctx *)c;
+    double complex R = rc->R(t, rc->ctx);
+    return -(rc->dR(t, rc->ctx) - rc->Q(t, rc->ctx) * R) / R;
+}
+static double complex ric_p0(double t, void *c) {
+    const ric_ctx *rc = (const ric_ctx *)c;
+    return -rc->P(t, rc->ctx) * rc->R(t, rc->ctx);
+}
+
+gia_status gia_riccati_solve(gia_cfn Q, gia_cfn R, gia_cfn dR, gia_cfn P, void *ctx,
+                             double complex f0, double t_max,
+                             gia_lde2_sol **sol, double *t_fail, const char **why) {
+    ric_ctx       *rc;
+    gia_lde2_sol  *sl = NULL;
+    double complex R0;
+    gia_status     st;
+
+    if (!Q || !R || !dR || !P || !sol)
+        return fail(GIA_E_ARG, "gia_riccati_solve: NULL argument", why);
+    if (!finite_c(f0))
+        return fail(GIA_E_DOMAIN, "gia_riccati_solve: f0 must be finite", why);
+    R0 = R(0.0, ctx);
+    if (!finite_c(R0) || R0 == 0.0)
+        return fail(GIA_E_DOMAIN,
+                    "gia_riccati_solve: f = y'/(R y) needs R != 0 ([06 Eq 3.17], PLAN R11)", why);
+    rc = (ric_ctx *)malloc(sizeof(*rc));
+    if (!rc) return fail(GIA_E_NOMEM, "gia_riccati_solve: out of memory", why);
+    rc->Q = Q; rc->R = R; rc->dR = dR; rc->P = P; rc->ctx = ctx;
+    /* y(0) = 1, y~'(0) = R(0) f0 (N5). */
+    st = gia_lde2_solve(ric_p1, ric_p0, rc, 1.0, R0 * f0, t_max, &sl, t_fail, why);
+    if (st != GIA_OK) { free(rc); return st; }
+    sl->owned = rc;
+    *sol = sl;
+    return GIA_OK;
+}
+
+gia_status gia_riccati_eval(const gia_lde2_sol *sol, double t,
+                            double complex *f, double complex *trad_residual,
+                            const char **why) {
+    const ric_ctx *rc;
+    double complex c[2], r[2], E[2], dr[2], N = 0.0, D = 0.0, dN = 0.0;
+    double complex Q, R, dR, P, fv, res = 0.0;
+    gia_status     st;
+    int            i, nt;
+
+    if (!sol || !sol->owned)
+        return fail(GIA_E_ARG, "gia_riccati_eval: not a Riccati solution", why);
+    rc = (const ric_ctx *)sol->owned;
+    if ((st = gia_lde2_terms(sol, t, c, r, E, why)) != GIA_OK) return st;
+    nt = sol->one_family ? 1 : 2;
+    for (i = 0; i < nt; i++) { N += c[i] * r[i] * E[i]; D += c[i] * E[i]; }
+    Q = rc->Q(t, rc->ctx); R = rc->R(t, rc->ctx); dR = rc->dR(t, rc->ctx); P = rc->P(t, rc->ctx);
+    if (!finite_c(Q) || !finite_c(R) || !finite_c(dR) || !finite_c(P))
+        return fail(GIA_E_DOMAIN, "gia_riccati_eval: a coefficient is not finite", why);
+    if (cabs(D) <= 1e-300 || R == 0.0)
+        return fail(GIA_E_RANGE,
+                    "gia_riccati_eval: y = 0 or R = 0 here, a pole of f = y'/(R y) (numerics N5)",
+                    why);
+    fv = N / (R * D);
+    if (trad_residual) {
+        double complex fp;
+        if (root_slopes(sol, t, r, dr) != GIA_OK)
+            return fail(GIA_E_DOMAIN, "gia_riccati_eval: a coefficient is not finite", why);
+        for (i = 0; i < nt; i++) dN += c[i] * (dr[i] + r[i] * r[i]) * E[i];
+        /* f = N/(R D), D' = N:  f' = N'/(R D) - N R'/(R^2 D) - N^2/(R D^2). */
+        fp  = dN / (R * D) - N * dR / (R * R * D) - N * N / (R * D * D);
+        res = fp + Q * fv + R * fv * fv - P;
+    }
+    if (!finite_c(fv) || !finite_c(res))
+        return fail(GIA_E_RANGE, "gia_riccati_eval: result not finite (NFR-NUM-003)", why);
+    if (f) *f = fv;
+    if (trad_residual) *trad_residual = res;
+    return GIA_OK;
+}
+
+/* FR-IDC-013 — PLAN §6. */
+gia_status gia_idc_refuse(const char *feature, const char **why) {
+    if (!feature) return fail(GIA_E_ARG, "gia_idc_refuse: feature is NULL", why);
+    if (!strcmp(feature, "riccati_duet"))
+        return fail(GIA_E_UNSUPPORTED,
+                    "the direct Riccati duet [06 Eq 3.22] is not derivable from Eq 3.19, and "
+                    "its source [06 ref 8] is not available (PLAN X3, §6); the Riccati equation "
+                    "is solved by linearisation instead (FR-IDC-008)", why);
+    if (!strcmp(feature, "abel_net"))
+        return fail(GIA_E_UNSUPPORTED,
+                    "Abel's n-et [06 Eq 3.25-3.27] rests on [06 ref 8], which is not available "
+                    "(PLAN §6)", why);
+    if (!strcmp(feature, "solution_drift"))
+        return fail(GIA_E_UNSUPPORTED,
+                    "solution drift is defined only for a known equation [06 §4]; the sources "
+                    "define none for a network whose flow matrix is not constant (FR-IDC-011, "
+                    "PLAN §6)", why);
+    return fail(GIA_E_ARG, "gia_idc_refuse: unknown feature", why);
 }

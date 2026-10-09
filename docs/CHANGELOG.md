@@ -50,6 +50,11 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The Riccati equation by linearisation, and named refusals** (PLAN.md W2 `idc-riccati`, FR-IDC-008 and FR-IDC-013).
+  - `gia_riccati_solve` and `gia_riccati_eval` solve `f' + Qf + Rf² = P` with the substitution `f = y'/(R y)`, taking y from the incipient LDE solver ([06 Eq 3.16–3.18], PLAN R11). They report the traditional Riccati residual of the result.
+  - The printed substitution of [06 Eq 3.17] is inverted. A test shows that it leaves an Eq 3.18 residual of 18.3 against a tolerance of 1e-6 (erratum X2).
+  - `gia_idc_refuse` refuses the Riccati duet [06 Eq 3.22], Abel's n-et and network solution drift, each with the reason the sources give (PLAN §6).
+
 - **The binary function, `gia_binary_*`** (PLAN.md W2 `idc-binary`, FR-IDC-007). It solves `f' + A f^(½) + B f = 0` on both branches [02 Eq 14.7.1–14.7.7] from the single characteristic `u² + Au + B = 0` (PLAN R9; the printed per-branch exponents are erratum X7). The constants come from the four initial conditions. A double root is refused, because no source defines that case. Tests check both branches by hand for A = 1, B = −2. They also check the defining residual with `f'` by central difference, a complex case, linearity in the initial conditions (FR-IDC-012, now `implemented`), and an overflow returning `GIA_E_RANGE`.
 
 - **The second-order incipient LDE with variable coefficients, `gia_lde2_*`** (PLAN.md W2 `idc-lde2`, FR-IDC-006). It solves `f̃'' + a₁(t) f̃' + a₀(t) f = 0` as `Σ cᵢ exp(∫₀ᵗ rᵢ)`, with `rᵢ(t)` the roots of the incipient characteristic [06 Eq 3.3–3.6], labelled by continuity in t.
