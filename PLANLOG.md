@@ -31,6 +31,12 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
     defining equation's termwise residual itself. vv-plan.md §2 rule 2 ("residual first") requires
     this, and `f` alone cannot provide it.
 
+### `idc-binary`
+
+- **`gia_binary_eval` returns a `gia_status`.** It returned `void`. But `e^{u²t}` overflows for
+  moderate `t`, and NFR-NUM-003 forbids returning infinity, so the function needs a way to say
+  `GIA_E_RANGE`.
+
 ---
 
 ## [Revision 3] — 2026-10-09

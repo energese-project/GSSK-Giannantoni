@@ -50,6 +50,8 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The binary function, `gia_binary_*`** (PLAN.md W2 `idc-binary`, FR-IDC-007). It solves `f' + A f^(½) + B f = 0` on both branches [02 Eq 14.7.1–14.7.7] from the single characteristic `u² + Au + B = 0` (PLAN R9; the printed per-branch exponents are erratum X7). The constants come from the four initial conditions. A double root is refused, because no source defines that case. Tests check both branches by hand for A = 1, B = −2. They also check the defining residual with `f'` by central difference, a complex case, linearity in the initial conditions (FR-IDC-012, now `implemented`), and an overflow returning `GIA_E_RANGE`.
+
 - **The second-order incipient LDE with variable coefficients, `gia_lde2_*`** (PLAN.md W2 `idc-lde2`, FR-IDC-006). It solves `f̃'' + a₁(t) f̃' + a₀(t) f = 0` as `Σ cᵢ exp(∫₀ᵗ rᵢ)`, with `rᵢ(t)` the roots of the incipient characteristic [06 Eq 3.3–3.6], labelled by continuity in t.
   - **Method** (numerics N3): the stable root form, plus an adaptive Gauss–Legendre sweep that accepts a step only when its integral agrees with two half-steps to 1e-12 and no root moves more than half the root separation.
   - **Double root:** a root that is double throughout gives the single family `c·e^{∫r}`. Initial conditions inconsistent with that family are refused, and [06 Eq 3.7] is not used (erratum X12).

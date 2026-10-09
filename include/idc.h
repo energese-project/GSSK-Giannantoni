@@ -71,4 +71,28 @@ gia_status gia_lde2_terms(const gia_lde2_sol *sol, double t,
 
 void gia_lde2_free(gia_lde2_sol *sol);
 
+/* FR-IDC-007 — the binary function [02 Eq 14.7.1-14.7.7], [06 Eq 3.10-3.15]:
+ *
+ *     f' + A f^(1/2) + B f = 0,    two branches sigma = 1, 2,
+ *
+ * solved per PLAN R9 / numerics.md N4: u1, u2 are the roots of
+ * u^2 + A u + B = 0 (one characteristic serves both branches; the printed
+ * "distinct exponents per branch" is erratum X7), each branch is
+ * f_s = c_s1 e^{u1^2 t} + c_s2 e^{u2^2 t} with half-derivative
+ * sum_i c_si u_i e^{u_i^2 t}, and the constants come from
+ * [[1, 1], [u1, u2]] c_s = (f_s(0), f_s^(1/2)(0)). u1 = u2 is defined by no
+ * source and is refused (GIA_E_UNSUPPORTED). */
+typedef struct { double complex u[2]; double complex c[2][2]; } gia_binary_sol;
+
+gia_status gia_binary_solve(double complex A, double complex B,
+                            const double complex f0[2], const double complex fhalf0[2],
+                            gia_binary_sol *sol, const char **why);
+
+/* f_s(t) and f_s^(1/2)(t) for both branches (fhalf may be NULL). Returns a
+ * status rather than nothing so that an overflowing exponential is
+ * GIA_E_RANGE, never inf (NFR-NUM-003). */
+gia_status gia_binary_eval(const gia_binary_sol *sol, double t,
+                           double complex f[2], double complex fhalf[2],
+                           const char **why);
+
 #endif /* GIA_IDC_H */

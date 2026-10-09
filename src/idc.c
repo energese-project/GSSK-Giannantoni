@@ -397,3 +397,62 @@ gia_status gia_lde2_eval(const gia_lde2_sol *sol, double t,
     if (trad_residual) *trad_residual = res;
     return GIA_OK;
 }
+
+/* ================================================================== *
+ * FR-IDC-007 — the binary function (numerics.md N4)
+ * ================================================================== */
+
+gia_status gia_binary_solve(double complex A, double complex B,
+                            const double complex f0[2], const double complex fhalf0[2],
+                            gia_binary_sol *sol, const char **why) {
+    double complex disc, sq, q, u1, u2, det;
+    int            s;
+
+    if (!f0 || !fhalf0 || !sol)
+        return fail(GIA_E_ARG, "gia_binary_solve: NULL argument", why);
+    if (!finite_c(A) || !finite_c(B) || !finite_c(f0[0]) || !finite_c(f0[1]) ||
+        !finite_c(fhalf0[0]) || !finite_c(fhalf0[1]))
+        return fail(GIA_E_DOMAIN, "gia_binary_solve: coefficients and ICs must be finite", why);
+
+    /* N3's stable root form with constant a1 = A, a0 = B. */
+    disc = A * A - 4.0 * B;
+    sq   = csqrt(disc);
+    q    = cabs(A + sq) >= cabs(A - sq) ? A + sq : A - sq;
+    if (q == 0.0) { u1 = u2 = 0.0; }
+    else          { u1 = -q / 2.0; u2 = B / u1; }
+    if (cabs(u1 - u2) <= N3_TOL * fmax(1.0, cabs(u1)))
+        return fail(GIA_E_UNSUPPORTED,
+                    "gia_binary_solve: u^2 + A u + B = 0 has a double root, for which no "
+                    "available source defines the binary function (PLAN R9, numerics N4)", why);
+    det = u2 - u1;
+    for (s = 0; s < 2; s++) {
+        sol->c[s][0] = (f0[s] * u2 - fhalf0[s]) / det;
+        sol->c[s][1] = (fhalf0[s] - f0[s] * u1) / det;
+    }
+    sol->u[0] = u1; sol->u[1] = u2;
+    return GIA_OK;
+}
+
+gia_status gia_binary_eval(const gia_binary_sol *sol, double t,
+                           double complex f[2], double complex fhalf[2],
+                           const char **why) {
+    double complex E[2], fv[2], hv[2];
+    int            i, s;
+
+    if (!sol || !f) return fail(GIA_E_ARG, "gia_binary_eval: NULL argument", why);
+    if (!isfinite(t)) return fail(GIA_E_ARG, "gia_binary_eval: t must be finite", why);
+    for (i = 0; i < 2; i++) {
+        double complex z = sol->u[i] * sol->u[i] * t;      /* exponent u_i^2 t */
+        if (creal(z) > EXP_MAX)
+            return fail(GIA_E_RANGE, "gia_binary_eval: e^{u^2 t} overflows (numerics N6)", why);
+        E[i] = cexp(z);
+    }
+    for (s = 0; s < 2; s++) {
+        fv[s] = sol->c[s][0] * E[0] + sol->c[s][1] * E[1];
+        hv[s] = sol->c[s][0] * sol->u[0] * E[0] + sol->c[s][1] * sol->u[1] * E[1];
+        if (!finite_c(fv[s]) || !finite_c(hv[s]))
+            return fail(GIA_E_RANGE, "gia_binary_eval: result not finite (NFR-NUM-003)", why);
+    }
+    for (s = 0; s < 2; s++) { f[s] = fv[s]; if (fhalf) fhalf[s] = hv[s]; }
+    return GIA_OK;
+}
