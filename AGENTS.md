@@ -3,7 +3,10 @@
 Welcome, fellow agent. This document provides the necessary context and standards for contributing to the General Systems Simulation Kernel (GSSK).
 
 ## 🎯 Project Overview
-GSSK is a high-performance numerical engine for General Systems Theory and Odum Energy Systems Language. It simulates systems as coupled Ordinary Differential Equations (ODEs) using Euler or RK4 integration.
+This repository holds two engines over Odum's Energy Systems Language, which share a build and a JSON parser and nothing else ([ADR 0011](docs/adr/0011-two-engines-declared-lossy-projection.md)):
+
+- **The GSSK kernel** (`include/gssk.h`, `src/gssk.c`) simulates systems as coupled ordinary differential equations: Euler, RK4, adaptive Dormand–Prince, or the matrix exponential. Its `"incipient"` method is the **classical** matrix exponential under an old name. It is not Giannantoni's incipient calculus (PLAN.md §2 E2).
+- **The Giannantoni engine** (`include/engine.h`, `src/engine.c`, `bin/giannantoni_sim`) is where Giannantoni's Incipient Differential Calculus (IDC) and Maximum Ordinality Principle (MOP) are being built, test-first from the sources ([PLAN.md](PLAN.md)). Much of what it reports today is classical, assumed, a proxy or illustrative, and every output says which. Do not describe it, or the matrix exponential, as "implementing IDC" ([docs/giannantoni_assessment.md](docs/giannantoni_assessment.md#status-of-record-planmd-2)).
 
 ## 🛠 Tech Stack
 - **Language**: C99 (Strict compliance: `-std=c99 -Wall -Wextra -Werror`).
@@ -14,13 +17,13 @@ GSSK is a high-performance numerical engine for General Systems Theory and Odum 
 ## 🏗 Architecture
 - **Public API**: `include/gssk.h`. DO NOT put implementation details here.
 - **Core Logic**: `src/gssk.c`.
-- **Instance-Based**: All state is stored in an opaque `GSSK_Instance`. No global or static variables.
+- **Instance-Based**: All state is stored in an opaque `GSSK_Instance`. No global or static variables. The same holds for the Giannantoni units, and `make check-symbols` enforces it there (NFR-REE-001).
 - **Memory Management**: Every `GSSK_Init` must have a corresponding `GSSK_Free`.
 
 ## 🧪 Testing & Verification
 We use a **Registration-based Regression Testing** system.
 - **Run Tests**: `make test`
-- **Add New Test**: Create a JSON model in `examples/`, then run `make test-update`.
+- **Add New Test** (kernel models only): Create a JSON model in `examples/`, then run `make test-update`. A model with no golden file fails `make test` unless `tests/skip_allowlist.txt` names it with a reason ([ADR 0018](docs/adr/0018-giannantoni-test-protocol.md) rule 1).
 - **Comparison**: We use `bin/csv_compare` with a $10^{-6}$ tolerance to verify numerical stability.
 
 ### Giannantoni engine: requirements first
@@ -35,13 +38,37 @@ current output. The golden-file workflow above does **not** apply to it.
 - `make check-trace` fails on an untraced requirement, an orphan tag, or an unbacked `implemented`
   claim. It runs in CI.
 
+### Giannantoni work: the protocol
+
+Any change to the Giannantoni units (`src/engine.c`, `src/idc.c`, `src/mop.c`, `src/relational.c`, `src/harmony.c`) follows [ADR 0018](docs/adr/0018-giannantoni-test-protocol.md), which records PLAN.md §1's guardrails **G1–G7**. In short:
+
+- **G1.** No golden files. The oracle is an equation, a closed form, or a printed number.
+- **G2.** Line coverage of the units must be ≥ 90% (`make coverage-gia`).
+- **G3.** No untested or stubbed function in `idc.h`, `mop.h` or `relational.h` (`make check-api-called`). Rule 3 below does not apply to them.
+- **G4.** A departure from a printed equation needs all three of:
+  - a probe in `docs/sources/probes/`;
+  - a row in PLAN §5;
+  - a test showing the printed form fails.
+
+  No tolerance is widened without that row.
+- **G5.** An ADR defines a Giannantoni term only by citing a source equation or a §5 erratum.
+- **G6.** Never equate IDC with the matrix exponential. Never clamp signed or complex coordinates (see the Fail-Safe Policy below).
+- **G7.** Each PR body:
+  - maps each test to the equation it verifies;
+  - quotes the red run from before the implementation;
+  - quotes each catalogue mutation's failure.
+
+A feature may be refused only if PLAN §6 lists it. Anything else not yet built stays `planned`.
+
+PLAN.md §1 lists the loopholes these close (B1–B12). They were found in this repository, not imagined.
+
 ## 📜 Coding Standards
 1. **Absolute Paths**: When using IDE tools, prefer absolute paths for configuration (see `.clangd`).
 2. **Fail-Safe Policy**:
    - Always check for `NaN` or `Inf` after a step.
-   - Enforce physical conservation (clamping $Q < 0$ to $0.0$).
+   - **GSSK kernel only:** enforce physical conservation (clamping $Q < 0$ to $0.0$). The Giannantoni units never clamp, floor or take absolute values of coordinates to keep them "physical". Relational Space coordinates are signed and complex, and the MOP's algebra is non-conservative by design ([10 Eq 17.1]; NFR-NUM-006, PLAN §1 B6).
    - JSON parsing must be strict. Return `NULL` if the schema is violated.
-3. **No Placeholders**: Never use placeholder code. If a feature isn't implemented, return a proper error code or use `(void)` for intentional stubs.
+3. **No Placeholders**: Never use placeholder code. In the GSSK kernel, a feature that isn't implemented returns a proper error code, or uses `(void)` for an intentional stub. **In the Giannantoni API (`idc.h`, `mop.h`, `relational.h`) there are no stubs at all**: every declared function is implemented and called by a test (ADR 0018 rule 3, `make check-api-called`). A refusal (`GIA_E_UNSUPPORTED`) is allowed only for what PLAN.md §6 says the sources do not define, and it names that reason.
 
 ## 🚀 Deployment (WASM)
 GSSK is designed for web integration. Any core change must still build for `wasm32-wasip1` with `make wasm` (clang + wasi-libc from the pinned WASI SDK; no Emscripten). The JavaScript side is `src/gssk.js`, a dependency-free ES module — keep it that way, and never add CommonJS.

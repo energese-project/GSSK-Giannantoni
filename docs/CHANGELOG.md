@@ -28,6 +28,14 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **`AGENTS.md` and `TODO.md` no longer equate the incipient calculus with the matrix exponential** (PLAN.md W1 `guard-agents-wording`, B5 and B6). The changes:
+  - The Overview now describes both engines. It no longer says "Euler or RK4" for a repository with four integrators, and it labels the kernel's `"incipient"` method as classical.
+  - A new "Giannantoni work: the protocol" section summarises ADR 0018's G1–G7.
+  - The clamp `Q < 0 → 0` is scoped to the kernel, since the Giannantoni units never clamp signed or complex coordinates.
+  - The `(void)`-stub allowance no longer covers the Giannantoni API.
+  - `make test-update` is marked kernel-only.
+  - In TODO.md, the Vision, the Non-Goals and the Phase 1 heading stop calling the matrix exponential IDC.
+
 - **A coverage gate on the Giannantoni units, and a kernel gate that can fail** (PLAN.md W1 `guard-coverage-giannantoni`, NFR-COV-001). `make coverage-gia` builds the Giannantoni units with `--coverage`, runs every Giannantoni suite and the CLI system tests, and requires ≥ 90% of lines in `engine.c` (and in `idc.c`, `mop.c`, `relational.c` and `harmony.c` once they exist). `validation.c` and `projection.c` are reported but not gated. The gate is `scripts/coverage_gate.sh`. Its parse is POSIX `awk`, and an unreadable or empty report **fails**: the old kernel gate printed `OK` whenever its `grep -oP` matched nothing, which on macOS was always (PLAN §1 B3). The kernel gate now uses the same portable parse and also fails on an unreadable summary. `make coverage-check` runs both gates. The README badge claimed a 35% gate was ≥ 85%; it now shows both real gates. `make test-coverage-gate` self-tests the gate in CI.
 
 - **`make test` fails on a model with no golden file** (PLAN.md W1 `guard-no-skip`, ADR 0018 rule 1). It used to print `SKIPPED` and exit 0, so a new model "passed" by having no expected output (PLAN §1 B1). A model may now skip only if `tests/skip_allowlist.txt` names it with a reason after `#`. An entry without a reason, or an entry for a model that does have a golden file, also fails, so the list cannot grow silently. `invalid_model` is the one entry: the kernel deliberately refuses it. `make test-guard-no-skip` (`tests/guard_no_skip.sh`, in CI) checks that the guard itself still bites: a golden file removed from a copy of `tests/expected` must turn `make test` red.
