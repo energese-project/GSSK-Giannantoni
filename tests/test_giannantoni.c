@@ -69,6 +69,7 @@ static bool loads(const char *json) {
  * 1. Persistence of form, and the drift TDC introduces
  * ------------------------------------------------------------------ */
 
+/* Verifies: FR-IDC-001, FR-IDC-003, FR-IDC-004 (T-IDC-01) */
 static void test_drift(void) {
     gia_phi affine, quad;
     double  a = 1.5, t = 1.5;
@@ -126,6 +127,7 @@ static void test_drift(void) {
  * 2. The binary / duet
  * ------------------------------------------------------------------ */
 
+/* Verifies: FR-IDC-005 (T-IDC-02, VAL-06) */
 static void test_duet(void) {
     gia_phi phi;
     gia_net d;
@@ -253,6 +255,7 @@ static char *seed_json(const char *generative) {
     return buf;
 }
 
+/* Verifies: FR-ORD-006 (T-ORD-05) */
 static void test_generative(void) {
     cJSON     *root, *out, *out2;
     gia_model  m, evolved;
@@ -331,6 +334,7 @@ static void test_generative(void) {
     cJSON_Delete(root);
 }
 
+/* Verifies: FR-ORD-006 (T-ORD-05) */
 static void test_generative_disabled(void) {
     cJSON     *root, *out;
     gia_model  m;
@@ -879,6 +883,7 @@ static cJSON *coproduction_model(const char *mode) {
     return cJSON_Parse(buf);
 }
 
+/* Verifies: FR-EM-001, FR-EM-002 (T-EM-01) */
 static void test_emergy(void) {
     cJSON     *root;
     gia_model  m;
@@ -938,6 +943,7 @@ static void test_emergy(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* Verifies: FR-EM-003 (T-EM-02) */
 static void test_emergy_feedback(void) {
     cJSON     *root;
     gia_model  m;
@@ -1522,6 +1528,7 @@ static void test_projection_processing_node_params(void) {
  * co-production ancestor, and to sum only across inputs that do not.
  * ------------------------------------------------------------------ */
 
+/* Verifies: FR-EM-003 (T-EM-02) */
 static void test_reunited_coproducts(void) {
     cJSON     *root;
     gia_model  m;
@@ -1571,6 +1578,7 @@ static void test_reunited_coproducts(void) {
     cJSON_Delete(root);
 }
 
+/* Verifies: FR-EM-003 (T-EM-02) */
 static void test_independent_inputs_still_sum(void) {
     cJSON     *root;
     gia_model  m;
@@ -1652,6 +1660,7 @@ static char *slurp_file(const char *path) {
     return b;
 }
 
+/* Verifies: FR-ORD-007 (T-ORD-06) */
 static void test_module_order_invariance(void) {
     const char *orders[3] = {
         E_ENERGY "," E_CTRL "," E_OUT,
@@ -2503,6 +2512,7 @@ static char *appended(const cJSON *out, int seed_edges) {
     return txt;
 }
 
+/* Verifies: FR-ORD-007 (T-ORD-06) */
 static void test_emergence_is_order_invariant(void) {
     /* A dead end c AND an unconnected d, with the nodes listed two ways.
      * Before ADR 0015 the step closed c from hub a in one order and d from hub

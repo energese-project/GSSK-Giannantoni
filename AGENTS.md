@@ -23,6 +23,18 @@ We use a **Registration-based Regression Testing** system.
 - **Add New Test**: Create a JSON model in `examples/`, then run `make test-update`.
 - **Comparison**: We use `bin/csv_compare` with a $10^{-6}$ tolerance to verify numerical stability.
 
+### Giannantoni engine: requirements first
+
+The Giannantoni engine is specified by [docs/requirements/](docs/requirements/README.md), not by its
+current output. The golden-file workflow above does **not** apply to it.
+
+- Every test's oracle is a source equation, a hand-derived closed form, or a published number (the
+  oracle policy in `docs/requirements/vv-plan.md` §2), never output the code produced.
+- Tag each test with the requirements it verifies — `/* Verifies: FR-IDC-006 (T-IDC-04) */` — and
+  move a requirement to `Status: implemented` only when a tagged test passes.
+- `make check-trace` fails on an untraced requirement, an orphan tag, or an unbacked `implemented`
+  claim. It runs in CI.
+
 ## 📜 Coding Standards
 1. **Absolute Paths**: When using IDE tools, prefer absolute paths for configuration (see `.clangd`).
 2. **Fail-Safe Policy**:

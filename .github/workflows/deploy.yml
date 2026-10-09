@@ -186,6 +186,12 @@ jobs:
       - name: Giannantoni generative engine tests
         run: make test-giannantoni
 
+      # Requirements traceability (docs/requirements/). Fails on an untraced
+      # requirement, an orphan Verifies: tag, or an `implemented` claim no
+      # test backs — the ways a green build can avoid being built to spec.
+      - name: Requirements traceability
+        run: make check-trace
+
   # ────────────────────────────────────────────────────────────
   # Quality gate — all Linux-only checks as serial steps.
   # One checkout, one apt-get, one runner.

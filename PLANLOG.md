@@ -10,6 +10,69 @@ from an assumption.
 
 ---
 
+## [Revision 3] — 2026-10-09
+
+A requirements baseline, written from a senior C developer's view of what was missing. The plan
+said what to build and in what order. It did not say what the delivered kernel must do, under what
+conditions, to what accuracy, or how each claim is proven. In V-model terms, the left arm had been
+skipped.
+
+### Added
+
+- `docs/requirements/`:
+  - stakeholder and business requirements with acceptance criteria;
+  - the SRS (functional and non-functional);
+  - an interface control document: C API contracts, the seed's `mop` block, outputs, CLI;
+  - a numerical design per algorithm;
+  - a V&V plan, with oracle, tolerance and determinism policy and an 81-entry test catalogue.
+
+  In all, 88 requirements, each traced to a source equation and to its verification.
+- `make check-trace` (`scripts/check_trace.sh`, POSIX sh + awk) runs in CI. It fails on an untraced
+  requirement, an orphan `Verifies:` tag, or an `implemented` claim with no tagged test. Nine planted
+  faults each fail it; the unmodified tree passes under macOS awk and Linux mawk. Ten existing tests
+  are tagged, which backs the ten requirements already `implemented`.
+
+### Found — writing requirements surfaced what the plan did not
+
+- **The incipient derivative is two operations.** Pointwise, `(f'/f)ⁿ f`, it is the sources'
+  definition, and it is not additive. The superposition the sources print as the solution of the
+  second-order equation [06 Eq 3.6] solves it only if the derivative acts termwise on exponential
+  terms (residual 0 termwise, −1.67 pointwise). The sources use termwise for every superposition they
+  print. Decided as R16. It is also the reason E4b holds.
+- **Two different drifts had been conflated.** Solution drift of a known model [06 §4] is zero for
+  constant coefficients, and the sources define none for coupled nonlinear systems.
+  Output-projection drift [09 Eq 13] is defined on any trajectory. Revision 2's T-IDC-11 expected
+  the first to be nonzero for an interaction network. The SRS now has one requirement for each, and
+  separate CSV columns.
+- **[06 Eq 3.7] is wrong under every reading** (erratum X12). Its "second solution at a double root"
+  leaves residual −0.7 classically, −0.7 termwise and 0.93 pointwise. Under the termwise derivative a
+  double root has only the one-parameter family `c·e^{∫α̃}`, so ICs inconsistent with it are now
+  refused.
+- **[23 Eq A2.6] gives the real unit i a 4π period** (erratum X11), and Eq 7.4's `√2ψ` holds only for
+  ε₂ = ε₃. The EQS uses i's factor only as a scale; unequal angles are refused.
+- **The First Equation's closed form needs a numerically stable formulation.** Evaluated as printed
+  (even corrected) it cancels near t = 0: relative error 5.9e-5 at t = 1e-11. The unified
+  `log1p`/`expm1` form holds 4e-16 and is continuous through b = 0, which also removes the b = 0
+  special case (probe `first_equation_numerics.py`).
+- **Two defects in the existing engine, by inspection:**
+  - `src/engine.c:2830` holds `static const gia_model *sort_model` for a `qsort` comparator. That is
+    file-scope mutable state, which `AGENTS.md` forbids, and it makes the generative step
+    non-reentrant.
+  - `combine_inflows` and `gia_emergy_at` silently ignore inflows beyond 64 and co-production
+    masks beyond 64 components, giving a wrong answer instead of an error.
+
+  Both are now requirements (NFR-REE-001, NFR-LIM-001), with tests and a task (`guard-reentrancy`).
+
+### Decided
+
+- The baseline is the specification; the plan is the schedule. Where they disagree, the baseline wins.
+- PLAN §8 moved into the V&V catalogue, so there is one test list, not two that drift apart.
+- New API surface uses a `gia_status` code with a `why` out-parameter naming the source of any
+  refusal. The library never prints or exits.
+- The Giannantoni engine is native only in this baseline; WASM stays the GSSK kernel's surface.
+
+---
+
 ## [Revision 2] — 2026-10-09
 
 Re-read against the full source set the maintainer added to `docs/`: the 2002 book that began the
