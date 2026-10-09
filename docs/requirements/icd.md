@@ -39,7 +39,7 @@ Every new function returns `gia_status` and takes `const char **why` last. On an
 `"[06 Eq 3.22] is not derivable from Eq 3.19 (PLAN X3)"`; outputs are left unmodified. On `GIA_OK`,
 `*why` is not written. No function prints, exits or aborts (NFR-ERR-001).
 - **Source:** srs NFR-ERR-001, FR-OUT-002
-- **Verification:** T-API-01, T-ERR-01 · **Priority:** Must · **Status:** planned · **Task:** idc-general-f
+- **Verification:** T-API-01, T-ERR-01 · **Priority:** Must · **Status:** implemented · **Task:** idc-general-f
 
 ### IF-API-002 — `idc.h`
 ```c

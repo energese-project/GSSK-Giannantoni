@@ -191,6 +191,11 @@ jobs:
       - name: Giannantoni generative engine tests
         run: make test-giannantoni
 
+      # The Giannantoni kernel's V&V suite (docs/requirements/vv-plan.md §7):
+      # every oracle an equation, a closed form or a printed number.
+      - name: Giannantoni V&V suite
+        run: make test-mop
+
       - name: Giannantoni CLI system tests
         run: make test-mop-cli
 
