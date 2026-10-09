@@ -195,6 +195,12 @@ test-giannantoni: directories $(TARGET_TEST_GIA)
 	@echo "=== Giannantoni engine tests ==="
 	@./$(TARGET_TEST_GIA)
 
+# System tests of bin/giannantoni_sim (docs/requirements/vv-plan.md §1): the
+# run report, the CSV and the exit status, checked against docs/requirements/icd.md.
+.PHONY: test-mop-cli
+test-mop-cli: directories $(TARGET_SIM)
+	@sh $(TEST_DIR)/mop_cli.sh
+
 # Requirements traceability (docs/requirements/README.md): every requirement
 # is verified by a catalogued entry, every `implemented` claim is backed by a
 # `Verifies:` tag in tests/ or scripts/, and no tag names something that does
@@ -912,7 +918,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni check-trace check-version test-schema
+           test-gnp-loop test-giannantoni test-mop-cli check-trace check-version test-schema
 
 # Full native build + CI's suites under real GCC with -Werror.
 test-linux: container-image-linux

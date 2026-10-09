@@ -4,7 +4,10 @@
  *
  * Implements:
  * - Euler / RK4 / AUTO / INCIPIENT integration modes
- * - IDC as baseline solver in AUTO/INCIPIENT (no silent fallback — Phase 1)
+ * - "IDC" baseline in AUTO/INCIPIENT (no silent fallback — Phase 1). Despite
+ *   the name this is the classical matrix exponential below, not
+ *   Giannantoni's incipient calculus (PLAN.md §2 E2; R15 renames it "expm").
+ *   The kernel is the classical (TDC) engine, ADR 0011.
  * - Padé (3,3) matrix-exponential: N(X)/D(X) where X=A·dt, A-stable, O(h⁷)
  * - Riccati exact duet for isolated 2-node interaction systems
  * - Limit edges included in IDC flow matrix via effective conductance g=k·C/(C+Q)

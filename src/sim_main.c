@@ -188,6 +188,54 @@ static void report_duet(const gia_model *m) {
     }
 }
 
+/* FR-OUT-001: every output says what produced it. One `label.<name>: <label>`
+ * line per CSV column, in header order, then one per reported quantity. The
+ * five labels (docs/requirements/srs.md FR-OUT-001):
+ *
+ *   implemented   the source's construction, verified against it
+ *   classical     a correct result of ordinary (TDC) numerics, not of IDC
+ *   assumed       built from an assumption the sources state, not derived
+ *   proxy         a stand-in for a quantity the sources define differently
+ *   illustrative  the source's formula applied to inputs it does not supply
+ *
+ * PLAN.md §2 is the evidence for each assignment. tests/mop_cli.sh checks the
+ * lines against the CSV header the same run writes, so a column cannot be
+ * added here or in gia_write_trajectories without the other. */
+static void report_labels(const gia_model *m) {
+    int i;
+
+    printf("\n%s\n", RULE);
+    printf(" WHAT PRODUCED EACH OUTPUT (FR-OUT-001)\n");
+    printf("%s\n", RULE);
+    printf("label.time: implemented\n");
+    for (i = 0; i < m->n_nodes; i++) {
+        const char *id = m->nodes[i].id;
+        /* E3: Q(t) = exp(A t) Q(0) is the matrix exponential. */
+        printf("label.%s_Q: classical\n", id);
+        /* Odum's emergy algebra, [02 p. 23 rules 1-4] (FR-EM-001..003). */
+        printf("label.%s_Em: implemented\n", id);
+        printf("label.%s_Tr: implemented\n", id);
+        /* E4: the drift identity is Giannantoni's, but the per-node phi it is
+         * applied to is invented by phi_for_node, not derived from Q. */
+        printf("label.%s_idc: illustrative\n", id);
+        printf("label.%s_tdc: illustrative\n", id);
+        printf("label.%s_drift: illustrative\n", id);
+    }
+    printf("label.psi_network: illustrative\n");
+    printf("label.conservation: classical\n");
+    printf("label.emergy_excess: implemented\n");
+
+    /* E6: the fraction of components on a cycle, not [22 Eq 11.1]. */
+    printf("label.ordinality: proxy\n");
+    /* E5: constructed from roots of unity and checked against the
+     * construction; [23 §8 ii] says the EQS assumes it. */
+    printf("label.harmony: assumed\n");
+    /* E7: the ADR 0015 graph heuristic, not [02 Eq 5.3] / [22 Eq 2]. */
+    printf("label.generative_step: illustrative\n");
+    /* FR-IDC-005 is implemented, but the duet is taken of an invented phi. */
+    printf("label.duet: illustrative\n");
+}
+
 int main(int argc, char **argv) {
     const char *model_path = NULL;
     const char *csv_path   = DEFAULT_CSV;
@@ -336,6 +384,8 @@ int main(int argc, char **argv) {
     /* ---- Which mode was it, really? Decided from the two graphs. ---- */
     mode = gia_validate_mode(root, out);
     gia_report_mode(mode, root, out);
+
+    report_labels(&model);
 
     rc = EXIT_SUCCESS;
 

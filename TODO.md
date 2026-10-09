@@ -570,6 +570,11 @@ general-purpose ODE library. The wedge is:
 
 ### 10.3 MOP harmony relationships
 
+> **Constructed, not derived (PLAN.md §2 E5).** The items checked below build the matrix *from* the
+> roots of unity and then verify the invariants of that construction, so they are tests of the
+> constructor, not evidence that harmony emerges. The report labels it `assumed`. Harmony verdicts
+> computed from the Fundamental Equations are PLAN W8 (`mop-harmony-detector`).
+
 - [x] N x N matrix generated from one reference couple by the `(N-1)` ordinal
       roots of unity.
 - [x] Reduction invariant: every entry reconstructs from `alpha_12` alone.

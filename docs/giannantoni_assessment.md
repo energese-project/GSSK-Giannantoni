@@ -7,6 +7,34 @@
 > tabulated limits, while MOP as published has no representation for Odum's
 > typed primitives.
 
+## Status of record (PLAN.md §2)
+
+This document was written as an assessment, and parts of it read as though the repository already
+implements Giannantoni's calculus. It does not, yet. The table below is the status of record; where
+the prose further down disagrees with it, the table wins. Each label is the one `giannantoni_sim`
+prints for the same output (`label.<name>:` lines in its run report, checked by `tests/mop_cli.sh`).
+
+| # | Feature | What the code does | Label |
+|---|---|---|---|
+| E1 | "A second engine implementing IDC and MOP" | See E2–E8 | Overclaim — withdrawn from README |
+| E2 | Kernel `"method": "incipient"` (`src/gssk.c`) | Padé (3,3) `expm(A·dt)`; `limit` linearised | `classical` |
+| E3 | MOP engine trajectories `_Q` | `gia_matrix_exp`, `Q(t) = exp(A t) Q(0)` | `classical` |
+| E4 | `_idc`, `_tdc`, `_drift`, `psi_network` | Giannantoni's drift identity, applied to a per-node φ invented by `phi_for_node`, decoupled from `_Q` | `illustrative` |
+| E4b | Drift from `φ = ln Q_i` | Not built, and must not be: it would report drift for constant-coefficient networks, contradicting `[06 §4 (i)]` | — |
+| E5 | Harmony Relationships | Constructed from roots of unity, then checked against the construction | `assumed` |
+| E6 | Ordinality | Fraction of components on a cycle; not `[22 Eq 11.1]` | `proxy` |
+| E7 | Generative step (`gia_generate`) | ADR 0015 graph heuristic; not `[02 Eq 5.3]` or `[22 Eq 2]` | `illustrative` |
+| E8 | First and Second Fundamental Equations | Absent | absent |
+| — | `_Em`, `_Tr`, `emergy_excess` | Odum's emergy algebra, `[02 p. 23 rules 1–4]` | `implemented` |
+| — | `gia_idc_amplitude`, `gia_drift`, `gia_incipient_fractional` on a given φ | `(φ')ⁿ`, Bell polynomial, all q branches — Giannantoni's own definitions `[02 Eq 14.8.2, 14.9.5]`, `[06 Eq 3.8–3.9]` | `implemented` (the function; its network inputs are E4) |
+
+**Correction kept from PLAN r1.** `gia_idc_amplitude`'s `(φ')ⁿ` is not a shortcut: it is Giannantoni's
+definition, stated identically in `[02 Eq 14.8.2, 14.9.4–14.9.5]`, `[09 Eq 12, 25]`, `[10 Table 1]`,
+`[22 Eq 5.2]` and `[23 Eq 3.2.5]`. What E4 faults is the φ it is given, not the identity.
+
+Implementation of the rest, test-first and from the sources, is [PLAN.md](https://github.com/energese-project/GSSK-Giannantoni/blob/main/PLAN.md)
+W2–W8, specified by [requirements/](requirements/README.md).
+
 ## Summary verdict
 
 **Partial compatibility — with important caveats on the efficiency claims.**
@@ -307,6 +335,10 @@ Prioritised in order of value/complexity ratio:
 
 ### Phase 1 — IDC as Baseline (No Silent Fallback) ✅ IMPLEMENTED (v3.0.0)
 
+> **Status of record: `classical` (E2).** What landed under this heading is a matrix-exponential
+> solver labelled "incipient". It is a sound classical method; it is not Giannantoni's incipient
+> calculus. PLAN R15 renames it `"expm"`.
+
 The kernel now runs IDC on every AUTO/INCIPIENT step, regardless of edge types.
 Previously, limit/threshold edges silently fell back to RK4 only; now:
 
@@ -417,7 +449,9 @@ Done:
    `phi(t)` is carried as a polynomial, so every `phi^(n)` is exact. The
    incipient amplitude is `(phi')^n`; the traditional one is the complete Bell
    polynomial `B_n(phi', ..., phi^(n))` via the standard recursion. The
-   difference is the drift `psi_n`, reported per node and per step in the CSV.
+   difference is the drift `psi_n`, reported per node and per step in the CSV
+   (*status of record: the identity is `implemented`; the per-node CSV columns are
+   `illustrative`, because their φ is invented, E4*).
    It is identically zero exactly when `phi` is affine — which is the
    constant-coefficient agreement §1 predicts — and the tests pin it against
    hand-derived closed forms (`psi_2 = a`, `psi_3 = 3 a^2 t` for
@@ -428,14 +462,15 @@ Done:
    `+/- sqrt(alpha) e^(alpha t)` duet of the 2006 paper, and the branches sum
    to zero.
 
-3. **Harmony Relationships.** The N x N matrix is generated from a single
+3. **Harmony Relationships** *(status of record: `assumed`, E5)*. The N x N matrix is generated from a single
    reference couple `alpha_12` by the `(N-1)` ordinal roots of unity. Two
    invariants are checked rather than asserted: every entry reconstructs from
    `alpha_12` alone (the N x N -> 1 reduction), and every row sums to zero
    because the roots cancel (global balance; N >= 3, since at N = 2 there is
    one root and no interior to balance against).
 
-4. **The generative step, gated on ordinality.** Ordinality is the fraction of
+4. **The generative step, gated on ordinality** *(status of record: ordinality is a `proxy`, E6;
+   the step is `illustrative`, E7)*. Ordinality is the fraction of
    components lying on a closed pathway. Below maximum, the engine spawns a
    regulator and closes an open pathway; the test then reloads the evolved
    graph and confirms ordinality actually reached 1, and that a further step is

@@ -19,6 +19,18 @@
  *
  * See docs/giannantoni_assessment.md for how this relates to the kernel's
  * Phase 1 IDC solver, which solves a different (scalar, conservative) problem.
+ *
+ * Status of record (PLAN.md §2; docs/giannantoni_assessment.md). What is here
+ * is NOT yet an implementation of IDC or the MOP:
+ *   - network trajectories are the matrix exponential          classical  (E3)
+ *   - the per-node phi behind _idc/_tdc/_drift is invented     illustrative (E4)
+ *   - the harmony matrix is built from roots of unity          assumed    (E5)
+ *   - gia_ordinality is the fraction of components on a cycle  proxy      (E6)
+ *   - gia_generate is the ADR 0015 heuristic                   illustrative (E7)
+ *   - the First and Second Fundamental Equations               absent     (E8)
+ * The derivative identities (Sections 1-2) and the emergy algebra are
+ * Giannantoni's and Odum's own, and are implemented. The CLI prints one
+ * `label.` line per output saying which of these it is (FR-OUT-001).
  */
 
 #ifndef GIANNANTONI_ENGINE_H
