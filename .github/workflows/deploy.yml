@@ -283,7 +283,9 @@ jobs:
           echo "## Coverage summary" >> $GITHUB_STEP_SUMMARY
           lcov --summary coverage/lcov.info >> $GITHUB_STEP_SUMMARY 2>&1 || true
 
-      - name: Coverage — enforce ≥ 85% line
+      # The kernel gate is 35% (the badge used to claim 85%); the Giannantoni
+      # units' gate is 90% and fails on an unreadable report (NFR-COV-001).
+      - name: Coverage — kernel ≥ 35%, Giannantoni units ≥ 90%
         run: make coverage-check
 
       - name: Coverage — upload HTML report
