@@ -1,6 +1,6 @@
 # ADR 0015 — What the emergent quality closes
 
-- **Status**: accepted
+- **Status**: accepted; superseded by [ADR 0021](0021-ordinality-and-the-generative-step.md) (ordinality, the emergent component `E` and its closing rule)
 - **Date**: 2026-09-13
 - **Task**: `mop-step-closes-nothing`
 - **Supersedes**: nothing

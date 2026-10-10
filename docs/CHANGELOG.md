@@ -50,6 +50,14 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **ADR 0021: ordinality as Giannantoni defines it, and a generative step under Maximum Em-Power** ([docs/adr/0021](adr/0021-ordinality-and-the-generative-step.md)). It supersedes the cycle-coverage definition of ordinality in ADRs 0014 and 0015, and ADR 0015's emergent component. ADR 0014's leg rules stand.
+  - Each couple of components is classified as 2/2, 2, ½ or unrelated from the exponents in [10] and [22 Eq 6–8]. Maximum Ordinality is "every couple 2/2" [22 §12.1], which is strong connectivity of the component graph. Boundary nodes are habitat, not components.
+  - The generative step adds one linear pathway at a time, from a sink to a source of the condensation, choosing the candidate that maximises total empower [02 Eq 5.3]. It repeats until the graph is strongly connected.
+  - Cycle coverage survives only as `closure (proxy)`.
+  - The ADR lists each example seed's verdict before and after. `closed_loop.json` moves from "below maximum (0.800)" to "at maximum".
+
+  No behaviour changes until `mop-ordinality` lands.
+
 - **ADR 0020: the Relational Space algebra** ([docs/adr/0020](adr/0020-relational-algebra.md)). The engine will use the product table of [23 Eq 5.1.3–5.1.5] as printed, which is commutative and non-associative. Products of three or more factors are evaluated left to right and never reassociated. The evidence is that the literal table reproduces the EQS brackets of [23 Eq 7.1–7.3] to 8.9e-16, while an associative reading does not. Exponentials are De Moivre's closed form, never a power series. A root's power multiplies its angle, and the table power is a separate function: under the table the "roots of unity" are not roots of unity (erratum X10). The EQS refuses unequal angles (X11). The circle product of [02], [06b] keeps factor pairs and reduces cardinally to multiplication. No behaviour changes.
 
 - **ADR 0019: the MOP's two Fundamental Equations, as the engine solves them** ([docs/adr/0019](adr/0019-mop-fundamental-equations.md)). It records three decisions:
