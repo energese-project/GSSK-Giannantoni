@@ -341,3 +341,44 @@ gia_status gia_mop_couple_rel(const gia_beta beta[3], gia_rational k, double t,
     alpha->i = creal(c[0]); alpha->j = creal(c[1]); alpha->k = creal(c[2]);
     return GIA_OK;
 }
+
+/* FR-MOP-006 — [23 Eq 7.1-7.5]; numerics N8. */
+gia_status gia_eqs(const gia_eqs_params *p, rel_t ref, int l, double out[3],
+                   const char **why) {
+    const double pi = 3.14159265358979323846;
+    double       r2psi, B, C, E[3], expo, res[3];
+    rel_t        root, br;
+    int          i;
+
+    if (!p || !out) return fail(GIA_E_ARG, "gia_eqs: NULL argument", why);
+    if (p->N < 3 || l < 1 || l > p->N - 1)
+        return fail(GIA_E_ARG, "gia_eqs: needs N >= 3 and l = 1..N-1", why);
+    if (p->eps[1] != p->eps[2])
+        return fail(GIA_E_DOMAIN, "[23 Eq 7.4] writes one angle sqrt2 psi for both the j and the "
+                    "k spinor, which holds only for eps_2 = eps_3 (PLAN X11)", why);
+    for (i = 0; i < 3; i++)
+        if (!isfinite(p->psi1[i]) || !isfinite(p->eps[i]))
+            return fail(GIA_E_DOMAIN, "gia_eqs: parameters must be finite", why);
+    if (!isfinite(p->psi2) || !isfinite(p->A) || !isfinite(ref.i) || !isfinite(ref.j) ||
+        !isfinite(ref.k))
+        return fail(GIA_E_DOMAIN, "gia_eqs: parameters must be finite", why);
+
+    r2psi = p->psi2 * (p->eps[1] + 2.0 * pi * l) / (double)(p->N - 1);     /* (7.5) */
+    B = cos(r2psi);
+    C = sin(r2psi) / sqrt(2.0);                                             /* (7.4) */
+    for (i = 0; i < 3; i++) E[i] = (p->eps[i] + 4.0 * pi * l) / (double)(p->N - 1);
+    root.i = B; root.j = C; root.k = C;
+    br = rel_mul(root, ref);            /* the three brackets, PLAN R2 */
+
+    expo = p->psi1[0] * E[0] * br.i;
+    if (expo > 709.78)
+        return fail(GIA_E_RANGE, "gia_eqs: rho = A e^S overflows (numerics N6)", why);
+    res[0] = p->A * exp(expo);                                              /* (7.1) */
+    res[1] = p->psi1[1] * E[1] * br.j;                                      /* (7.2) */
+    res[2] = p->psi1[2] * E[2] * br.k;                                      /* (7.3) */
+    for (i = 0; i < 3; i++)
+        if (!isfinite(res[i]))
+            return fail(GIA_E_RANGE, "gia_eqs: a coordinate is not finite", why);
+    for (i = 0; i < 3; i++) out[i] = res[i];
+    return GIA_OK;
+}

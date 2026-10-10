@@ -91,4 +91,26 @@ gia_status gia_quad_gk15(gia_quad_fn g, void *ctx, double lo, double hi, double 
 gia_status gia_mop_couple_rel(const gia_beta beta[3], gia_rational k, double t,
                               rel_t *alpha, const char **why);
 
+/* FR-MOP-006 — the EQS operative form [23 Eq 7.1-7.5]. For the couple 1j
+ * reached by root l = 1..N-1 of the reference couple's coordinates
+ * ref = {Sigma0, Phi0, Theta0} at t:
+ *
+ *   rho_1j   = A exp(psi1[0] E_{l,1} (B Sigma0 - C (Phi0 + Theta0)))    (7.1, 7.1.1)
+ *   phi_1j   = psi1[1] E_{l,2} (B Phi0 + C Sigma0)                       (7.2)
+ *   theta_1j = psi1[2] E_{l,3} (B Theta0 + C Sigma0 + C (Phi0 + Theta0)) (7.3)
+ *
+ *   E_{l,i} = (eps[i] + 4 pi l)/(N - 1),  B = cos(sqrt2 psi_l),
+ *   C = sin(sqrt2 psi_l)/sqrt2,  sqrt2 psi_l = psi2 (eps + 2 pi l)/(N - 1)
+ *                                                                    (7.4, 7.5)
+ *
+ * The three brackets are exactly rel_mul((B, C, C), ref) (PLAN R2,
+ * probes/eqs_relational_product.py), and that is how they are computed.
+ * [23 Eq 7.4] collapses the j and k angles into one, so eps[1] != eps[2] is
+ * refused: GIA_E_DOMAIN (PLAN X11). Tagged harmony-assuming: the factors
+ * psi1 E come from assuming the Harmony Relationships [23 §8 ii]. out =
+ * {rho, phi, theta}. */
+typedef struct { double psi1[3], psi2, eps[3], A; int N; } gia_eqs_params;
+gia_status gia_eqs(const gia_eqs_params *p, rel_t ref, int l, double out[3],
+                   const char **why);
+
 #endif /* GIA_MOP_H */

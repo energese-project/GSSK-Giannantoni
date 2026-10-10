@@ -1696,6 +1696,87 @@ static void test_mop_relational_couple(void) {
        rel_eq(al, R(99, 99, 99), 0.0) && why != NULL);
 }
 
+/* ------------------------------------------------------------------ *
+ * The EQS (FR-MOP-006)
+ * ------------------------------------------------------------------ */
+
+/* [23 Eq 7.1-7.5] written out as printed, bracket by bracket, for a test to
+ * compare against: no relational product involved. */
+static void eqs_by_hand(const gia_eqs_params *p, double S0, double F0, double T0, int l,
+                        double out[3]) {
+    double r2psi = p->psi2 * (p->eps[1] + 2.0 * M_PI * l) / (p->N - 1);
+    double B = cos(r2psi), C = sin(r2psi) / sqrt(2.0);
+    double E1 = (p->eps[0] + 4.0 * M_PI * l) / (p->N - 1);
+    double E2 = (p->eps[1] + 4.0 * M_PI * l) / (p->N - 1);
+    double E3 = (p->eps[2] + 4.0 * M_PI * l) / (p->N - 1);
+    out[0] = p->A * exp(p->psi1[0] * E1 * (B * S0 - C * (F0 + T0)));
+    out[1] = p->psi1[1] * E2 * (B * F0 + C * S0);
+    out[2] = p->psi1[2] * E3 * (B * T0 + C * S0 + C * (F0 + T0));
+}
+
+/* Source: [23 Eq 7.1-7.5]; PLAN R2, X11.
+ * N = 4 with given coordinates and factors, every l, by hand. */
+/* Verifies: FR-MOP-006 (T-MOP-08) */
+static void test_mop_eqs(void) {
+    gia_eqs_params p = { { 0.7, 1.1, -0.4 }, 0.9, { 0.2, 0.3, 0.3 }, 1.5, 4 };
+    rel_t          ref = { 0.6, -0.25, 0.8 };
+    double         got[3], want[3];
+    const char    *why = NULL;
+    int            l, all = 1;
+
+    printf("\n[T-MOP-08] the EQS operative form, N = 4\n");
+    for (l = 1; l <= 3; l++) {
+        eqs_by_hand(&p, ref.i, ref.j, ref.k, l, want);
+        if (gia_eqs(&p, ref, l, got, &why) != GIA_OK ||
+            !near_c(got[0], want[0], TOL_CLOSED) || !near_c(got[1], want[1], TOL_CLOSED) ||
+            !near_c(got[2], want[2], TOL_CLOSED)) {
+            printf("    l = %d: got %.15g %.15g %.15g want %.15g %.15g %.15g\n", l,
+                   got[0], got[1], got[2], want[0], want[1], want[2]);
+            all = 0;
+        }
+    }
+    ok("rho, phi, theta = [23 Eq 7.1-7.5] by hand, l = 1, 2, 3, 1e-12", all);
+    p.eps[2] = 0.31; why = NULL;
+    ok("X11: eps_2 != eps_3 refused, GIA_E_DOMAIN with a reason",
+       gia_eqs(&p, ref, 1, got, &why) == GIA_E_DOMAIN && why && strstr(why, "X11"));
+    p.eps[2] = 0.3;
+    ok("l outside 1..N-1, N < 3: GIA_E_ARG",
+       gia_eqs(&p, ref, 0, got, &why) == GIA_E_ARG && gia_eqs(&p, ref, 4, got, &why) == GIA_E_ARG);
+    p.A = 1.0; p.psi1[0] = 800.0; ref.i = -10.0;   /* B < 0 at l = 1, so S > 0 */
+    ok("rho overflow: GIA_E_RANGE", gia_eqs(&p, ref, 1, got, &why) == GIA_E_RANGE);
+}
+
+/* A fixed 64-bit LCG (vv-plan.md §6), mapped to [lo, hi). No global RNG. */
+static double lcg_uniform(unsigned long long *x, double lo, double hi) {
+    *x = *x * 6364136223846793005ULL + 1442695040888963407ULL;
+    return lo + (hi - lo) * (double)(*x >> 11) / 9007199254740992.0;
+}
+
+/* Source: [23 Eq 7.1.1, 7.2, 7.3]; probes/eqs_relational_product.py.
+ * Validation: the source's own brackets are the literal table's product
+ * of the De Moivre root and the reference coordinates, over 1000 draws. */
+/* Verifies: BR-005, BR-008, FR-MOP-006, FR-REL-001 (VAL-02) */
+static void test_val_eqs_brackets(void) {
+    unsigned long long x = 1;
+    double worst = 0.0;
+    int    n;
+    printf("\n[VAL-02] [23 Eq 7.1-7.3]'s brackets are rel_mul(root, ref)\n");
+    for (n = 0; n < 1000; n++) {
+        double psi = lcg_uniform(&x, -3, 3), S = lcg_uniform(&x, -2, 2);
+        double F = lcg_uniform(&x, -2, 2), T = lcg_uniform(&x, -2, 2);
+        double r = sqrt(2.0) * psi, B = cos(r), C = sin(r) / sqrt(2.0);
+        rel_t  got = rel_mul(R(B, C, C), R(S, F, T));
+        double d0 = fabs(got.i - (B * S - C * (F + T)));
+        double d1 = fabs(got.j - (B * F + C * S));
+        double d2 = fabs(got.k - (B * T + C * S + C * (F + T)));
+        if (d0 > worst) worst = d0;
+        if (d1 > worst) worst = d1;
+        if (d2 > worst) worst = d2;
+    }
+    printf("    worst |table product - printed bracket| over 1000 draws: %.3g\n", worst);
+    ok("1000 seeded draws: <= 1e-12", worst <= TOL_CLOSED);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -1734,6 +1815,8 @@ int main(void) {
     test_rel_exp();
     test_rel_roots();
     test_mop_relational_couple();
+    test_mop_eqs();
+    test_val_eqs_brackets();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

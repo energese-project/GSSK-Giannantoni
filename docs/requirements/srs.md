@@ -216,7 +216,7 @@ A and N, the kernel shall compute for each `l = 1…N−1` the coordinates of [2
 brackets evaluated as the relational product of the De Moivre root `B_l + C_l j + C_l k` and
 `{Σ₀, Φ₀, Θ₀}` (FR-REL-001). It shall refuse ε₂ ≠ ε₃: [23 Eq 7.4] is defined only for equal angles.
 - **Source:** [23 Eq 7.1–7.5]; PLAN R2, X11
-- **Verification:** T-MOP-08, VAL-02 · **Priority:** Must · **Status:** planned · **Task:** mop-eqs
+- **Verification:** T-MOP-08, VAL-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-eqs
 
 ### FR-MOP-007 — Relational-valued couples
 For k = 1 the kernel shall solve the First Equation componentwise on relational elements; for k > 1 it

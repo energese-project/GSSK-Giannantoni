@@ -56,6 +56,8 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The EQS operative form, `gia_eqs`** (PLAN.md W5 `mop-eqs`, FR-MOP-006). It evaluates `ρ₁ⱼ`, `φ₁ⱼ` and `θ₁ⱼ` of [23 Eq 7.1–7.5] for each root `l`, computing the three brackets as the relational product of the De Moivre root `(B, C, C)` with the reference couple's coordinates. Unequal j and k angles are refused, because [23 Eq 7.4] writes one angle for both (erratum X11). The construction is tagged as harmony-assuming [23 §8 ii]. A validation test reproduces the source's printed brackets from the table product over 1000 seeded draws, to 4.4e-16 (VAL-02).
+
 - **The Relational Space algebra, `rel_*`, and relational-valued couples** (PLAN.md W5 `mop-relational-algebra`, FR-REL-001…004, FR-MOP-007; ADR 0020).
   - **Product.** `rel_mul` is the product table of [23 Eq 5.1.3–5.1.5] as printed, which is commutative and non-associative. `rel_mul3` evaluates left to right, so `(j∘j)∘k = −k` while `j∘(j∘k) = k`.
   - **Exponential.** `rel_exp` is the De Moivre form [23 Eq 5.1.2], never a power series.
