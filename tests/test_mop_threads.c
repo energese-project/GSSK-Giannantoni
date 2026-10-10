@@ -149,7 +149,7 @@ int main(void) {
     } else {
         /* The seeds must actually exercise the sort: generation adds legs. */
         bool grew_a = strlen(ref_a) > strlen(SEED_A) / 2 &&
-                      strstr(ref_a, "emergent") != NULL;
+                      strstr(ref_a, "max_empower_pathway") != NULL;
         printf("  %-58s %s\n", "seed A is below maximum and grows",
                grew_a ? "PASS" : "FAIL");
         if (!grew_a) failures++;

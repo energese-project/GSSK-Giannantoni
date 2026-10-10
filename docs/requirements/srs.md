@@ -151,26 +151,26 @@ returning on a feedback pathway shall not be re-injected; independent inputs sha
 For an interaction whose inputs are all drawn, the product's emergy shall equal the sum of the drawn
 inputs' emergy, so the equivalent source term `Φ(u₁, u₂)` is zero.
 - **Source:** [02 Eq 3.9, 3.12, 3.15]; ADR 0017
-- **Verification:** T-EM-04 · **Priority:** Must · **Status:** planned · **Task:** emergy-source-terms
+- **Verification:** T-EM-04 · **Priority:** Must · **Status:** implemented · **Task:** emergy-source-terms
 
 ### FR-EM-005 — Ordinal forms of the three processes
 The kernel shall construct co-production as a binary (two branches, each `Em(u)`), interaction as a
 duet `[Em(u₁), Em(u₂)]`, and feedback as the duet-binary `[[a₁, a₂], [a₂, a₁]]`.
 - **Source:** [22 Eq 6–8], [06b Eq 6, 10], [10 §Incipient Derivative]
-- **Verification:** T-EM-05 · **Priority:** Should · **Status:** planned · **Task:** emergy-ordinal-forms
+- **Verification:** T-EM-05 · **Priority:** Should · **Status:** implemented · **Task:** emergy-ordinal-forms
 
 ### FR-EM-006 — Circle product
 The circle product shall keep every pair of factors in the outer arrangement
 (`(a₁; a₂) ∘ [b₁, b₂] = [(a₁·b₁; a₂·b₁), (a₁·b₂; a₂·b₂)]` before reduction), and its cardinal reduction
 shall map each pair to its product; `l ∘ l` shall be stored as `[l, l]` and reduce to `l²`.
 - **Source:** [02 Eq 14.11.4–14.11.5], [06b Eq 2–3]; PLAN R12
-- **Verification:** T-EM-06 · **Priority:** Should · **Status:** planned · **Task:** emergy-ordinal-forms
+- **Verification:** T-EM-06 · **Priority:** Should · **Status:** implemented · **Task:** emergy-ordinal-forms
 
 ### FR-EM-007 — Global emergy balance arithmetic
 Given input emergies, co-injection, co-production and re-normalisation factors and source terms, the
 kernel shall evaluate the global balance of [02 Eq 3.21] and solve it for one unknown source term.
 - **Source:** [02 Eq 3.18–3.26]
-- **Verification:** T-EM-07, VAL-04 · **Priority:** Could · **Status:** planned · **Task:** emergy-source-terms
+- **Verification:** T-EM-07, VAL-04 · **Priority:** Could · **Status:** implemented · **Task:** emergy-source-terms
 
 ### 2.3 Maximum Ordinality Principle
 
@@ -180,35 +180,35 @@ For `β(t) = (a + b t)^p` and cardinality k, the kernel shall compute the soluti
 `α(t) = [((a+bt)^{(p+k)/k} − a^{(p+k)/k}) / (b(p+k))]^k` for `b ≠ 0`, and `α(t) = (β^{1/k} t / k)^k`
 for `b = 0`, computed per numerics N1. The printed forms [23 Eq 5.5.7–5.5.8] shall not be used.
 - **Source:** [23 Eq 5.4.2, 5.5.2–5.5.6]; PLAN R1, X1
-- **Verification:** T-MOP-01, T-MOP-02, T-MOP-03, T-NUM-01 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-01, T-MOP-02, T-MOP-03, T-NUM-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-002 — Domain of the First Equation
 The kernel shall accept integer `k ≥ 1` with real or complex a, b, and rational non-integer k only with
 real `a > 0`, `b ≥ 0`. It shall refuse any other k, `a + bt = 0` on `[0, t]`, and `b(p + k) = 0`
 with `b ≠ 0`.
 - **Source:** PLAN R1; numerics N1
-- **Verification:** T-MOP-05 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-05 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-003 — The Matrioska
 For N components and a boundary condition per couple, the kernel shall solve each couple independently
 and return the internal-representation Matrioska with a zero diagonal and `N(N−1)` entries; couples
 without a boundary condition shall be marked unrelated, not zero.
 - **Source:** [23 Eq 5.4.1–5.4.2, 5.6.1]
-- **Verification:** T-MOP-04 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-004 — Sampled boundary conditions
 For β given as samples `(tᵢ, βᵢ)`, linearly interpolated, the kernel shall compute
 `α(t) = {(1/k) ∫₀ᵗ β^{1/k}}^k` by adaptive quadrature with the branch of `β^{1/k}` continued along t
 from the principal branch at `t = 0` (numerics N2), and shall refuse t outside the sampled range.
 - **Source:** [23 Eq 5.5.5–5.5.7]; PLAN R1
-- **Verification:** T-MOP-06 · **Priority:** Should · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-06 · **Priority:** Should · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-005 — Second Fundamental Equation (printed solution)
 Given `α₁₂(0)`, `c₁`, `c₂` and N, the kernel shall evaluate `A(t) = α₁₂(0) ∘ r + ln(c₁ + c₂t)`, the
 specular `B(t) = [[A, −A], [−A, A]]`, and `{r} = e^{B(t)} ∘ (roots 13…1N)` of [23 Eq 6.1–6.3], with λ
 null; it shall refuse `c₁ + c₂t ≤ 0` on `[0, t]`.
 - **Source:** [23 Eq 6.1–6.3, §8 ii]; PLAN R4, R12
-- **Verification:** T-MOP-07 · **Priority:** Must · **Status:** planned · **Task:** mop-second-equation
+- **Verification:** T-MOP-07 · **Priority:** Must · **Status:** implemented · **Task:** mop-second-equation
 
 ### FR-MOP-006 — The EQS operative form
 Given the reference couple's coordinates `Σ₀(t), Φ₀(t), Θ₀(t)`, the factors `ψ₁,ᵢ`, `ψ₂`, ε₁, ε₂ = ε₃,
@@ -216,20 +216,20 @@ A and N, the kernel shall compute for each `l = 1…N−1` the coordinates of [2
 brackets evaluated as the relational product of the De Moivre root `B_l + C_l j + C_l k` and
 `{Σ₀, Φ₀, Θ₀}` (FR-REL-001). It shall refuse ε₂ ≠ ε₃: [23 Eq 7.4] is defined only for equal angles.
 - **Source:** [23 Eq 7.1–7.5]; PLAN R2, X11
-- **Verification:** T-MOP-08, VAL-02 · **Priority:** Must · **Status:** planned · **Task:** mop-eqs
+- **Verification:** T-MOP-08, VAL-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-eqs
 
 ### FR-MOP-007 — Relational-valued couples
 For k = 1 the kernel shall solve the First Equation componentwise on relational elements; for k > 1 it
 shall refuse, because the sources define no division or power in the relational algebra.
 - **Source:** PLAN §6
-- **Verification:** T-MOP-09 · **Priority:** Should · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-09 · **Priority:** Should · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-008 — Boundary conditions from the network
 On request, the kernel shall set `e^{α_ij(t)}` to the empower carried from component i to component j
 by the emergy pass, derive `β_ij` by [23 Eq 5.5.2] with k = 1, and mark couples with no pathway
 unrelated.
 - **Source:** PLAN R8
-- **Verification:** T-MOP-10 · **Priority:** Should · **Status:** planned · **Task:** mop-network-beta
+- **Verification:** T-MOP-10 · **Priority:** Should · **Status:** implemented · **Task:** mop-network-beta
 
 ### 2.4 Relational Space algebra
 
@@ -238,26 +238,26 @@ The kernel shall implement the bilinear product of relational elements with the 
 [23 Eq 5.1.3–5.1.5]: `i∘i = 1, i∘j = j, i∘k = k, j∘i = j, j∘j = −1, j∘k = k, k∘i = k, k∘j = k,
 k∘k = −1`.
 - **Source:** [23 Eq 5.1.3–5.1.5]; PLAN R2
-- **Verification:** T-REL-01, VAL-02 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-REL-01, VAL-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### FR-REL-002 — The De Moivre exponential
 The kernel shall define `Exp{a·i ⊕ b·j ⊕ c·k} = eᵃ [cos ρ + (b·j + c·k) sin ρ / ρ]` with `ρ = √(b²+c²)`,
 and the limit `eᵃ` at `ρ = 0`; it shall not use a power series.
 - **Source:** [23 Eq 5.1.2]; PLAN R2
-- **Verification:** T-REL-03 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-REL-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### FR-REL-003 — Ordinal roots and their powers
 The kernel shall construct the canonical ordinal root `r_{N,l}` (ε = 0, `√2·ψ = 2πl/(N−1)`) and raise
 a root to an integer power by multiplying its angle, so that `r_{N,l}^{N−1} = 1`. It shall expose the
 table-product power separately and shall not substitute one for the other.
 - **Source:** [23 Eq A2.5–A2.6]; PLAN R3, X10
-- **Verification:** T-REL-04 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-REL-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### FR-REL-004 — No reassociation
 Products of three or more relational elements shall be evaluated left to right in the order written;
 the kernel shall not reassociate them.
 - **Source:** [23 Eq 5.1.3–5.1.5] (non-associative); PLAN R2
-- **Verification:** T-REL-02 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-REL-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### 2.5 Ordinality and the generative step
 
@@ -266,25 +266,25 @@ For each unordered couple of components the kernel shall assign: 2/2 if each rea
 quantity-carrying legs (the ADR 0014 walk); otherwise 2 if both feed one interaction module; otherwise
 ½ if both are products of one replicating process; otherwise unrelated.
 - **Source:** [22 Eq 6–8, 11.1], [10 §MOP]; PLAN R5, X6
-- **Verification:** T-ORD-01 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ### FR-ORD-002 — The Ordinality record
 The kernel shall report `{k, n₂₂, n₂, n½, n_unrelated}`, with k the number of components (boundary
 nodes and modules excluded) and the counts from FR-ORD-001.
 - **Source:** [23 Eq 3.2], [22 Eq 11.1]; PLAN R5
-- **Verification:** T-ORD-01 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ### FR-ORD-003 — Maximum Ordinality
 A network shall be at Maximum Ordinality exactly when every couple is 2/2, i.e. when its component
 graph is strongly connected.
 - **Source:** [22 §12.1, Eq 11.1]; PLAN R5
-- **Verification:** T-ORD-02 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ### FR-ORD-004 — Closure, labelled as a proxy
 The fraction of components on a closed pathway shall be reported only as `closure`, labelled a proxy,
 and shall decide nothing.
 - **Source:** PLAN R5, E6
-- **Verification:** T-ORD-03 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ### FR-ORD-005 — The generative step under the Maximum Em-Power Principle
 Below Maximum Ordinality, the kernel shall repeatedly add one `linear` pathway, of the seed's mean
@@ -293,7 +293,7 @@ component, choosing the candidate that maximises total empower at `t_end` with t
 lexicographic `(from, to)`, until the network is at Maximum Ordinality; at Maximum Ordinality it shall
 add nothing.
 - **Source:** [02 Eq 5.3], [22 Eq 2, §12.1]; PLAN R6
-- **Verification:** T-ORD-04 · **Priority:** Must · **Status:** planned · **Task:** mop-generative-empower
+- **Verification:** T-ORD-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-generative-empower
 
 ### FR-ORD-006 — Mode decided structurally
 Whether a run was generative or functional shall be decided by comparing the output graph with the
@@ -312,7 +312,7 @@ Reordering a model's nodes, edges or a module's legs shall not change any result
 For a Matrioska α with N ≥ 3, the kernel shall compute
 `R_H = max_{j=2..N−1} |α_{1,j+1}/α_{12} − e^{2πi(j−1)/(N−1)}|` in ℂ, refusing `α₁₂ = 0`.
 - **Source:** [23 Eq 5.6.5]; PLAN R7, X9
-- **Verification:** T-HAR-02, T-HAR-03, T-HAR-04 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-HAR-02, T-HAR-03, T-HAR-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### FR-HAR-002 — Verdict for a construction
 Given a construction (a map from boundary conditions to a Matrioska), the kernel shall evaluate it on a
@@ -320,19 +320,19 @@ harmonic input and on the fixed perturbations of vv-plan.md §6, and report `imp
 output is within tolerance, `transported` if every output's `R_H` equals its input's, and `absent`
 otherwise. For an observed Matrioska it shall report `present` or `absent`.
 - **Source:** PLAN R7
-- **Verification:** T-HAR-05, T-HAR-06, T-HAR-07 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-HAR-05, T-HAR-06, T-HAR-07 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### FR-HAR-003 — No harmony in the solver
 The First and Second Equation solvers and the EQS shall not call the harmony constructor; the
 detector shall not be linked against it.
 - **Source:** PLAN §1 G-rules, B11
-- **Verification:** T-HAR-01 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-HAR-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### FR-HAR-004 — The constructor, labelled
 The existing harmony constructor shall live in `src/harmony.c` as `gia_harmony_assume_*`, and every
 output it produces shall be labelled `assumed`.
 - **Source:** PLAN E5, W8
-- **Verification:** T-HAR-08 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-HAR-08 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### 2.7 Labelling and reporting
 
@@ -346,13 +346,13 @@ The run report shall list every output column and quantity with one label from `
 Every refusal shall name the feature and the source reason (equation or PLAN §6 row), on stderr for
 the CLI and through the `why` out-parameter for the library.
 - **Source:** PLAN §6
-- **Verification:** T-OUT-03 · **Priority:** Must · **Status:** planned · **Task:** mop-claims-remediation
+- **Verification:** T-OUT-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-claims-remediation
 
 ### FR-OUT-003 — Harmony verdicts reported verbatim
 The report shall carry one line per construction, `harmony.<construction>: <verdict>`, with the verdict
 from FR-HAR-002.
 - **Source:** PLAN R7
-- **Verification:** T-OUT-02 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-OUT-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### 2.8 GSSK kernel
 
@@ -361,7 +361,7 @@ The GSSK kernel shall accept `"method": "expm"`, and shall accept `"method": "in
 deprecated alias that produces byte-identical output and prints one notice that it is the matrix
 exponential.
 - **Source:** PLAN R15
-- **Verification:** T-KER-01 · **Priority:** Should · **Status:** planned · **Task:** kernel-method-label
+- **Verification:** T-KER-01 · **Priority:** Should · **Status:** implemented · **Task:** kernel-method-label
 
 ---
 
@@ -372,36 +372,36 @@ Closed-form results shall have relative error ≤ 1e-12 where the condition numb
 (numerics.md) is ≤ 10; residuals of defining equations shall be ≤ 1e-6 relative; quadrature shall meet
 a requested relative tolerance of 1e-10 or report failure.
 - **Source:** vv-plan.md §3
-- **Verification:** T-MOP-01, T-IDC-04, T-NUM-03 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-01, T-IDC-04, T-NUM-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-002 — No cancellation near t = 0
 FR-MOP-001 shall retain relative error ≤ 1e-12 for `|b t / a|` from 1e-12 to 1, and shall be continuous
 as b → 0.
 - **Source:** numerics N1
-- **Verification:** T-NUM-01, T-MOP-03 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-NUM-01, T-MOP-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-003 — Never emit a non-finite value
 No library function shall return, and the CLI shall not write, an infinity or NaN; a result that would
 overflow shall be refused with `GIA_E_RANGE`.
 - **Source:** `AGENTS.md` §Fail-Safe; numerics N1, N6
-- **Verification:** T-NUM-02 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-NUM-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-004 — One branch policy
 Every multivalued function shall use the branch stated in numerics.md for it, and no other.
 - **Source:** numerics.md §1
-- **Verification:** T-MOP-05, T-MOP-06 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-05, T-MOP-06 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-005 — Quadrature reports its error
 Every adaptive quadrature shall return an error estimate, and shall return `GIA_E_CONVERGENCE` when it
 cannot meet its tolerance within its subdivision limit.
 - **Source:** numerics N2
-- **Verification:** T-NUM-03 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-NUM-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-006 — No clamping in the Giannantoni units
 The Giannantoni units shall not clamp, floor or take absolute values of signed or complex coordinates
 to keep them "physical"; `AGENTS.md`'s clamp applies to the GSSK kernel only.
 - **Source:** PLAN §1 B6, G6
-- **Verification:** T-NUM-04 · **Priority:** Must · **Status:** planned · **Task:** guard-agents-wording
+- **Verification:** T-NUM-04 · **Priority:** Must · **Status:** implemented · **Task:** guard-agents-wording
 
 ### NFR-DET-001 — Bit-identical repeats
 The same binary on the same input shall produce byte-identical output.
@@ -438,13 +438,13 @@ Exceeding any fixed limit shall be refused with `GIA_E_LIMIT`. (Defect at baseli
 and `gia_emergy_at` in `src/engine.c` silently ignore a component's inflows beyond 64, and co-production
 masks beyond 64 components.)
 - **Source:** BR-009
-- **Verification:** T-LIM-01 · **Priority:** Must · **Status:** planned · **Task:** emergy-source-terms
+- **Verification:** T-LIM-01 · **Priority:** Must · **Status:** implemented · **Task:** emergy-source-terms
 
 ### NFR-ROB-001 — Hostile seeds
 The `mop` block parser shall reject malformed input with an error and never crash; it shall be fuzzed
 with a committed corpus.
 - **Source:** `AGENTS.md` §Fail-Safe ("JSON parsing must be strict")
-- **Verification:** T-ROB-01, T-IN-02 · **Priority:** Should · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-ROB-01, T-IN-02 · **Priority:** Should · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-POR-001 — Builds clean everywhere
 The Giannantoni units shall compile without warnings under `-std=c99 -Wall -Wextra -Werror` with GCC,
@@ -456,7 +456,7 @@ Linux clang and Apple clang.
 The kernel shall solve the First Equation for N = 64 (4,032 couples) at 1,000 output times, affine-power
 β, in under 2 s on a CI runner; N ≤ 64 is the supported limit (NFR-LIM-001 above it).
 - **Source:** `src/engine.c` 64-wide masks; BR-011
-- **Verification:** T-PERF-01 · **Priority:** Could · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-PERF-01 · **Priority:** Could · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-SEP-001 — Two engines stay separate
 No Giannantoni unit shall include `gssk.h`.

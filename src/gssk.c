@@ -278,6 +278,7 @@ struct GSSK_Instance {
     double       t_end;
     double       dt;
     GSSK_Method  method;
+    bool         method_expm; /* ADR 0022: spelled "expm", serialised back so */
     double       solver_tolerance;
     /* Phase 2 — adaptive numerics */
     double       rel_tol;  /* DOPRI5 relative tolerance (default 1e-6) */
@@ -4504,8 +4505,17 @@ GSSK_Status GSSK_Init(const char *json_data, GSSK_Instance **out_inst) {
         inst->config.method = GSSK_METHOD_EULER;
       else if (strcmp(meth->valuestring, "rk4")  == 0)
         inst->config.method = GSSK_METHOD_RK4;
-      else if (strcmp(meth->valuestring, "incipient") == 0)
+      else if (strcmp(meth->valuestring, "expm") == 0) {
+        inst->config.method      = GSSK_METHOD_EXPM;
+        inst->config.method_expm = true;
+      } else if (strcmp(meth->valuestring, "incipient") == 0) {
+        /* ADR 0022: the same code path, under a name that claimed more than
+         * it computes. Once per load, on stderr, never in the CSV. */
         inst->config.method = GSSK_METHOD_INCIPIENT;
+        fprintf(stderr, "gssk: \"method\": \"incipient\" is deprecated; it is the matrix "
+                        "exponential exp(A dt), not Giannantoni's incipient calculus. "
+                        "Use \"expm\" (ADR 0022).\n");
+      }
       else if (strcmp(meth->valuestring, "adaptive") == 0)
         inst->config.method = GSSK_METHOD_ADAPTIVE;
       else
@@ -6418,7 +6428,8 @@ static cJSON *build_topology_json(GSSK_Instance *inst) {
   cJSON_AddNumberToObject(cfg, "t_start",          inst->config.t_start);
   cJSON_AddNumberToObject(cfg, "t_end",            inst->config.t_end);
   cJSON_AddNumberToObject(cfg, "dt",               inst->config.dt);
-  cJSON_AddStringToObject(cfg, "method",           method_str(inst->config.method));
+  cJSON_AddStringToObject(cfg, "method",           inst->config.method_expm
+                                                    ? "expm" : method_str(inst->config.method));
   cJSON_AddNumberToObject(cfg, "solver_tolerance", inst->config.solver_tolerance);
   if (inst->config.rel_tol != 1e-6)
     cJSON_AddNumberToObject(cfg, "rel_tol", inst->config.rel_tol);

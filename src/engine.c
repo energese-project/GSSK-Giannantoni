@@ -166,84 +166,6 @@ double complex gia_net_sum(const gia_net *n) {
 }
 
 /* ================================================================== *
- * 4. MOP Harmony Relationships
- * ================================================================== */
-
-double complex gia_ordinal_root(int roots, int m) {
-    double theta;
-    if (roots < 1) return 1.0;
-    theta = 2.0 * M_PI * (double)m / (double)roots;
-    return cos(theta) + I * sin(theta);
-}
-
-double complex gia_harmony_reconstruct(int n, double complex alpha_ref,
-                                       int i, int j) {
-    int m;
-    if (n < 2 || i < 0 || j < 0 || i >= n || j >= n) return 0.0;
-    if (i == j) return 0.0;  /* no self-relation on the diagonal */
-    /* Within row i the partners j != i are indexed in ascending order, so the
-     * partner's ordinal position is j, less one if it sits past the diagonal. */
-    m = (j < i) ? j : j - 1;
-    return alpha_ref * gia_ordinal_root(n - 1, m);
-}
-
-bool gia_harmony_init(gia_harmony *h, int n, double complex alpha_ref) {
-    int i, j;
-    if (!h || n < 2) return false;
-    h->n         = n;
-    h->alpha_ref = alpha_ref;
-    h->a         = (double complex *)calloc((size_t)n * (size_t)n,
-                                            sizeof(double complex));
-    if (!h->a) { h->n = 0; return false; }
-
-    for (i = 0; i < n; i++)
-        for (j = 0; j < n; j++)
-            h->a[(size_t)i * (size_t)n + (size_t)j] =
-                gia_harmony_reconstruct(n, alpha_ref, i, j);
-    return true;
-}
-
-void gia_harmony_free(gia_harmony *h) {
-    if (!h) return;
-    free(h->a);
-    h->a = NULL;
-    h->n = 0;
-}
-
-double complex gia_harmony_at(const gia_harmony *h, int i, int j) {
-    if (!h || !h->a || i < 0 || j < 0 || i >= h->n || j >= h->n) return 0.0;
-    return h->a[(size_t)i * (size_t)h->n + (size_t)j];
-}
-
-double gia_harmony_row_residual(const gia_harmony *h) {
-    double worst = 0.0;
-    int    i, j;
-    if (!h || !h->a) return 0.0;
-    for (i = 0; i < h->n; i++) {
-        double complex s = 0.0;
-        double         mod;
-        for (j = 0; j < h->n; j++) s += gia_harmony_at(h, i, j);
-        mod = cabs(s);
-        if (mod > worst) worst = mod;
-    }
-    return worst;
-}
-
-double gia_harmony_reduction_residual(const gia_harmony *h) {
-    double worst = 0.0;
-    int    i, j;
-    if (!h || !h->a) return 0.0;
-    for (i = 0; i < h->n; i++) {
-        for (j = 0; j < h->n; j++) {
-            double d = cabs(gia_harmony_at(h, i, j) -
-                            gia_harmony_reconstruct(h->n, h->alpha_ref, i, j));
-            if (d > worst) worst = d;
-        }
-    }
-    return worst;
-}
-
-/* ================================================================== *
  * 4b. The network: flow matrix and matrix exponential
  * ================================================================== */
 
@@ -2325,8 +2247,6 @@ static void coproduct_ancestry(const gia_model *m, const bool *is_back,
  * `mask` is n entries per contribution. Groups are merged transitively: an
  * inflow bridging two existing groups joins them, because all three then trace
  * to one co-production. */
-#define GIA_MAX_INFLOWS 64
-
 static double combine_inflows(int n, int count, const char *masks,
                               const double *vals) {
     double gval[GIA_MAX_INFLOWS];
@@ -2387,6 +2307,8 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
     bool    ok = false;
 
     if (!m || m->n_nodes <= 0) return false;
+    /* NFR-LIM-001: refuse, never truncate. */
+    if (gia_emergy_check_limits(m, NULL) != GIA_OK) return false;
     n = m->n_nodes;
 
     q       = (double *)calloc((size_t)n, sizeof(double));
@@ -2498,31 +2420,28 @@ done:
     return ok;
 }
 
-double gia_emergy_excess(const gia_model *m, double t) {
-    double *em = NULL, *q = NULL, *flow = NULL, *out_em = NULL;
+/* The emergy each node receives (em) and sends onward (out_em) at t, under
+ * the same rules as gia_emergy_at. */
+static bool emergy_out(const gia_model *m, double t, double *em, double *out_em) {
+    double *q = NULL, *flow = NULL, *out_tot = NULL;
     bool   *is_back = NULL;
     char   *colour = NULL;
-    double  excess = 0.0, *out_tot = NULL;
-    int     i, n;
+    int     i, n = m->n_nodes;
+    bool    ok = false;
 
-    if (!m || m->n_nodes <= 0) return 0.0;
-    n = m->n_nodes;
-
-    em      = (double *)calloc((size_t)n, sizeof(double));
     q       = (double *)calloc((size_t)n, sizeof(double));
-    out_em  = (double *)calloc((size_t)n, sizeof(double));
     out_tot = (double *)calloc((size_t)n, sizeof(double));
     colour  = (char   *)calloc((size_t)n, sizeof(char));
     flow    = (double *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
                                sizeof(double));
     is_back = (bool   *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
                                sizeof(bool));
-    if (!em || !q || !out_em || !out_tot || !colour || !flow || !is_back)
-        goto done;
+    if (!q || !out_tot || !colour || !flow || !is_back) goto done;
 
     if (!gia_emergy_at(m, t, em, NULL))        goto done;
     if (!gia_network_state(m, t, q, NULL))     goto done;
 
+    for (i = 0; i < n; i++) out_em[i] = 0.0;
     for (i = 0; i < m->n_edges; i++) flow[i] = gia_edge_flow(m, &m->edges[i], q, t);
     for (i = 0; i < n; i++)
         if (colour[i] == 0) mark_back_edges(m, colour, is_back, i);
@@ -2547,20 +2466,250 @@ double gia_emergy_excess(const gia_model *m, double t) {
         else
             out_em[a] += (out_tot[a] > 0.0) ? em[a] * (f / out_tot[a]) : 0.0;
     }
-
-    /* Emergy created, component by component. A partition contributes nothing:
-     * what leaves equals what arrived. A replication contributes the whole
-     * inflow again for every product past the first. */
-    for (i = 0; i < n; i++) {
-        double made = out_em[i] - em[i];
-        if (!m->nodes[i].integrates) continue;   /* a boundary source is not creating */
-        if (made > 0.0) excess += made;
-    }
-
+    ok = true;
 done:
-    free(em); free(q); free(out_em); free(out_tot); free(colour);
-    free(flow); free(is_back);
+    free(q); free(out_tot); free(colour); free(flow); free(is_back);
+    return ok;
+}
+
+double gia_emergy_excess(const gia_model *m, double t) {
+    double *em = NULL, *out_em = NULL, excess = 0.0;
+    int     i, n;
+
+    if (!m || m->n_nodes <= 0) return 0.0;
+    n = m->n_nodes;
+    em     = (double *)calloc((size_t)n, sizeof(double));
+    out_em = (double *)calloc((size_t)n, sizeof(double));
+    if (em && out_em && emergy_out(m, t, em, out_em)) {
+        /* Emergy created, component by component. A partition contributes
+         * nothing: what leaves equals what arrived. A replication contributes
+         * the whole inflow again for every product past the first. */
+        for (i = 0; i < n; i++) {
+            double made = out_em[i] - em[i];
+            if (!m->nodes[i].integrates) continue;   /* a boundary source is not creating */
+            if (made > 0.0) excess += made;
+        }
+    }
+    free(em); free(out_em);
     return excess;
+}
+
+static gia_status em_fail(gia_status st, const char *reason, const char **why) {
+    if (why) *why = reason;
+    return st;
+}
+
+/* A pathway that moves quantity: not a used leg, not a read control. */
+static bool carries_quantity(const gia_edge *e) {
+    return e->role != GIA_ROLE_USED && !(e->role == GIA_ROLE_CONTROL && e->use_ratio <= 0.0);
+}
+
+gia_status gia_emergy_carried(const gia_model *m, double t, double *carried, const char **why) {
+    double    *em = NULL, *q = NULL, *flow = NULL, *out_tot = NULL;
+    gia_status st;
+    int        i, n;
+
+    if (!m || !carried || m->n_nodes <= 0)
+        return em_fail(GIA_E_ARG, "gia_emergy_carried: NULL argument or empty model", why);
+    if ((st = gia_emergy_check_limits(m, why)) != GIA_OK) return st;
+    n       = m->n_nodes;
+    em      = (double *)calloc((size_t)n, sizeof(double));
+    q       = (double *)calloc((size_t)n, sizeof(double));
+    out_tot = (double *)calloc((size_t)n, sizeof(double));
+    flow    = (double *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1), sizeof(double));
+    if (!em || !q || !out_tot || !flow) {
+        st = em_fail(GIA_E_NOMEM, "gia_emergy_carried: out of memory", why);
+        goto done;
+    }
+    if (!gia_emergy_at(m, t, em, NULL) || !gia_network_state(m, t, q, NULL)) {
+        st = em_fail(GIA_E_RANGE, "gia_emergy_carried: the network or emergy pass did not "
+                     "evaluate at t", why);
+        goto done;
+    }
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        flow[i] = fabs(gia_edge_flow(m, e, q, t));
+        if (e->from >= 0 && carries_quantity(e)) out_tot[e->from] += flow[i];
+    }
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        const int       a = e->from;
+        carried[i] = 0.0;
+        if (a < 0 || e->to < 0 || !carries_quantity(e) || flow[i] <= 0.0) continue;
+        if (!m->nodes[a].integrates && m->nodes[a].quality_input > 0.0)
+            carried[i] = flow[i] * m->nodes[a].quality_input;
+        else if (e->out_mode == GIA_OUT_REPLICATE)
+            carried[i] = em[a];
+        else
+            carried[i] = out_tot[a] > 0.0 ? em[a] * (flow[i] / out_tot[a]) : 0.0;
+    }
+    st = GIA_OK;
+done:
+    free(em); free(q); free(out_tot); free(flow);
+    return st;
+}
+
+/* NFR-LIM-001. */
+gia_status gia_emergy_check_limits(const gia_model *m, const char **why) {
+    int b, i, replicates = 0;
+    if (!m || m->n_nodes <= 0)
+        return em_fail(GIA_E_ARG, "gia_emergy_check_limits: NULL or empty model", why);
+    for (i = 0; i < m->n_edges; i++)
+        if (m->edges[i].from >= 0 && m->edges[i].out_mode == GIA_OUT_REPLICATE) replicates = 1;
+    if (replicates && m->n_nodes > GIA_MAX_INFLOWS)
+        return em_fail(GIA_E_LIMIT,
+                       "the emergy pass tracks co-production ancestry across at most "
+                       "GIA_MAX_INFLOWS (64) nodes; this model has more and a co-production "
+                       "(NFR-LIM-001)", why);
+    for (b = 0; b < m->n_nodes; b++) {
+        int count = 0;
+        for (i = 0; i < m->n_edges; i++)
+            if (m->edges[i].from >= 0 && m->edges[i].to == b &&
+                m->edges[i].role != GIA_ROLE_USED) count++;
+        if (count > GIA_MAX_INFLOWS)
+            return em_fail(GIA_E_LIMIT,
+                           "a node has more than GIA_MAX_INFLOWS (64) inflows, which the "
+                           "emergy pass cannot combine under rule 4 (NFR-LIM-001)", why);
+    }
+    return GIA_OK;
+}
+
+/* FR-EM-002, FR-EM-004. */
+gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
+                                  double *phi, const char **why) {
+    double    *em, *out_em;
+    gia_status st;
+    if (!m || !phi || m->n_nodes <= 0)
+        return em_fail(GIA_E_ARG, "gia_emergy_source_term: NULL or empty model", why);
+    if (node < 0 || node >= m->n_nodes)
+        return em_fail(GIA_E_ARG, "gia_emergy_source_term: node out of range", why);
+    if (!m->nodes[node].is_module &&
+        (m->nodes[node].kind == GIA_NODE_SOURCE || m->nodes[node].kind == GIA_NODE_SINK ||
+         m->nodes[node].kind == GIA_NODE_CONSTANT))
+        return em_fail(GIA_E_ARG, "gia_emergy_source_term: a source, sink or constant is "
+                       "habitat, not a process ([02 Eq 3.6])", why);
+    if ((st = gia_emergy_check_limits(m, why)) != GIA_OK) return st;
+    em     = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    out_em = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    if (!em || !out_em || !emergy_out(m, t, em, out_em)) {
+        free(em); free(out_em);
+        return em_fail(GIA_E_DOMAIN, "gia_emergy_source_term: the network does not solve "
+                       "at t", why);
+    }
+    *phi = out_em[node] - em[node];
+    free(em); free(out_em);
+    return GIA_OK;
+}
+
+/* FR-EM-005 — [22 Eq 6-8]. */
+static gia_oform oform(gia_oform_kind kind, int rows, int cols) {
+    gia_oform f;
+    memset(&f, 0, sizeof(f));
+    f.kind = kind; f.rows = rows; f.cols = cols;
+    return f;
+}
+
+gia_oform gia_oform_scalar(double a) {
+    gia_oform f = oform(GIA_OF_SCALAR, 1, 1);
+    f.v[0][0] = a;
+    return f;
+}
+
+gia_oform gia_oform_binary(double em_u) {
+    gia_oform f = oform(GIA_OF_BINARY, 2, 1);
+    f.v[0][0] = em_u; f.v[1][0] = em_u;
+    return f;
+}
+
+gia_oform gia_oform_duet(double em_u1, double em_u2) {
+    gia_oform f = oform(GIA_OF_DUET, 1, 2);
+    f.v[0][0] = em_u1; f.v[0][1] = em_u2;
+    return f;
+}
+
+gia_oform gia_oform_duet_binary(double a1, double a2) {
+    gia_oform f = oform(GIA_OF_DUET_BINARY, 2, 2);
+    f.v[0][0] = a1; f.v[0][1] = a2;
+    f.v[1][0] = a2; f.v[1][1] = a1;
+    return f;
+}
+
+/* FR-EM-006 — [06b Eq 2], [02 Eq 14.11.5]; PLAN R12. */
+gia_status gia_circle_product(const gia_oform *a, const gia_oform *b, gia_circle *out,
+                              const char **why) {
+    int i, j;
+    if (!a || !b || !out)
+        return em_fail(GIA_E_ARG, "gia_circle_product: NULL argument", why);
+    if (a->cols != 1 || b->rows != 1 || a->rows < 1 || a->rows > 2 || b->cols < 1 || b->cols > 2)
+        return em_fail(GIA_E_ARG, "gia_circle_product: the left factor must be a column "
+                       "(a1; a2) and the right a row [b1, b2] ([06b Eq 2])", why);
+    memset(out, 0, sizeof(*out));
+    out->rows = a->rows; out->cols = b->cols;
+    for (i = 0; i < a->rows; i++)
+        for (j = 0; j < b->cols; j++) {
+            out->pair[i][j][0] = a->v[i][0];
+            out->pair[i][j][1] = b->v[0][j];
+        }
+    return GIA_OK;
+}
+
+/* The cardinal reduction: each pair to its product. */
+gia_oform gia_circle_reduce(const gia_circle *c) {
+    gia_oform f;
+    int       i, j;
+    memset(&f, 0, sizeof(f));
+    if (!c) return f;
+    f.kind = (c->rows == 1 && c->cols == 1) ? GIA_OF_SCALAR : GIA_OF_DUET_BINARY;
+    f.rows = c->rows; f.cols = c->cols;
+    for (i = 0; i < c->rows; i++)
+        for (j = 0; j < c->cols; j++)
+            f.v[i][j] = c->pair[i][j][0] * c->pair[i][j][1];
+    return f;
+}
+
+static gia_status balance_sums(const gia_balance_term *in, int n_in,
+                               const gia_balance_term *out, int n_out,
+                               double *sin, double *sout, const char **why) {
+    int i;
+    if ((n_in > 0 && !in) || (n_out > 0 && !out) || n_in < 0 || n_out < 0)
+        return em_fail(GIA_E_ARG, "gia_emergy balance: NULL terms or negative count", why);
+    *sin = *sout = 0.0;
+    for (i = 0; i < n_in; i++)  *sin  += in[i].weight * in[i].value;
+    for (i = 0; i < n_out; i++) *sout += out[i].weight * out[i].value;
+    if (!isfinite(*sin) || !isfinite(*sout))
+        return em_fail(GIA_E_RANGE, "gia_emergy balance: a sum is not finite", why);
+    return GIA_OK;
+}
+
+/* FR-EM-007 — [02 Eq 3.21]. */
+gia_status gia_emergy_global_balance(const gia_balance_term *in, int n_in,
+                                     const gia_balance_term *out, int n_out,
+                                     double *residual, const char **why) {
+    double     a, b;
+    gia_status st;
+    if (!residual) return em_fail(GIA_E_ARG, "gia_emergy_global_balance: residual is NULL", why);
+    if ((st = balance_sums(in, n_in, out, n_out, &a, &b, why)) != GIA_OK) return st;
+    *residual = a - b;
+    return GIA_OK;
+}
+
+gia_status gia_emergy_balance_solve(const gia_balance_term *in, int n_in,
+                                    const gia_balance_term *out, int n_out,
+                                    const double *phi_w, int n_phi, double *phi,
+                                    const char **why) {
+    double     a, b, w = 0.0, x;
+    int        k;
+    gia_status st;
+    if (!phi_w || !phi || n_phi < 1)
+        return em_fail(GIA_E_ARG, "gia_emergy_balance_solve: no source terms to solve for", why);
+    if ((st = balance_sums(in, n_in, out, n_out, &a, &b, why)) != GIA_OK) return st;
+    for (k = 0; k < n_phi; k++) w += phi_w[k];
+    if (w == 0.0 || !isfinite(w))
+        return em_fail(GIA_E_DOMAIN, "gia_emergy_balance_solve: the source-term weights sum "
+                       "to zero, so the unknown is not determined", why);
+    x = (b - a) / w;
+    for (k = 0; k < n_phi; k++) phi[k] = phi_w[k] * x;
+    return GIA_OK;
 }
 
 /* ================================================================== *
@@ -2677,19 +2826,105 @@ int gia_component_count(const gia_model *m) {
     return m ? component_count(m) : 0;
 }
 
-double gia_ordinality(gia_model *m) {
-    int count, n;
+static bool is_component(const gia_node *nd);
+
+/* FR-ORD-004: the proxy. Habitat sits outside the system [10], so only
+ * components are counted (ADR 0021). */
+double gia_closure(gia_model *m) {
+    int i, on = 0, n = 0;
     if (!m || m->n_nodes <= 0) return 0.0;
-    count = gia_mark_cycles(m);
-    n     = component_count(m);
-    return n > 0 ? (double)count / (double)n : 0.0;
+    (void)gia_mark_cycles(m);
+    for (i = 0; i < m->n_nodes; i++) {
+        if (!is_component(&m->nodes[i])) continue;
+        n++;
+        if (m->nodes[i].on_cycle) on++;
+    }
+    return n > 0 ? (double)on / (double)n : 0.0;
 }
 
+double gia_ordinality(gia_model *m) {
+    return gia_closure(m);
+}
+
+/* Does component `from` reach `to` along quantity-carrying legs? The ADR 0014
+ * walk of reaches(), from a fresh visited set. */
+static bool reaches_from(const gia_model *m, int from, int to, bool *seen) {
+    int k;
+    for (k = 0; k < m->n_nodes * GIA_STREAMS; k++) seen[k] = false;
+    seen[visit_slot(m, from, GIA_ROLE_NONE)] = true;
+    return reaches(m, from, GIA_ROLE_NONE, to, seen);
+}
+
+/* A leg that carries quantity: everything but a read control. */
+static bool carries(const gia_edge *e) {
+    return !(e->role == GIA_ROLE_CONTROL && e->use_ratio <= 0.0);
+}
+
+/* 2: both feed one interaction module along a quantity-carrying leg. */
+static bool feed_one_interaction(const gia_model *m, int a, int b) {
+    int i, j;
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *ea = &m->edges[i];
+        if (ea->from != a || ea->to < 0 || !carries(ea)) continue;
+        if (!m->nodes[ea->to].is_module || m->nodes[ea->to].kind != GIA_NODE_INTERACTION) continue;
+        for (j = 0; j < m->n_edges; j++) {
+            const gia_edge *eb = &m->edges[j];
+            if (eb->from == b && eb->to == ea->to && carries(eb)) return true;
+        }
+    }
+    return false;
+}
+
+/* 1/2: both are products, replicated, of one process. */
+static bool coproducts(const gia_model *m, int a, int b) {
+    int i, j;
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *ea = &m->edges[i];
+        if (ea->to != a || ea->from < 0 || ea->out_mode != GIA_OUT_REPLICATE) continue;
+        for (j = 0; j < m->n_edges; j++) {
+            const gia_edge *eb = &m->edges[j];
+            if (eb->to == b && eb->from == ea->from && eb->out_mode == GIA_OUT_REPLICATE)
+                return true;
+        }
+    }
+    return false;
+}
+
+gia_status gia_ordinality_record(const gia_model *m, gia_ordinality_rec *r, const char **why) {
+    gia_ordinality_rec out = {0, 0, 0, 0, 0};
+    bool              *seen;
+    int                i, j;
+
+    if (!m || !r || m->n_nodes < 0) {
+        if (why) *why = "gia_ordinality_record: NULL argument";
+        return GIA_E_ARG;
+    }
+    seen = (bool *)malloc((size_t)(m->n_nodes > 0 ? m->n_nodes : 1) * GIA_STREAMS * sizeof(bool));
+    if (!seen) {
+        if (why) *why = "gia_ordinality_record: out of memory";
+        return GIA_E_NOMEM;
+    }
+    for (i = 0; i < m->n_nodes; i++) {
+        if (!is_component(&m->nodes[i])) continue;
+        out.k++;
+        for (j = i + 1; j < m->n_nodes; j++) {
+            if (!is_component(&m->nodes[j])) continue;
+            if (reaches_from(m, i, j, seen) && reaches_from(m, j, i, seen)) out.n22++;
+            else if (feed_one_interaction(m, i, j))                       out.n2++;
+            else if (coproducts(m, i, j))                                  out.nhalf++;
+            else                                                           out.nunrelated++;
+        }
+    }
+    free(seen);
+    *r = out;
+    return GIA_OK;
+}
+
+/* FR-ORD-003: every couple 2/2. */
 bool gia_at_maximum_ordinality(gia_model *m) {
-    int n;
-    if (!m || m->n_nodes <= 0) return false;
-    n = component_count(m);
-    return n > 0 && gia_mark_cycles(m) == n;
+    gia_ordinality_rec r;
+    if (!m || gia_ordinality_record(m, &r, NULL) != GIA_OK || r.k < 2) return false;
+    return r.n22 == r.k * (r.k - 1) / 2;
 }
 
 /* ================================================================== *
@@ -2759,6 +2994,10 @@ done:
 static bool is_component(const gia_node *nd) {
     return !nd->is_module && nd->kind != GIA_NODE_SOURCE &&
            nd->kind != GIA_NODE_SINK && nd->kind != GIA_NODE_CONSTANT;
+}
+
+bool gia_node_is_component(const gia_model *m, int i) {
+    return m && i >= 0 && i < m->n_nodes && is_component(&m->nodes[i]);
 }
 
 /* F at time s along the engine's own solution (numerics.md N7: Q at t +- h
@@ -2933,19 +3172,23 @@ bool gia_write_trajectories(const gia_model *m, const char *path, int steps) {
     dt = m->t_end / (double)steps;
     for (s = 0; s <= steps; s++) {
         double t = (double)s * dt;
-        bool   have_dp;
+        bool   have_dp, have_em;
 
         (void)gia_sample_at(m, t, q, NULL, NULL, NULL);
-        (void)gia_emergy_at(m, t, em, tr);
+        /* A model past the emergy pass's limits is refused, not truncated
+         * (NFR-LIM-001): its emergy cells are left empty. */
+        have_em = gia_emergy_at(m, t, em, tr);
         have_dp = gia_drift_projection(m, t, dt, dp, NULL) == GIA_OK;
 
         fprintf(f, "%.6f", t);
         for (i = 0; i < m->n_nodes; i++) {
-            fprintf(f, ",%.10g,%.10g,%.10g,", q[i], em[i], tr[i]);
+            fprintf(f, ",%.10g,", q[i]);
+            if (have_em) fprintf(f, "%.10g,%.10g,", em[i], tr[i]); else fprintf(f, ",,");
             if (have_dp) fprintf(f, "%.10g", dp[i]);
         }
-        fprintf(f, ",%.10g,%.10g\n",
-                gia_conservation_residual(m, t), gia_emergy_excess(m, t));
+        fprintf(f, ",%.10g,", gia_conservation_residual(m, t));
+        if (have_em) fprintf(f, "%.10g", gia_emergy_excess(m, t));
+        fprintf(f, "\n");
     }
 
     free(q); free(em); free(tr); free(dp);
@@ -2956,15 +3199,6 @@ bool gia_write_trajectories(const gia_model *m, const char *path, int steps) {
 /* ================================================================== *
  * 8. Mode 2 — the generative ordinal step
  * ================================================================== */
-
-static bool id_taken(const cJSON *nodes, const char *id) {
-    const cJSON *it;
-    cJSON_ArrayForEach(it, nodes) {
-        const char *nid = str_field(it, "id", NULL);
-        if (nid && !strcmp(nid, id)) return true;
-    }
-    return false;
-}
 
 /* Replace in place where the key already exists, so the field keeps its
  * position in the object. Delete-then-add would move it to the end, which
@@ -2981,31 +3215,8 @@ static void set_string(cJSON *obj, const char *key, const char *value) {
     }
 }
 
-/* Whether quantity can travel from `from` to `to` over legs that carry it --
- * the same walk the cycle scan uses (ADR 0014). */
-static bool path_exists(const gia_model *m, int from, int to) {
-    bool *seen = (bool *)calloc((size_t)m->n_nodes * GIA_STREAMS, sizeof(bool));
-    bool  r;
-    if (!seen) return false;
-    seen[visit_slot(m, from, GIA_ROLE_NONE)] = true;
-    r = reaches(m, from, GIA_ROLE_NONE, to, seen);
-    free(seen);
-    return r;
-}
-
-static void add_emergent_leg(cJSON *edges, const char *from, const char *to,
-                             const char *label, double weight) {
-    cJSON *ne = cJSON_CreateObject();
-    if (!ne) return;
-    cJSON_AddStringToObject(ne, "source", from);
-    cJSON_AddStringToObject(ne, "target", to);
-    cJSON_AddStringToObject(ne, "flow_type", label);
-    cJSON_AddNumberToObject(ne, "weight", weight);
-    cJSON_AddItemToArray(edges, ne);
-}
-
-/* Sort node indices by id, so the emitted legs are in id order and the output
- * is a function of the model rather than of how its file was ordered.
+/* Sort node indices by id, so candidates are enumerated in id order and the
+ * output is a function of the model rather than of how its file was ordered.
  *
  * qsort's comparator takes no context, so the id travels with the index in
  * each element rather than through a file-scope pointer to the model: that
@@ -3030,32 +3241,127 @@ static bool sort_by_id(const gia_model *m, int *ids, int n) {
     return true;
 }
 
-/* ADR 0015. Below maximum ordinality the step grows one component, the
- * emergent quality E, and closes EVERY open component through it by adding
- * only the direction that is missing:
- *
- *   hub cannot reach o  ->  E -> o      (and hub -> E)
- *   o cannot reach hub  ->  o -> E      (and E -> hub)
- *
- * so each o ends on hub -> E -> o ~> hub or o -> E -> hub ~> o. The previous
- * rule wired hub -> E -> open only, which closes nothing when `open` is a dead
- * end: ordinality fell on every step and the step never stopped, while printing
- * that it had closed the loop.
- *
- * A sink is never closed and never the hub -- closing it would draw on energy
- * already used (Odum 1972 SecV) -- so a model whose only open component is a
- * sink stops below maximum, at a fixed point it names. */
+/* The component graph's condensation, enough of it to choose candidates:
+ * comps[0..n) are the component indices in id order; scc[a] labels the
+ * strongly connected component of comps[a] by its lowest position; src[s] and
+ * snk[s] say whether SCC s has no in-edge, no out-edge, from another SCC. */
+typedef struct {
+    int   n, n_scc, n_src, n_snk;
+    int  *comps, *scc;
+    bool *src, *snk;
+} gia_condensation;
+
+static void condensation_free(gia_condensation *c) {
+    free(c->comps); free(c->scc); free(c->src); free(c->snk);
+    memset(c, 0, sizeof(*c));
+}
+
+static bool condensation(const gia_model *m, gia_condensation *c) {
+    bool *reach = NULL, *seen = NULL;
+    int   a, b, n = 0;
+
+    memset(c, 0, sizeof(*c));
+    c->comps = (int *)malloc((size_t)m->n_nodes * sizeof(int));
+    if (!c->comps) return false;
+    for (a = 0; a < m->n_nodes; a++) if (is_component(&m->nodes[a])) c->comps[n++] = a;
+    c->n   = n;
+    c->scc = (int *)malloc((size_t)(n > 0 ? n : 1) * sizeof(int));
+    c->src = (bool *)calloc((size_t)(n > 0 ? n : 1), sizeof(bool));
+    c->snk = (bool *)calloc((size_t)(n > 0 ? n : 1), sizeof(bool));
+    reach  = (bool *)calloc((size_t)(n > 0 ? n * n : 1), sizeof(bool));
+    seen   = (bool *)malloc((size_t)m->n_nodes * GIA_STREAMS * sizeof(bool));
+    if (!c->scc || !c->src || !c->snk || !reach || !seen || !sort_by_id(m, c->comps, n)) {
+        free(reach); free(seen); condensation_free(c);
+        return false;
+    }
+    for (a = 0; a < n; a++)
+        for (b = 0; b < n; b++)
+            reach[a * n + b] = a == b || reaches_from(m, c->comps[a], c->comps[b], seen);
+    for (a = 0; a < n; a++) {
+        c->scc[a] = a;
+        for (b = 0; b < a; b++)
+            if (reach[a * n + b] && reach[b * n + a]) { c->scc[a] = c->scc[b]; break; }
+        if (c->scc[a] == a) { c->n_scc++; c->src[a] = c->snk[a] = true; }
+    }
+    for (a = 0; a < n; a++)
+        for (b = 0; b < n; b++)
+            if (c->scc[a] != c->scc[b] && reach[a * n + b]) {
+                c->snk[c->scc[a]] = false;
+                c->src[c->scc[b]] = false;
+            }
+    for (a = 0; a < n; a++) {
+        if (c->scc[a] != a) continue;
+        if (c->src[a]) c->n_src++;
+        if (c->snk[a]) c->n_snk++;
+    }
+    free(reach); free(seen);
+    return true;
+}
+
+/* A `linear` pathway, as the seed's own pathways are written. */
+static bool add_pathway(cJSON *root, const char *from, const char *to, double weight) {
+    cJSON *edges = cJSON_GetObjectItemCaseSensitive(root, "edges");
+    cJSON *ne;
+    if (!cJSON_IsArray(edges) && !(edges = cJSON_AddArrayToObject(root, "edges"))) return false;
+    ne = cJSON_CreateObject();
+    if (!ne) return false;
+    cJSON_AddStringToObject(ne, "source", from);
+    cJSON_AddStringToObject(ne, "target", to);
+    cJSON_AddStringToObject(ne, "logic", "linear");
+    cJSON_AddNumberToObject(ne, "weight", weight);
+    cJSON_AddStringToObject(ne, "flow_type", "max_empower_pathway");
+    cJSON_AddItemToArray(edges, ne);
+    return true;
+}
+
+/* Total empower at t_end: the components' emergy per unit time, summed.
+ * Habitat sits outside the system (ADR 0021), so a sink's accumulation is not
+ * counted. False when the emergy pass is unavailable (NFR-LIM-001). */
+static bool total_empower(const gia_model *m, double *total) {
+    double *em = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    double  s  = 0.0;
+    int     i;
+    bool    okay;
+    if (!em) return false;
+    okay = gia_emergy_at(m, m->t_end, em, NULL);
+    for (i = 0; okay && i < m->n_nodes; i++) if (is_component(&m->nodes[i])) s += em[i];
+    free(em);
+    if (!okay || !isfinite(s)) return false;
+    *total = s;
+    return true;
+}
+
+/* The total empower of `root` with the pathway from -> to added. */
+static bool trial_empower(const cJSON *root, const char *from, const char *to, double weight,
+                          double *total) {
+    cJSON    *trial = cJSON_Duplicate(root, 1);
+    gia_model tm;
+    bool      okay = false;
+    if (!trial) return false;
+    if (add_pathway(trial, from, to, weight) && gia_model_load(&tm, trial)) {
+        okay = total_empower(&tm, total);
+        gia_model_free(&tm);
+    }
+    cJSON_Delete(trial);
+    return okay;
+}
+
+/* ADR 0021 §2 (FR-ORD-005). Below Maximum Ordinality, repeat: form the
+ * condensation of the component graph; the candidates are the pathways from a
+ * component in a sink SCC to one in a source SCC (never within one SCC); add
+ * the `linear` one, of the seed's mean edge weight, that maximises total
+ * empower at t_end -- the discrete form of [02 Eq 5.3] -- ties within 1e-9
+ * relative going to the lexicographically first (from, to). Each addition
+ * lowers #sources + #sinks of the condensation, so the step ends within that
+ * many additions; a model that does not is returned unchanged, as is one the
+ * emergy pass cannot evaluate. No component is ever added (ADR 0015's E is
+ * retired). */
 cJSON *gia_generate(const gia_model *m) {
-    cJSON  *out, *nodes, *edges, *nn, *from;
-    bool   *on_cycle = NULL, *need_in = NULL, *need_out = NULL;
-    int    *open_ids = NULL;
-    int     i, j, hub = -1, best_in = -1, n_open = 0, n_sink_open = 0, n_comp;
-    int     suffix;
-    double  mean_w = 0.0, ordinality, evolved;
-    char    rid[64];
-    bool    to_e = false, from_e = false, confirmed = false;
-    cJSON  *seed_copy;
-    gia_model check;
+    cJSON           *out;
+    gia_condensation c;
+    gia_model        cur;
+    double           mean_w = 0.0;
+    int              i, added = 0, bound = -1;
 
     if (!m || !m->root) return NULL;
 
@@ -3066,160 +3372,66 @@ cJSON *gia_generate(const gia_model *m) {
     if (!out) return NULL;
     if (!m->generative) return out;
 
-    on_cycle = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
-    need_in  = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
-    need_out = (bool *)calloc((size_t)m->n_nodes, sizeof(bool));
-    open_ids = (int  *)calloc((size_t)m->n_nodes, sizeof(int));
-    if (!on_cycle || !need_in || !need_out || !open_ids) goto done;
-
-    n_comp     = component_count(m);
-    ordinality = n_comp > 0 ? (double)cycles_into(m, on_cycle) / (double)n_comp
-                            : 0.0;
-
-    /* The hub is the component the most flows arrive at. A control is not a
-     * flow, a module holds nothing, and a sink holds only what is spent, so
-     * none of them is a hub. Ties go to the lower id, never to array order. */
-    for (i = 0; i < m->n_nodes; i++) {
-        int in_deg = 0;
-        if (m->nodes[i].is_module || m->nodes[i].kind == GIA_NODE_SINK) continue;
-        for (j = 0; j < m->n_edges; j++)
-            if (m->edges[j].to == i && m->edges[j].role != GIA_ROLE_CONTROL)
-                in_deg++;
-        if (in_deg > best_in ||
-            (in_deg == best_in && strcmp(m->nodes[i].id, m->nodes[hub].id) < 0)) {
-            best_in = in_deg;
-            hub     = i;
-        }
-    }
-
-    /* The open components are a set, not the first one found. */
-    for (i = 0; i < m->n_nodes; i++) {
-        if (m->nodes[i].is_module || on_cycle[i]) continue;
-        if (m->nodes[i].kind == GIA_NODE_SINK) { n_sink_open++; continue; }
-        if (i == hub) continue;
-        open_ids[n_open++] = i;
-    }
-
-    if (hub < 0 || (n_open == 0 && on_cycle[hub])) {
-        /* Nothing that may be closed is open. */
-        if (n_sink_open > 0)
-            printf("  MOP ordinal step: at a fixed point below maximum "
-                   "ordinality (%.3f).\n"
-                   "  The only open component%s a sink, which is never "
-                   "closed: that would\n"
-                   "  draw on energy already used (Odum 1972 SecV).\n",
-                   ordinality, n_sink_open == 1 ? " is" : "s are");
-        goto done;
-    }
-
-    if (!sort_by_id(m, open_ids, n_open)) goto done;
-    for (i = 0; i < n_open; i++) {
-        int o = open_ids[i];
-        need_in[o]  = !path_exists(m, hub, o);          /* E -> o   */
-        need_out[o] = !path_exists(m, o, hub);          /* o -> E   */
-        to_e   = to_e   || need_in[o];
-        from_e = from_e || need_out[o];
-    }
-    if (n_open == 0) to_e = from_e = true;           /* the hub alone is open */
-
     for (i = 0; i < m->n_edges; i++) mean_w += m->edges[i].weight;
     mean_w = (m->n_edges > 0) ? mean_w / (double)m->n_edges : 1.0;
 
-    nodes = cJSON_GetObjectItemCaseSensitive(out, "nodes");
-    edges = cJSON_GetObjectItemCaseSensitive(out, "edges");
-    if (!cJSON_IsArray(nodes)) goto done;
-    if (!cJSON_IsArray(edges)) {
-        edges = cJSON_AddArrayToObject(out, "edges");
-        if (!edges) goto done;
-    }
+    for (;;) {
+        double best = 0.0;
+        int    a, b, best_a = -1, best_b = -1, n_cand = 0;
+        char   from[256], to[256];
 
-    suffix = 1;
-    snprintf(rid, sizeof(rid), "emergent_quality_%d", suffix);
-    while (id_taken(nodes, rid) && suffix < 1000) {
-        suffix++;
-        snprintf(rid, sizeof(rid), "emergent_quality_%d", suffix);
-    }
-
-    /* A component, not a module (ADR 0015 decision 5): under ADR 0014 a module
-     * is not counted toward ordinality and its control closes nothing, so an
-     * emergent quality written as one could raise nothing. `storage` also
-     * loads under GSSK_Init. */
-    nn = cJSON_CreateObject();
-    if (!nn) goto done;
-    cJSON_AddStringToObject(nn, "id", rid);
-    cJSON_AddStringToObject(nn, "label", "Emergent Quality");
-    cJSON_AddStringToObject(nn, "type", "storage");
-    /* The new component enters as the (N+1)-th, so its ordinal rank is N --
-     * counted in components, since a module is not one. */
-    cJSON_AddNumberToObject(nn, "ordinality_rank", (double)n_comp);
-    from = cJSON_AddArrayToObject(nn, "emerged_from");
-    if (from) {
-        if (n_open == 0)
-            cJSON_AddItemToArray(from, cJSON_CreateString(m->nodes[hub].id));
-        for (i = 0; i < n_open; i++)
-            cJSON_AddItemToArray(from,
-                                 cJSON_CreateString(m->nodes[open_ids[i]].id));
-    }
-    cJSON_AddItemToArray(nodes, nn);
-
-    /* Legs in a fixed order: the hub's pair, then each open component in id
-     * order. Further from Maximum Ordinality, a stronger corrective return. */
-    if (to_e)   add_emergent_leg(edges, m->nodes[hub].id, rid,
-                                 "ordinal_ascent", mean_w);
-    if (from_e) add_emergent_leg(edges, rid, m->nodes[hub].id,
-                                 "emergent_feedback_loop", 1.0 - ordinality);
-    for (i = 0; i < n_open; i++) {
-        const char *oid = m->nodes[open_ids[i]].id;
-        if (need_in[open_ids[i]])
-            add_emergent_leg(edges, rid, oid, "emergent_feedback_loop",
-                             1.0 - ordinality);
-        if (need_out[open_ids[i]])
-            add_emergent_leg(edges, oid, rid, "ordinal_ascent", mean_w);
-    }
-    set_string(out, "system_name",
-               "Evolved Self-Organizing Graph (Post-MOP Ordinal Step)");
-
-    /* Claim closure only after checking it (decision 6). Every component the
-     * step set out to close, and the emergent quality itself, must now be on a
-     * closed pathway, and ordinality must not have fallen. */
-    if (gia_model_load(&check, out)) {
-        int k;
-        evolved   = gia_ordinality(&check);
-        confirmed = evolved >= ordinality;
-        for (k = 0; k < check.n_nodes && confirmed; k++) {
-            const gia_node *nd = &check.nodes[k];
-            if (nd->is_module || nd->kind == GIA_NODE_SINK) continue;
-            if (!nd->on_cycle) confirmed = false;
+        if (!gia_model_load(&cur, out)) break;
+        if (!condensation(&cur, &c)) { gia_model_free(&cur); break; }
+        if (c.n < 2 || c.n_scc == 1) {
+            if (c.n < 2)
+                printf("  MOP generative step: fewer than two components, so no couple "
+                       "to relate.\n");
+            else
+                printf("  MOP generative step: at Maximum Ordinality (strongly connected) "
+                       "after %d addition%s.\n", added, added == 1 ? "" : "s");
+            condensation_free(&c); gia_model_free(&cur);
+            break;
         }
-        gia_model_free(&check);
-    } else {
-        evolved = ordinality;
-    }
-
-    if (!confirmed) {
-        seed_copy = cJSON_Duplicate(m->root, 1);
-        if (seed_copy) {
+        if (bound < 0) bound = c.n_src + c.n_snk;
+        if (added >= bound) {
+            printf("  MOP generative step: declined. %d additions did not reach Maximum "
+                   "Ordinality, so the seed is returned unchanged.\n", added);
+            condensation_free(&c); gia_model_free(&cur);
             cJSON_Delete(out);
-            out = seed_copy;
+            return cJSON_Duplicate(m->root, 1);
         }
-        printf("  MOP ordinal step: declined. The graph it built did not put "
-               "every open\n"
-               "  component on a closed pathway, so the seed is returned "
-               "unchanged.\n");
-        goto done;
+        for (a = 0; a < c.n; a++) {
+            if (!c.snk[c.scc[a]]) continue;
+            for (b = 0; b < c.n; b++) {
+                double tot;
+                if (c.scc[a] == c.scc[b] || !c.src[c.scc[b]]) continue;
+                n_cand++;
+                if (!trial_empower(out, cur.nodes[c.comps[a]].id, cur.nodes[c.comps[b]].id,
+                                   mean_w, &tot))
+                    continue;
+                if (best_a < 0 || tot > best + 1e-9 * (fabs(best) > 1.0 ? fabs(best) : 1.0)) {
+                    best = tot; best_a = a; best_b = b;
+                }
+            }
+        }
+        if (best_a >= 0) {
+            snprintf(from, sizeof from, "%s", cur.nodes[c.comps[best_a]].id);
+            snprintf(to, sizeof to, "%s", cur.nodes[c.comps[best_b]].id);
+        }
+        condensation_free(&c); gia_model_free(&cur);
+        if (best_a < 0 || !add_pathway(out, from, to, mean_w)) {
+            printf("  MOP generative step: declined. The emergy pass could not evaluate "
+                   "the candidates, so the seed is returned unchanged.\n");
+            cJSON_Delete(out);
+            return cJSON_Duplicate(m->root, 1);
+        }
+        added++;
+        printf("  MOP generative step %d: %s -> %s, the maximum total empower %.6g of %d "
+               "candidate%s ([02 Eq 5.3]).\n", added, from, to, best, n_cand,
+               n_cand == 1 ? "" : "s");
     }
-
-    printf("  MOP ordinal step: %d open component%s, closed through '%s' "
-           "(hub '%s').\n", n_open == 0 ? 1 : n_open,
-           (n_open == 0 || n_open == 1) ? "" : "s", rid, m->nodes[hub].id);
-    printf("  Ordinality %.3f -> %.3f, confirmed by rescanning the evolved "
-           "graph.\n", ordinality, evolved);
-
-done:
-    free(on_cycle);
-    free(need_in);
-    free(need_out);
-    free(open_ids);
+    if (added > 0)
+        set_string(out, "system_name", "Evolved Self-Organizing Graph (Post-MOP Ordinal Step)");
     return out;
 }
 

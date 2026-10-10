@@ -27,9 +27,13 @@
  *     drift of the solved trajectory (the invented-phi
  *     _idc/_tdc/_drift columns, E4, are removed)
  *   - the harmony matrix is built from roots of unity          assumed    (E5)
- *   - gia_ordinality is the fraction of components on a cycle  proxy      (E6)
- *   - gia_generate is the ADR 0015 heuristic                   illustrative (E7)
- *   - the First and Second Fundamental Equations               absent     (E8)
+ *     (src/harmony.c, gia_harmony_assume_*; the detector that decides
+ *     harmony is gia_harmony_verdict in mop.h)
+ *   - the Ordinality record and Maximum Ordinality (ADR 0021)  implemented
+ *     (gia_closure, the fraction on a cycle, is a proxy, E6)
+ *   - gia_generate: one pathway at a time by maximum empower  implemented (E7)
+ *     (ADR 0021 §2, [02 Eq 5.3])
+ *   - the First and Second Fundamental Equations are in mop.h  (E8)
  * The derivative identities (Sections 1-2) and the emergy algebra are
  * Giannantoni's and Odum's own, and are implemented. The CLI prints one
  * `label.` line per output saying which of these it is (FR-OUT-001).
@@ -59,6 +63,11 @@
 
 /* Branch cap for the n-et. The binary (duet) case is n = 2. */
 #define GIA_MAX_BRANCHES     16
+
+/* The emergy pass combines at most this many inflows into one node, and tracks
+ * co-production ancestry across at most this many components; past either it
+ * refuses with GIA_E_LIMIT rather than truncating (NFR-LIM-001). */
+#define GIA_MAX_INFLOWS      64
 
 /* ================================================================== *
  * 1. Exponential form:  f(t) = e^phi(t)
@@ -170,7 +179,7 @@ double complex gia_net_sum(const gia_net *n);
  *   - Every row sums to alpha_ref * sum_m omega^m = 0 exactly, for N-1 >= 2.
  *     That is the global balance the Harmony Relationships assert.
  *   - Any entry is recoverable from alpha_ref and (i, j) alone. That is the
- *     O(N^2) -> O(1) reduction, and gia_harmony_reconstruct() lets a test
+ *     O(N^2) -> O(1) reduction, and gia_harmony_assume_reconstruct() lets a test
  *     confirm the stored matrix really does carry no extra information.
  *
  * Note alpha_{0,1} == alpha_ref by construction: row 0's first partner is 1,
@@ -184,27 +193,27 @@ typedef struct {
 } gia_harmony;
 
 /* The m-th of the `roots` roots of unity. */
-double complex gia_ordinal_root(int roots, int m);
+double complex gia_harmony_assume_root(int roots, int m);
 
 /* Build the N x N harmony matrix from the reference couple. Requires n >= 2.
  * Returns false on bad argument or allocation failure. */
-bool gia_harmony_init(gia_harmony *h, int n, double complex alpha_ref);
-void gia_harmony_free(gia_harmony *h);
+bool gia_harmony_assume_init(gia_harmony *h, int n, double complex alpha_ref);
+void gia_harmony_assume_free(gia_harmony *h);
 
 /* Stored entry (i, j). Out-of-range indices return 0. */
-double complex gia_harmony_at(const gia_harmony *h, int i, int j);
+double complex gia_harmony_assume_at(const gia_harmony *h, int i, int j);
 
 /* Entry (i, j) recomputed from alpha_ref and the roots of unity alone,
- * touching no stored state. Equality with gia_harmony_at() over all (i, j)
+ * touching no stored state. Equality with gia_harmony_assume_at() over all (i, j)
  * is the N x N -> 1 reduction claim. */
-double complex gia_harmony_reconstruct(int n, double complex alpha_ref,
+double complex gia_harmony_assume_reconstruct(int n, double complex alpha_ref,
                                        int i, int j);
 
 /* max_i |sum_j alpha_ij| — the balance residual. ~0 at Maximum Ordinality. */
-double gia_harmony_row_residual(const gia_harmony *h);
+double gia_harmony_assume_row_residual(const gia_harmony *h);
 
 /* max_ij |stored - reconstructed| — the reduction residual. ~0 by construction. */
-double gia_harmony_reduction_residual(const gia_harmony *h);
+double gia_harmony_assume_reduction_residual(const gia_harmony *h);
 
 /* ================================================================== *
  * 4b. The network: the matrix exponential form
@@ -647,6 +656,88 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr);
  * rather than argued about. */
 double gia_emergy_excess(const gia_model *m, double t);
 
+/* FR-EM-002, FR-EM-004 — the equivalent source term of one process [02 Eq 3.6-3.17]:
+ * the emergy it sends onward minus the emergy it receives, at t. A partition
+ * gives 0; a co-production with n products gives (n - 1) Em(u) [02 Eq 3.8]; an
+ * interaction whose inputs are all drawn gives 0, since Em(y) = Em(u1) + Em(u2)
+ * [02 Eq 3.9, 3.12, 3.15]. `node` must be a component or a module (a source,
+ * sink or constant is not a process: GIA_E_ARG). A model past the emergy pass's
+ * fixed limits -- more than GIA_MAX_INFLOWS inflows into one node, or more than
+ * 64 components with a co-production -- is GIA_E_LIMIT (NFR-LIM-001). */
+gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
+                                  double *phi, const char **why);
+
+/* FR-MOP-008 (PLAN R8) — the emergy each pathway carries at t, by the emergy
+ * pass's rules: a source's pathways carry flow x quality_input; a replicating
+ * pathway carries its origin's whole empower; a partition carries the origin's
+ * empower in proportion to its flow among the origin's outgoing pathways. A
+ * used leg, and a read control, carry none. Unlike the pass's own accounting,
+ * a pathway that closes a loop is not zeroed: it carries what rides on it.
+ * carried has n_edges entries. GIA_E_LIMIT past the pass's limits;
+ * GIA_E_NOMEM. */
+gia_status gia_emergy_carried(const gia_model *m, double t, double *carried, const char **why);
+
+/* The emergy pass's limits, checked on their own: GIA_E_LIMIT when the model
+ * exceeds them (NFR-LIM-001). gia_emergy_at returns false in that case, and
+ * the trajectory CSV leaves its emergy cells empty, rather than truncating. */
+gia_status gia_emergy_check_limits(const gia_model *m, const char **why);
+
+/* FR-EM-005 — the ordinal forms of the three emergy processes [22 Eq 6-8],
+ * [06b Eq 6, 10], [10 §Incipient Derivative]:
+ *
+ *   co-production  binary       (a; a)            a column: 2 x 1, each branch Em(u)
+ *   interaction    duet         [a1, a2]          a row:    1 x 2
+ *   feedback       duet-binary  [[a1, a2],
+ *                                [a2, a1]]        2 x 2, specular
+ *
+ * Shapes matter: a binary is two branches of one thing, a duet two things
+ * held together, and the circle product below reads them that way. */
+typedef enum { GIA_OF_SCALAR, GIA_OF_BINARY, GIA_OF_DUET, GIA_OF_DUET_BINARY } gia_oform_kind;
+typedef struct {
+    gia_oform_kind kind;
+    int            rows, cols;      /* 1 or 2 each */
+    double         v[2][2];         /* v[row][col] */
+} gia_oform;
+
+gia_oform gia_oform_scalar(double a);
+gia_oform gia_oform_binary(double em_u);
+gia_oform gia_oform_duet(double em_u1, double em_u2);
+gia_oform gia_oform_duet_binary(double a1, double a2);
+
+/* FR-EM-006 — the circle product [02 Eq 14.11.4-14.11.5], [06b Eq 2-3]; PLAN R12.
+ * It is structural: every pair of factors is kept in the outer arrangement,
+ *
+ *     (a1; a2) o [b1, b2] = [ (a1 b1; a2 b1), (a1 b2; a2 b2) ]   before reduction,
+ *
+ * so out.pair[i][j] = {a_i, b_j} for a column a (rows x 1) and a row b
+ * (1 x cols); two scalars give one pair, l o l = [l, l], a "du-et of real
+ * numbers", not l^2. The cardinal reduction maps each pair to its product.
+ * A left factor that is not a column, or a right one that is not a row, is
+ * GIA_E_ARG. */
+typedef struct { int rows, cols; double pair[2][2][2]; } gia_circle;
+
+gia_status gia_circle_product(const gia_oform *a, const gia_oform *b, gia_circle *out,
+                              const char **why);
+gia_oform  gia_circle_reduce(const gia_circle *c);
+
+/* FR-EM-007 — the global emergy balance of [02 Eq 3.18-3.26]: weighted inputs
+ * plus source terms against weighted outputs, sum(w v)_in + sum Phi = sum(w v)_out,
+ * the weights being the co-injection, co-production and re-normalisation
+ * factors. */
+typedef struct { double value, weight; } gia_balance_term;
+
+/* residual = sum(w v)_in - sum(w v)_out. */
+gia_status gia_emergy_global_balance(const gia_balance_term *in, int n_in,
+                                     const gia_balance_term *out, int n_out,
+                                     double *residual, const char **why);
+
+/* Solve the balance for source terms that are fixed multiples of one unknown,
+ * Phi_k = phi_w[k] x: phi[k] = phi_w[k] (sum_out - sum_in) / sum(phi_w). */
+gia_status gia_emergy_balance_solve(const gia_balance_term *in, int n_in,
+                                    const gia_balance_term *out, int n_out,
+                                    const double *phi_w, int n_phi, double *phi,
+                                    const char **why);
+
 /* ================================================================== *
  * 6. Ordinality
  *
@@ -678,11 +769,40 @@ int gia_mark_cycles(gia_model *m);
 /* Number of components -- nodes that are not modules. */
 int gia_component_count(const gia_model *m);
 
-/* Fraction of components on a closed pathway, in [0, 1]. Calls
- * gia_mark_cycles(). */
+/* ADR 0021: node i is a component -- neither a module nor habitat (a source,
+ * a sink or a constant). False for an index out of range. */
+bool gia_node_is_component(const gia_model *m, int i);
+
+/* FR-ORD-004 (ADR 0021): the fraction of components (gia_node_is_component:
+ * habitat and modules excluded) that lie on a closed pathway, in [0, 1]; 0
+ * with no component. A proxy: it is reported, labelled so, and
+ * decides nothing. Calls gia_mark_cycles(). */
+double gia_closure(gia_model *m);
+
+/* Deprecated (ADR 0021): returns gia_closure. Kept for one release. */
 double gia_ordinality(gia_model *m);
 
-/* True when every component is on a cycle. */
+/* FR-ORD-001, FR-ORD-002 (ADR 0021 decision 1). Each unordered couple of
+ * components (gia_node_is_component) is classified by the first rule that
+ * applies:
+ *
+ *   n22    2/2, feedback: each reaches the other along quantity-carrying legs
+ *          (the ADR 0014 walk: a read control carries nothing; a module passes
+ *          energy to its products and a drawn control to its used leg)
+ *   n2     2, interaction: both feed one interaction module along a
+ *          quantity-carrying leg
+ *   nhalf  1/2, co-production: both are products (output_mode replicate) of
+ *          one process
+ *   nunrelated  none of these
+ *
+ * k is the number of components [23 Eq 3.2]. GIA_E_NOMEM on allocation
+ * failure; *r is written only on GIA_OK. */
+typedef struct { int k, n22, n2, nhalf, nunrelated; } gia_ordinality_rec;
+gia_status gia_ordinality_record(const gia_model *m, gia_ordinality_rec *r, const char **why);
+
+/* FR-ORD-003: Maximum Ordinality, {2 2} up {N N} [22 Eq 11.1]: every couple
+ * is 2/2, which is exactly strong connectivity of the component graph. Fewer
+ * than two components have no couple and are not at maximum. */
 bool gia_at_maximum_ordinality(gia_model *m);
 
 /* ================================================================== *
@@ -746,14 +866,17 @@ void gia_print_trajectories(const gia_model *m, int steps);
  * is already at Maximum Ordinality, or generative mode is off, the returned
  * graph compares equal to the input and the run is functional.
  *
- * Otherwise (ADR 0015) one emergent quality -- a component typed `storage`,
- * never a module -- closes EVERY open component at once, adding only the
- * direction each is missing, so one step reaches the fixed point and a second
- * changes nothing. A sink is never closed or drawn from, so a model whose only
- * open component is a sink is returned unchanged below maximum. Hub ties break
- * by id and added legs are emitted in id order, so reordering a model appends
- * byte-identical output. The result is rescanned before closure is claimed; if
- * the rescan disagrees the seed is returned unchanged.
+ * Otherwise (ADR 0021 §2, FR-ORD-005) it adds one `linear` pathway at a time,
+ * of the seed's mean edge weight, from a component in a sink SCC of the
+ * component graph's condensation to one in a source SCC, choosing the
+ * candidate that maximises total empower at t_end -- the components' summed
+ * empower, the discrete form of [02 Eq 5.3] -- with ties within 1e-9 relative
+ * going to the lexicographically first (from, to). It stops at Maximum
+ * Ordinality, within #sources + #sinks additions. No component is added, and
+ * habitat (sources, sinks, constants) is never joined. Candidates are
+ * enumerated in id order, so reordering a model appends byte-identical
+ * output. A model the emergy pass cannot evaluate, or with fewer than two
+ * components, is returned unchanged.
  * ================================================================== */
 
 cJSON *gia_generate(const gia_model *m);

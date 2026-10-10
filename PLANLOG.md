@@ -50,6 +50,194 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   drift as exactly zero for a constant flow matrix, and to refuse it otherwise. No function in the
   interface did either.
 
+### `emergy-source-terms`
+
+- **IF-API-005 gains the global-balance functions and a limit check.** FR-EM-007 asks the kernel to
+  "evaluate the global balance of [02 Eq 3.21] and solve it for one unknown source term", but no
+  interface carried it. `gia_emergy_global_balance` and `gia_emergy_balance_solve` now do, with each
+  term a `(value, weight)` pair. NFR-LIM-001 needs the refusal to be observable on its own, so
+  `gia_emergy_check_limits` reports `GIA_E_LIMIT`.
+
+### `emergy-ordinal-forms`
+
+- **IF-API-005 gains the ordinal forms and the circle product.** FR-EM-005 and FR-EM-006 had no
+  interface. A form records its shape as well as its entries: a binary is a column, a duet a row,
+  a duet-binary is 2 × 2. It needs the shape because the circle product of [06b Eq 2] is defined
+  as a column ∘ a row.
+
+### `mop-first-equation`
+
+- **IF-API-004 gains `gia_quad_gk15`.** T-NUM-03 requires that "an integrable singularity beyond the
+  subdivision limit returns `GIA_E_CONVERGENCE`". Through `gia_mop_couple` this cannot happen: a
+  piecewise-linear β that avoids 0 gives a bounded, continuous integrand. Exposing the N2 integrator
+  makes its error estimate and its refusal testable directly.
+- **`mop.h` does not include `relational.h` yet**, and FR-MOP-007 (relational-valued couples) is
+  deferred to `mop-relational-algebra`, which creates that header. The seed's `mop` block, the MOP
+  CSV and the CLI exit codes (IF-JSON-001, IF-OUT-002, IF-CLI-001, FR-OUT-002, NFR-ROB-001) follow in
+  `mop-seed-cli`, which splits from this task to keep each PR reviewable.
+
+### `mop-relational-algebra`
+
+- **`rel_exp` returns a `gia_status`.** It returned an `rel_t`. But `eᵃ` overflows, and
+  NFR-NUM-003 forbids returning infinity, so the function needs a status to report the overflow.
+- **IF-API-004 gains `gia_mop_couple_rel`** for FR-MOP-007. The requirement is "solve the First
+  Equation componentwise on relational elements for k = 1, refuse k > 1", and no interface carried
+  it.
+
+### `mop-second-equation`
+
+- **The ordinal power in [23 Eq 6.3] is read as the principal root of unity.** FR-MOP-005 writes
+  `A(t) = α₁₂(0) ∘ r + ln(c₁ + c₂t)`, and Eq 6.3 writes `r` as `({ᴺ⁻¹√1})^{↑N N}`. No source defines
+  that ordinal power. The engine takes `r = w = e^{2πi/(N−1)}`, the principal (N−1)-th root of
+  unity, and the roots of Eq 6.1 as `w^{j−2}`, j = 2…N. `mop.h` says the reading is the kernel's,
+  and T-MOP-07 pins it, so a different reading is a visible change rather than a silent one.
+- **T-MOP-07's oracle is reconstructed.** No source writes Eq 4.2 explicitly. The time dependence of
+  the printed solution is `ln(c₁ + c₂t)` alone, so `u = Ȧ` satisfies `u' + u² = 0`, and that is
+  what the test checks, by central differences.
+- **`e^B` is computed in closed form.** `B = A·M` with `M = [[1, −1], [−1, 1]]` and `M² = 2M`, so
+  `e^B = I + (e^{2A} − 1)/2 · M` exactly. Overflow of `e^{2A}` is `GIA_E_RANGE` (NFR-NUM-003).
+
+### `mop-seed-cli`
+
+- **`k` is required.** IF-JSON-001's grammar marks `reference`, `second_equation` and `eqs` optional,
+  and does not mark `k` optional. A block without `k` is a load error, rather than one that silently
+  takes a default.
+- **A key given twice is a load error.** cJSON keeps both members, and a lookup returns the first
+  one. So without this check, `{"k": 1, "k": 2}` would load as `k = 1` and nobody would be told.
+- **The loader adds a `detail` buffer to the `why` convention.** IF-API-001's `why` is a static
+  string, so it cannot name the offending key. `gia_mop_seed_load` therefore also takes
+  `char *detail, size_t cap`, owned by the caller, for the JSON path (`mop.beta[2].samples[1]`).
+  `why` stays static.
+- **Exit status 2 covers every refusal, not only `GIA_E_UNSUPPORTED` and `GIA_E_DOMAIN`.**
+  `GIA_E_RANGE`, `GIA_E_CONVERGENCE` and `GIA_E_LIMIT` are also the kernel declining to compute
+  (NFR-NUM-003: never a non-finite value). They are not load or validation errors, and exiting 1
+  for them would misreport them as such.
+- **IF-OUT-002 stays `planned`.** The CSV has `time` and the couple columns. Its last column, `R_H`,
+  is the harmony residual of FR-HAR-001, which lands with `mop-harmony-detector`. That task adds the
+  column and flips IF-OUT-002.
+- **`eqs` is checked, not evaluated.** [23 Eq 7.1–7.3] need the reference couple's relational
+  coordinates `{Σ₀, Φ₀, Θ₀}`. The seed does not supply them, and the First Equation's complex `α₁₂`
+  does not determine them. The CLI checks the parameters through `gia_eqs`, so an `ε₂ ≠ ε₃` seed is
+  refused (X11, exit 2), and says that no coordinates are computed.
+- **`"beta": "network"` loads and is refused at solve time** (`GIA_E_UNSUPPORTED`, naming
+  FR-MOP-008) until `mop-network-beta` lands. The grammar accepts it, so treating it as a load error
+  would be wrong.
+- **T-PERF-01's benchmark lives in `tests/bench_mop.c`**, not `bench/`. `check-trace` looks for
+  `Verifies:` tags only under `tests/` and `scripts/`. It measures CPU time, so that another job on
+  a loaded runner cannot fail the bound. It is not in CI: NFR-PERF-001 is a Could.
+
+### `mop-ordinality`
+
+- **"Feed one interaction module" means a direct, quantity-carrying leg into it.** ADR 0021 says
+  "along quantity-carrying legs" but does not say how far. A direct leg is the reading that keeps
+  ADR 0021 §3's hand-derived `input.json` row (`store_1`'s read control does not feed, `consumer_1`'s
+  drawn one does) and does not double-count a component upstream of another. A "replicating
+  process" is any node with `output_mode: replicate` legs to both components.
+- **Closure counts components only.** ADR 0021 §3 gives `closed_loop.json` closure 1.000, so the
+  heat sink is not counted. The old fraction counted every non-module node. Three assertions in
+  `test_giannantoni.c` pinned the old numbers. ADR 0021's Consequences require revising them in
+  this PR, and they now assert closure 1, with the reason in a comment:
+  `test_ordinality_invariant_under_respelling` (2/3 → 1, below → at maximum) and
+  `test_sink_is_never_closed` (2/3 → 1, 4/5 → 1). The latter is retired with ADR 0015's step in
+  `mop-generative-empower`.
+- **FR-ORD-004 stays `planned`.** The report labels closure a proxy. But `gia_generate`, the ADR 0015
+  heuristic, still chooses what to close from the cycle scan, so closure is not yet "deciding
+  nothing". That changes when `mop-generative-empower` replaces the step.
+- **IF-OUT-003 stays `planned`.** Its `ordinality`, `maximum_ordinality` and `closure (proxy)`
+  lines are written now. Its `harmony.<construction>: <verdict>` lines need FR-OUT-003 (W8).
+
+### `mop-generative-empower`
+
+- **"Total empower" is the sum of the components' empower at `t_end`.** ADR 0021 §2 says "the total
+  empower at `t_end` with the emergy pass" but does not say over what. The sum leaves habitat out,
+  for the reason ADR 0021 §1 gives: a sink's accumulation is outside the system [10]. It is
+  documented in `engine.h`.
+- **A tie is within 1e-9 relative, not exact equality.** The emergy pass sums in an order that
+  depends on the file. Exact comparison would let rounding break a tie differently when the nodes
+  are reordered, which would violate T-ORD-06's byte-identical output.
+- **Two refusals the ADR does not spell out.** The step returns the seed unchanged, and says so, in
+  two cases: when the emergy pass cannot evaluate any candidate (NFR-LIM-001), and when
+  `#sources + #sinks` additions have not reached Maximum Ordinality. The second cannot happen by the
+  ADR's termination argument; it is a guard, not a behaviour.
+- **The added pathway carries `"flow_type": "max_empower_pathway"`** so a reader of the output can
+  see which pathways the step added. The loader ignores `flow_type`.
+- **vv-plan §5 dispositions carried out.**
+  - `test_emergent_quality_closes`, `test_sink_is_never_closed` and
+    `test_emergent_quality_is_a_component` are retired.
+  - `test_generative` and `test_control_does_not_close_a_pathway` keep their mode assertions. Their
+    ADR 0015 ones ("one component emerged", `emerged_from`) are revised to ADR 0021's: no component
+    is added, and the added pathway is named.
+  - `test_emergence_is_order_invariant` (T-ORD-06) now compares the appended pathways.
+  - `test_mop_threads.c` detects growth by the new pathway label.
+- **`label.generative_step` becomes `implemented`** (E7), and `docs/giannantoni_assessment.md`'s rows
+  E6–E8 are updated to match.
+
+### `kernel-method-label`
+
+- **T-KER-01 is `tests/kernel_method.sh` (`make test-kernel-method`, in CI).** The catalogue calls it
+  a "kernel regression". The golden-file regression suite cannot express "two runs are
+  byte-identical, and one prints a notice", and ADR 0018 forbids adding golden files. Two examples
+  (`decay_model`, `diffusion_model`) are run under both spellings. The test also checks the
+  round-trip that ADR 0022 decision 4 promises.
+- **An unknown `method` string still silently becomes `auto`.** This is unchanged, and out of this
+  task's scope. Note that before this change `"expm"` fell into exactly that path: the red run's
+  serialisation check caught it.
+
+### `mop-network-beta`
+
+- **"Carried from component i to component j" means a direct pathway.** R8 does not say how far
+  emergy is followed. A pathway through a module, or through intermediate components, would need a
+  rule for splitting the module's output emergy among its products. The sources give no such rule,
+  and the engine already has one for direct pathways (the pass's partition and replicate rules). So
+  a couple is related exactly when a direct pathway `i → j` moves quantity: not a used leg, and not
+  a read control. Several such pathways sum.
+- **A loop-closing pathway carries what rides on it.** The emergy pass zeroes back edges in its own
+  accounting, so that a loop does not create emergy. Applying the same rule here would make one
+  pathway of every 2-cycle "unrelated", which contradicts R8's "couples with no pathway". So
+  `gia_emergy_carried` (added to IF-API-005) shares each origin's empower across all of its
+  quantity-carrying pathways.
+- **β by finite difference.** `β = α' = E'/E`. The derivative is a central difference with
+  `h = 1e-5·max(1, t)`, or a second-order forward difference at `t < h`. T-MOP-10 checks it by its
+  defining equation, `∫β = Δα`, to 1e-6. A pathway carrying no emergy has no logarithm, so it is
+  `GIA_E_RANGE`.
+- **The network form refuses k ≠ 1** (`GIA_E_UNSUPPORTED`, exit 2). FR-MOP-008 defines β with
+  k = 1.
+- **The per-seed verdict table** (PLAN §7, T-HARM-2b) needs the harmony detector. It lands with
+  `mop-harmony-detector`.
+
+### `mop-harmony-detector`
+
+- **The §6 perturbation scales each couple; it does not add to it.** Read as an added constant,
+  `β_h + δξ` changes the *shape* of an affine-power β. The First Equation's α is β's integral, and
+  under that reading the ratios of α would no longer equal the ratios of β. The First Equation
+  would then read `absent`, which contradicts R7's derived verdict (`transported`). So
+  `β_δ = β_h·(1 + δξ)` scales `a` and `b` together. ξ is the §6 LCG's pair in `[−1, 1]²`, and the
+  input's own residual is taken from `β(1)`.
+- **The EQS construction reads the root as a complex number.** [23 Eq 7.1–7.5] give relational
+  coordinates, while [23 Eq 5.6.5] compares complex ratios. With `ref = {1, 0, 0}`, `ψ₁ = 1` and
+  `A = 1`, `gia_eqs` returns `ρ = e^{E B}` and `φ = E C`. From these the construction recovers the
+  root `B + C j + C k` and writes it as `B + i√2 C = e^{i√2ψ_l}`. The map preserves the modulus.
+  With `ψ₂ = 1` and `ε = −2π`, `√2ψ_l = 2π(l−1)/(N−1)`. No source gives this mapping. It is the
+  construction under which [23 §8 ii]'s "assumed harmony" can be put to the detector at all, and it
+  reads `imposed` as R7 says.
+- **T-HAR-01's symbol rule is "no undefined reference".** The detector is itself named
+  `gia_harmony_*`, so "nm mop.o lists no `gia_harmony_*`" cannot be meant literally. The rule
+  `check_symbols.sh` enforces is that mop, mop_seed, relational, idc and engine have no undefined
+  reference to `gia_harmony_assume_*`. `validation.c`'s `gia_validate_harmony` checks the
+  constructor's invariants and does call it, so it is not on that list. `bin/test_mop_emergence`
+  is linked from `mop.o` and `relational.o` alone.
+- **What the run report evaluates.** It evaluates the three constructions at N = the seed's
+  component count, and only for N ≥ 3. It also observes the network's Matrioska on the reference
+  row, where a row couple with no pathway makes it `absent`.
+  `docs/results/harmony_verdicts.md` records each example's lines. `tests/mop_cli.sh` reads the
+  table and checks the report against it. Both examples' networks are "not evaluated", because
+  their source has no `quality_input`.
+- **IF-API-004 now lists what was built.** `gia_mop_network_beta(…, gia_beta *)` became
+  `gia_mop_network(…, gia_matrioska *alpha, gia_matrioska *beta)`, in `mop_seed.h`
+  (`mop-network-beta`). The three constructions are added. `api_called_selftest.sh` counts 33.
+- **The MOP CSV's `R_H` column** is the residual of the reference row at each time. The cell is
+  empty where the residual is undefined: N < 3, a row couple unrelated, or `α₁₂ = 0` at `t = 0`.
+
 ---
 
 ## [Revision 3] — 2026-10-09

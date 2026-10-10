@@ -28,6 +28,42 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **The harmony constructor moves to `src/harmony.c`, renamed `gia_harmony_assume_*`** (FR-HAR-004).
+  - Seven functions are renamed: `gia_ordinal_root`, `gia_harmony_init`, `_free`, `_at`,
+    `_reconstruct`, `_row_residual` and `_reduction_residual` each become
+    `gia_harmony_assume_<name>`.
+  - Its output stays labelled `assumed`.
+  - No solver or detector calls it (`check-symbols`, T-HAR-01).
+
+- **The kernel's matrix-exponential method is `"expm"`** (FR-KER-001, ADR 0022).
+  - `"incipient"` still loads. It runs the same code path, with byte-identical output, and now prints
+    one notice per load on stderr saying it is the matrix exponential and naming `expm`.
+  - A model serialises back the spelling it was loaded with.
+  - The schema enum gains `"expm"`.
+  - `make test-kernel-method` (T-KER-01) is in CI.
+
+- **ADR 0015's emergent component is retired.** The generative step no longer adds an
+  `emergent_quality_N` node with `emerged_from` and `ordinality_rank`, and it no longer adds
+  `ordinal_ascent` or `emergent_feedback_loop` legs. Its tests are retired or revised, as vv-plan.md
+  §5 sets out.
+
+- **The generative step follows the Maximum Em-Power Principle** (FR-ORD-005, ADR 0021 §2,
+  [02 Eq 5.3]). Below Maximum Ordinality it adds one `linear` pathway at a time, from a sink SCC to a
+  source SCC of the component graph. Each time it takes the candidate that maximises total empower
+  at `t_end`, and it stops at strong connectivity.
+  - `input.json` now gains `consumer_1 → store_1`.
+  - `closed_loop.json` is already at maximum and gains nothing.
+  - Closure no longer decides anything (FR-ORD-004).
+  - `label.generative_step` is now `implemented`.
+
+- **`gia_ordinality` is deprecated, and returns `gia_closure`**: the fraction of components (habitat
+  excluded) on a closed pathway. Two consequences:
+  - `closed_loop.json` reads closure 1.000 (it was 0.800 with the heat sink counted), and is at
+    Maximum Ordinality.
+  - Two disjoint 2-cycles have closure 1 but are not at maximum.
+
+  `label.ordinality` is now `implemented`, and `label.closure` is `proxy`.
+
 - **Drift on network trajectories, from the sources: solution drift and output-projection drift** (PLAN.md W2 `idc-drift-coupled`, FR-IDC-011, FR-IDC-014, IF-OUT-001). Breaking for consumers of `giannantoni_sim`'s CSV.
   - **Removed:** the `_idc`, `_tdc`, `_drift` and `psi_network` columns. They applied the drift identity to a per-node φ the engine invented, which was decoupled from `_Q` (PLAN E4).
   - **Added:** a `_drift_proj` column per node, the [09 Eq 13] output-projection drift `(Q'' − Q'²/Q)·Δ²/2` along the solved trajectory. `Q''` is exact (`A²x`) for a constant flow matrix, and Richardson-extrapolated otherwise (numerics N7).
@@ -55,6 +91,75 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **The Guix toolchain pack is no longer attached to releases.** At ~450 MB it is produced on demand instead (`guix.yml`, run by hand with `pack-toolchain`). Releases still ship the Guix-built `gssk.wasm`, its hashes and the recipe.
 
 ### Added
+
+- **The harmony detector** (FR-HAR-001…003, FR-OUT-003, VAL-07).
+  - `gia_harmony_residual` computes R_H of [23 Eq 5.6.5]. `gia_harmony_verdict` runs vv-plan.md
+    §6's procedure, and `gia_harmony_observed` gives the verdict for an observed Matrioska.
+  - Three constructions give the verdicts R7 derives: First Equation `transported`, Second Equation
+    `imposed`, EQS `imposed`.
+  - The run report prints one `harmony.<construction>: <verdict>` line per construction.
+  - The MOP CSV gains its `R_H` column.
+  - `docs/results/harmony_verdicts.md` records each example seed's verdicts, and `mop_cli.sh` holds
+    the report to it.
+  - `bin/test_mop_emergence` is linked without `harmony.o` (`make test-mop-emergence`, in CI).
+
+- **Boundary conditions from the network** (FR-MOP-008, PLAN R8).
+  - `gia_mop_network` sets `e^{α_ij}` to the emergy that the direct pathways `i → j` carry
+    (`gia_emergy_carried`, using the emergy pass's partition and replicate rules).
+  - It derives `β_ij = α'` by [23 Eq 5.5.2] with k = 1.
+  - Couples with no pathway are unrelated.
+  - `"beta": "network"` with k = 1 now writes the MOP CSV. With any other k it is refused.
+
+- **Ordinality as ADR 0021 defines it** (FR-ORD-001…003).
+  - `gia_ordinality_record` classifies each couple of components as 2/2 (mutual reachability along
+    quantity-carrying legs), 2 (both feed one interaction module) or ½ (co-products of one
+    replicating process), and counts them as `{k, n₂₂, n₂, n½, n_unrelated}`.
+  - `gia_at_maximum_ordinality` now means every couple is 2/2: strong connectivity of the component
+    graph.
+  - The run report prints `ordinality:`, `maximum_ordinality:` and `closure (proxy):`.
+
+- **The seed's `mop` block, `--mop-out`, and exit codes** (IF-JSON-001, IF-CLI-001, FR-OUT-002,
+  NFR-ROB-001).
+  - `gia_mop_seed_load` parses the block strictly. Each of these is a load error naming its JSON path:
+    an unknown or repeated key, a wrong type, a non-component id, a duplicate couple, and samples
+    that do not start at 0 or do not increase.
+  - `giannantoni_sim --mop-out PATH` writes `time` and each couple's `_re`/`_im`, in
+    `(from, to)` id order.
+  - The CLI exits 1 on a load error and 2 on a refusal. A refusal's reason, naming its source, goes
+    to stderr.
+  - `tests/mop_fuzz/` is a committed corpus of 47 hostile and valid seeds (T-ROB-01).
+  - `make bench-mop` times N = 64 at 1,000 output times against NFR-PERF-001's 2 s bound.
+
+- **The Second Fundamental Equation's printed solution** (FR-MOP-005, [23 Eq 6.1–6.3]).
+  `gia_mop_second` evaluates `A(t) = α₁₂(0)·w + ln(c₁ + c₂t)`, the specular
+  `B = [[A, −A], [−A, A]]`, and the Matrioska row `r₁ⱼ = (e^B)₁₁ w^{j−2}`, with `e^B` in closed form.
+  `w = e^{2πi/(N−1)}` is this kernel's reading of the undefined ordinal power in Eq 6.3 (PLANLOG).
+  `c₁ + c₂s ≤ 0` on `[0, t]` is refused. T-MOP-07 checks that `u = Ȧ` solves `u' + u² = 0`.
+
+- **The EQS operative form, `gia_eqs`** (PLAN.md W5 `mop-eqs`, FR-MOP-006). It evaluates `ρ₁ⱼ`, `φ₁ⱼ` and `θ₁ⱼ` of [23 Eq 7.1–7.5] for each root `l`, computing the three brackets as the relational product of the De Moivre root `(B, C, C)` with the reference couple's coordinates. Unequal j and k angles are refused, because [23 Eq 7.4] writes one angle for both (erratum X11). The construction is tagged as harmony-assuming [23 §8 ii]. A validation test reproduces the source's printed brackets from the table product over 1000 seeded draws, to 4.4e-16 (VAL-02).
+
+- **The Relational Space algebra, `rel_*`, and relational-valued couples** (PLAN.md W5 `mop-relational-algebra`, FR-REL-001…004, FR-MOP-007; ADR 0020).
+  - **Product.** `rel_mul` is the product table of [23 Eq 5.1.3–5.1.5] as printed, which is commutative and non-associative. `rel_mul3` evaluates left to right, so `(j∘j)∘k = −k` while `j∘(j∘k) = k`.
+  - **Exponential.** `rel_exp` is the De Moivre form [23 Eq 5.1.2], never a power series.
+  - **Roots and powers.** `rel_root` and `rel_root_pow` build the ordinal roots and raise them by multiplying the angle, so that `r^{N−1} = 1`. `rel_mul_pow` is the table power, where the same cube is `(0.540721, 0, −0.665721)` (erratum X10).
+  - **Relational couples.** `gia_mop_couple_rel` solves the First Equation componentwise on relational elements for k = 1. It refuses k > 1, because the sources define no division or non-integer power in this algebra.
+
+- **The MOP's First Fundamental Equation, `gia_mop_*`** (PLAN.md W4 `mop-first-equation`, FR-MOP-001…004, NFR-NUM-001…006). New `include/mop.h` and `src/mop.c` solve `(d̃/dt)^k α = β` per couple, with `α(0) = 0`. The solution is the one derived from [23 Eq 5.5.6], `α = {(1/k)∫β^{1/k}}^k`; the printed [23 Eq 5.5.7–5.5.8] leave residuals of 1.25 and −0.625 (erratum X1, ADR 0019).
+  - **Affine-power β:** numerics N1's unified form. It holds 1e-12 relative error down to `bt/a = 1e-11`, where the naive closed form loses 5.9e-5, and is continuous through `b = 0`.
+  - **Sampled β:** adaptive Gauss–Kronrod 7–15 on a phase continued across the negative real axis.
+  - **`gia_mop_solve`:** builds the Matrioska, marking couples with no boundary condition as unrelated rather than zero.
+  - **Domain:** the First Equation's domain (FR-MOP-002) is refused by name. Overflow is `GIA_E_RANGE`, never inf, and nothing is clamped.
+  - **`gia_quad_gk15`:** the integrator, exposed so that its error estimate and its refusal are testable.
+
+- **The ordinal forms of the emergy processes, and the circle product** (PLAN.md W3 `emergy-ordinal-forms`, FR-EM-005, FR-EM-006).
+  - `gia_oform_*` builds co-production as a binary (a column of two `Em(u)` branches), interaction as a duet (a row `[Em(u₁), Em(u₂)]`), and feedback as the specular duet-binary `[[a₁, a₂], [a₂, a₁]]` [22 Eq 6–8].
+  - `gia_circle_product` keeps every pair of factors, so `(a₁; a₂) ∘ [b₁, b₂] = [(a₁b₁; a₂b₁), (a₁b₂; a₂b₂)]` before reduction [06b Eq 2]. `l ∘ l` is the du-et `[l, l]`, not `l²` [02 Eq 14.11.5].
+  - `gia_circle_reduce` is the cardinal reduction that maps each pair to its product (PLAN R12).
+
+- **Emergy source terms, the global balance, and limits that refuse rather than truncate** (PLAN.md W3 `emergy-source-terms`, FR-EM-004, FR-EM-007, NFR-LIM-001).
+  - `gia_emergy_source_term` returns a process's equivalent source term, emergy out minus emergy in [02 Eq 3.6–3.17]: `(n−1)·Em(u)` for a co-production with n products, 0 for a partition, and 0 for an interaction whose inputs are all drawn.
+  - `gia_emergy_global_balance` and `gia_emergy_balance_solve` evaluate [02 Eq 3.21] and solve it for the source terms. On the totals of [02 Fig. 3.4] they reproduce `Φ_D = 30,000` and `Φ_E = 15,000` (VAL-04).
+  - **Fixed:** the emergy pass silently dropped a node's inflows past the 64th, and ignored co-production ancestry past 64 nodes. It now refuses with `GIA_E_LIMIT` (`gia_emergy_check_limits`), `gia_emergy_at` returns false, and the trajectory CSV leaves the emergy cells empty.
 
 - **The nonlinear equation of [02 Eq 14.10.1], `gia_nl1410_roots`** (PLAN.md W2 `idc-nonlinear-14-10`, FR-IDC-009). Substituting `F = e^{ut}` reduces `F·(d̃²/dt²)F² + A F²·(d̃/dt)F + B F³ = 0` to `4u² + Au + B = 0`. The solutions are its two roots, not the "triplet" [02 Eq 14.10.2] prints (erratum X8). The test forms the equation's incipient residual with `gia_idc_of` for each root, and checks that no third candidate solves it.
 

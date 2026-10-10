@@ -453,9 +453,9 @@
         },
         "method": {
           "type": "string",
-          "enum": ["auto", "euler", "rk4", "incipient"],
+          "enum": ["auto", "euler", "rk4", "expm", "incipient"],
           "default": "auto",
-          "description": "Integration method. auto: kernel selects incipient where eligible (all-constant/linear/interaction edges), RK4 otherwise, with dual-solver verification. euler/rk4: force specific solver (debugging). incipient: force IDC (testing only — falls back to RK4 for limit/threshold edges)."
+          "description": "Integration method. auto: kernel selects the matrix exponential where eligible (all-constant/linear/interaction edges), RK4 otherwise, with dual-solver verification. euler/rk4: force specific solver (debugging). expm: force the matrix exponential, a Pad\u00e9 (3,3) exp(A dt) with limit edges linearised \u2014 a classical method, not Giannantoni's incipient calculus (ADR 0022). incipient: deprecated alias of expm, byte-identical output; loading it prints one notice on stderr."
         },
         "solver_tolerance": {
           "type": "number",

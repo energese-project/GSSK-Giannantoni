@@ -17,14 +17,14 @@ prints for the same output (`label.<name>:` lines in its run report, checked by 
 | # | Feature | What the code does | Label |
 |---|---|---|---|
 | E1 | "A second engine implementing IDC and MOP" | See E2–E8 | Overclaim — withdrawn from README |
-| E2 | Kernel `"method": "incipient"` (`src/gssk.c`) | Padé (3,3) `expm(A·dt)`; `limit` linearised | `classical` |
+| E2 | Kernel `"method": "incipient"` (`src/gssk.c`) | Padé (3,3) `expm(A·dt)`; `limit` linearised. Renamed `"expm"`, with `"incipient"` a deprecated alias that prints a notice (ADR 0022, `kernel-method-label`) | `classical` |
 | E3 | MOP engine trajectories `_Q` | `gia_matrix_exp`, `Q(t) = exp(A t) Q(0)` | `classical` |
 | E4 | `_idc`, `_tdc`, `_drift`, `psi_network` | Removed (`idc-drift-coupled`). They applied the drift identity to a per-node φ invented by `phi_for_node`, decoupled from `_Q`. Replaced by solution drift (exactly 0 for a constant flow matrix, refused otherwise, FR-IDC-011) and `_drift_proj`, the `[09 Eq 13]` output-projection drift of the solved trajectory (FR-IDC-014) | `implemented` |
 | E4b | Drift from `φ = ln Q_i` | Not built, and must not be: it would report drift for constant-coefficient networks, contradicting `[06 §4 (i)]` | — |
-| E5 | Harmony Relationships | Constructed from roots of unity, then checked against the construction | `assumed` |
-| E6 | Ordinality | Fraction of components on a cycle; not `[22 Eq 11.1]` | `proxy` |
-| E7 | Generative step (`gia_generate`) | ADR 0015 graph heuristic; not `[02 Eq 5.3]` or `[22 Eq 2]` | `illustrative` |
-| E8 | First and Second Fundamental Equations | Absent | absent |
+| E5 | Harmony Relationships | The constructor (`src/harmony.c`, `gia_harmony_assume_*`) builds them from roots of unity: `assumed`. The detector (`gia_harmony_residual`, `gia_harmony_verdict`, [23 Eq 5.6.5]) decides them, and the report prints one verdict per construction: First Equation `transported`, Second Equation and EQS `imposed` (`mop-harmony-detector`; [results](results/harmony_verdicts.md)) | constructor `assumed`; verdicts `implemented` |
+| E6 | Ordinality | The `{k, n₂₂, n₂, n½, n_unrelated}` record and Maximum Ordinality as strong connectivity, `[22 Eq 6–8, 11.1]` (ADR 0021, `mop-ordinality`). The old fraction of components on a cycle survives only as `closure`, which decides nothing | `implemented` (`closure`: `proxy`) |
+| E7 | Generative step (`gia_generate`) | One pathway at a time from a sink SCC to a source SCC, choosing by maximum total empower, `[02 Eq 5.3]` (ADR 0021 §2, `mop-generative-empower`). ADR 0015's emergent component is retired | `implemented` |
+| E8 | First and Second Fundamental Equations | `mop.h`: `gia_mop_couple`/`gia_mop_solve` (`[23 Eq 5.5.6]`, ADR 0019), `gia_mop_second` (`[23 Eq 6.1–6.3]`) | `implemented` (the Second Equation: `assumed`, λ null) |
 | — | `_Em`, `_Tr`, `emergy_excess` | Odum's emergy algebra, `[02 p. 23 rules 1–4]` | `implemented` |
 | — | `gia_idc_amplitude`, `gia_drift`, `gia_incipient_fractional` on a given φ | `(φ')ⁿ`, Bell polynomial, all q branches — Giannantoni's own definitions `[02 Eq 14.8.2, 14.9.5]`, `[06 Eq 3.8–3.9]` | `implemented` (the function; no longer applied to an invented network φ) |
 

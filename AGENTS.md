@@ -5,7 +5,7 @@ Welcome, fellow agent. This document provides the necessary context and standard
 ## 🎯 Project Overview
 This repository holds two engines over Odum's Energy Systems Language, which share a build and a JSON parser and nothing else ([ADR 0011](docs/adr/0011-two-engines-declared-lossy-projection.md)):
 
-- **The GSSK kernel** (`include/gssk.h`, `src/gssk.c`) simulates systems as coupled ordinary differential equations: Euler, RK4, adaptive Dormand–Prince, or the matrix exponential. Its `"incipient"` method is the **classical** matrix exponential under an old name. It is not Giannantoni's incipient calculus (PLAN.md §2 E2).
+- **The GSSK kernel** (`include/gssk.h`, `src/gssk.c`) simulates systems as coupled ordinary differential equations: Euler, RK4, adaptive Dormand–Prince, or the matrix exponential. Its matrix-exponential method is `"expm"`; `"incipient"` is a deprecated alias for it, kept under its old name, and prints a notice (ADR 0022). Either way it is the **classical** matrix exponential, not Giannantoni's incipient calculus (PLAN.md §2 E2).
 - **The Giannantoni engine** (`include/engine.h`, `src/engine.c`, `bin/giannantoni_sim`) is where Giannantoni's Incipient Differential Calculus (IDC) and Maximum Ordinality Principle (MOP) are being built, test-first from the sources ([PLAN.md](PLAN.md)). Much of what it reports today is classical, assumed, a proxy or illustrative, and every output says which. Do not describe it, or the matrix exponential, as "implementing IDC" ([docs/giannantoni_assessment.md](docs/giannantoni_assessment.md#status-of-record-planmd-2)).
 
 ## 🛠 Tech Stack

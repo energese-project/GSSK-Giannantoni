@@ -172,8 +172,13 @@ typedef enum {
  *   constant/linear/interaction; falls back to RK4 for limit/threshold edges.
  *   Runs both solvers in parallel and cross-validates each step.
  *
- * GSSK_METHOD_INCIPIENT: force IDC. Eligible edges use matrix-exponential;
- *   ineligible edges fall back silently to RK4 sub-step.
+ * GSSK_METHOD_EXPM ("expm"): force the matrix exponential, a Padé (3,3)
+ *   exp(A dt), with limit edges linearised. This is a classical method, not
+ *   Giannantoni's incipient calculus (ADR 0011, ADR 0022).
+ *
+ * GSSK_METHOD_INCIPIENT ("incipient"): a deprecated alias of GSSK_METHOD_EXPM,
+ *   with the same value and byte-identical output; loading it prints one
+ *   notice on stderr (ADR 0022).
  *
  * GSSK_METHOD_EULER / GSSK_METHOD_RK4: classic numerical methods.
  *   Use for debugging or when IDC overhead is undesirable.
@@ -183,7 +188,8 @@ typedef enum {
   GSSK_METHOD_EULER,
   GSSK_METHOD_RK4,
   GSSK_METHOD_INCIPIENT,
-  GSSK_METHOD_ADAPTIVE /**< Phase 2: DOPRI5 5(4) explicit + PI step-size control */
+  GSSK_METHOD_ADAPTIVE, /**< Phase 2: DOPRI5 5(4) explicit + PI step-size control */
+  GSSK_METHOD_EXPM = GSSK_METHOD_INCIPIENT /**< ADR 0022: the documented name */
 } GSSK_Method;
 
 /**

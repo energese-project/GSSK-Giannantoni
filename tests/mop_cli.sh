@@ -71,7 +71,7 @@ for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.js
 
     # The reported quantities that are not CSV columns are labelled too.
     st=0
-    for q in ordinality harmony generative_step solution_drift; do
+    for q in ordinality maximum_ordinality closure harmony generative_step solution_drift; do
         grep -q "^label\.$q: " "$tmp/$name.out" || { echo "    no label for $q" >&2; st=1; }
     done
     ok "$name: reported quantities labelled" "$st"
@@ -80,7 +80,7 @@ for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.js
     # labelled as an implementation of Giannantoni's calculus.
     st=0
     awk -F': ' '/^label\..*_Q: / && $2 != "classical" { bad = 1 }
-                /^label\.ordinality: / && $2 != "proxy" { bad = 1 }
+                /^label\.closure: / && $2 != "proxy" { bad = 1 }
                 /^label\.harmony: / && $2 != "assumed" { bad = 1 }
                 END { exit bad }' "$tmp/$name.out" || st=1
     ok "$name: classical, proxy and assumed outputs say so" "$st"
@@ -132,6 +132,100 @@ for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.js
     done
     ok "$name: two runs are byte-identical (report, CSV, graph)" "$st"
 done
+
+# ---------------------------------------------------------------------------
+# Verifies: FR-ORD-002, FR-ORD-003, FR-ORD-004, IF-OUT-003 (T-ORD-03)
+#
+# The report carries ADR 0021's record and verdict, and closure only as a proxy.
+# The values are ADR 0021 §3's table, hand-derived there: input.json is
+# {2, 0, 0, 0, 1}, below, closure 0.000; closed_loop.json is {3, 3, 0, 0, 0}, at
+# maximum, closure 1.000. The catalogue mutation "gate on closure" is
+# closed_loop's old 0.800 with the sink counted.
+# ---------------------------------------------------------------------------
+for spec in "input:{2, 0, 0, 0, 1}:no:0.000" "closed_loop:{3, 3, 0, 0, 0}:yes:1.000"; do
+    name=${spec%%:*}; rest=${spec#*:}; rec=${rest%%:*}; rest=${rest#*:}
+    max=${rest%%:*}; clo=${rest#*:}
+    run "$name" "examples/giannantoni/$name.json"
+    st=0
+    grep -qxF "ordinality: $rec" "$tmp/$name.out" || { grep '^ordinality' "$tmp/$name.out" >&2 || true; st=1; }
+    grep -qxF "maximum_ordinality: $max" "$tmp/$name.out" || st=1
+    grep -qxF "closure (proxy): $clo" "$tmp/$name.out" || { grep '^closure' "$tmp/$name.out" >&2 || true; st=1; }
+    ok "$name: ordinality $rec, maximum $max, closure (proxy) $clo" "$st"
+done
+
+# ---------------------------------------------------------------------------
+# Verifies: FR-OUT-002, IF-CLI-001 (T-OUT-03)
+#
+# icd.md IF-CLI-001: exit 0 on success, 1 on a load or validation error, 2 on a
+# refusal, with the reason on stderr. FR-OUT-002: the reason names the feature and
+# its source. The seeds are the T-ROB-01 corpus's; the expected status and the
+# source each refusal must name are the interface's, by hand.
+# ---------------------------------------------------------------------------
+mop_run() {  # mop_run <corpus case> : $tmp/mop.{out,err,csv}, status in $tmp/mop.rc
+    rm -f "$tmp/mop.csv"
+    set +e
+    "$SIM" "tests/mop_fuzz/$1.json" --steps 3 --csv "$tmp/mopt.csv" --out "$tmp/mop.json" \
+        --mop-out "$tmp/mop.csv" >"$tmp/mop.out" 2>"$tmp/mop.err"
+    echo $? > "$tmp/mop.rc"
+    set -e
+}
+for spec in "ok_affine:0:" "ok_full:0:" \
+            "ok_refused_domain:2:FR-MOP-002" "ok_network:2:FR-MOP-008" \
+            "ok_refused_second:2:FR-MOP-005" "ok_refused_eqs_x11:2:X11" \
+            "bad_k_negative:1:mop.k" "bad_couple_module_free_sink:1:mop.beta[0]" \
+            "bad_truncated_json:1:" "ok_none:1:--mop-out"; do
+    case_=${spec%%:*}; rest=${spec#*:}; want=${rest%%:*}; names=${rest#*:}
+    mop_run "$case_"
+    st=0; [ "$(cat "$tmp/mop.rc")" -eq "$want" ] || { echo "    exit $(cat "$tmp/mop.rc"), want $want" >&2; st=1; }
+    if [ "$want" -ne 0 ]; then
+        [ -s "$tmp/mop.err" ] || { echo "    nothing on stderr" >&2; st=1; }
+        [ -z "$names" ] || grep -qF -- "$names" "$tmp/mop.err" || { echo "    stderr does not name $names:" >&2; cat "$tmp/mop.err" >&2; st=1; }
+        [ ! -e "$tmp/mop.csv" ] || { echo "    a MOP CSV was written" >&2; st=1; }
+    fi
+    ok "$case_: exits $want${names:+, stderr names $names}" "$st"
+done
+# A refusal says "refused"; a load error does not.
+mop_run ok_refused_domain; st=0; grep -q 'refused' "$tmp/mop.err" || st=1
+mop_run bad_k_negative;    grep -q 'refused' "$tmp/mop.err" && st=1
+ok "a refusal says refused on stderr; a load error does not" "$st"
+
+# IF-OUT-002 through the CLI: the header, and the run report's label.
+mop_run ok_full
+st=0
+[ "$(head -n 1 "$tmp/mop.csv")" = "time,a__b_re,a__b_im,R_H" ] || { head -n 1 "$tmp/mop.csv" >&2; st=1; }
+[ "$(wc -l < "$tmp/mop.csv" | tr -d ' ')" -eq 5 ] || st=1
+grep -qx 'label.mop_alpha: implemented' "$tmp/mop.out" || st=1
+grep -qx 'label.second_equation: assumed' "$tmp/mop.out" || st=1
+ok "--mop-out: IF-OUT-002's header, 1 + steps rows, labelled" "$st"
+
+# ---------------------------------------------------------------------------
+# Verifies: FR-OUT-003, IF-OUT-003, FR-HAR-002 (T-OUT-02)
+#
+# One `harmony.<construction>: <verdict>` line per evaluated construction, verbatim from the
+# detector, and as docs/results/harmony_verdicts.md records for each seed. A "not evaluated" row
+# means the report has no harmony line for that construction.
+# ---------------------------------------------------------------------------
+st=0; rows=0
+grep '^| `examples/' docs/results/harmony_verdicts.md \
+    | awk -F'|' '{ gsub(/[ `]/, "", $2); gsub(/^ +| +$/, "", $3); gsub(/^ +| +$/, "", $4); print $2 "|" $3 "|" $4 }' \
+    > "$tmp/verdicts"
+while IFS='|' read -r seed key verdict; do
+    rows=$((rows + 1))
+    run hv "$seed"
+    case "$verdict" in
+        "not evaluated")
+            ! grep -q "^harmony\.$key: " "$tmp/hv.out" || { echo "    $seed: $key has a verdict, the table says not evaluated" >&2; st=1; } ;;
+        *)
+            grep -qx "harmony\.$key: $verdict" "$tmp/hv.out" || { echo "    $seed: harmony.$key is not $verdict" >&2; st=1; } ;;
+    esac
+done < "$tmp/verdicts"
+[ "$rows" -ge 8 ] || { echo "    only $rows table rows read" >&2; st=1; }
+ok "harmony verdicts match docs/results/harmony_verdicts.md ($rows rows)" "$st"
+st=0
+for v in $(sed -n 's/^harmony\.[a-z_]*: //p' "$tmp/hv.out"); do
+    case "$v" in imposed|transported|present|absent) ;; *) echo "    verdict '$v'" >&2; st=1 ;; esac
+done
+ok "every harmony verdict is one of FR-HAR-002's four words" "$st"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "ALL PASS"; else echo "FAILURES PRESENT"; fi

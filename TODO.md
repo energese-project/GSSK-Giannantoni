@@ -582,7 +582,8 @@ general-purpose ODE library. The wedge is:
 > **Constructed, not derived (PLAN.md §2 E5).** The items checked below build the matrix *from* the
 > roots of unity and then verify the invariants of that construction, so they are tests of the
 > constructor, not evidence that harmony emerges. The report labels it `assumed`. Harmony verdicts
-> computed from the Fundamental Equations are PLAN W8 (`mop-harmony-detector`).
+> computed from the Fundamental Equations are the detector's (W8 `mop-harmony-detector`, done):
+> `harmony.<construction>: <verdict>` lines, and docs/results/harmony_verdicts.md.
 
 - [x] N x N matrix generated from one reference couple by the `(N-1)` ordinal
       roots of unity.
@@ -823,12 +824,15 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
 - [x] W2 `idc-taylor` — incipient Taylor projection, [09] validation (FR-IDC-010, VAL-01)
 - [x] W2 `idc-nonlinear-14-10` — [02 Eq 14.10.1] (FR-IDC-009)
 - [x] W2 `idc-drift-coupled` — solution drift and output-projection drift (FR-IDC-011, 014)
-- [ ] W3 `emergy-source-terms`, `emergy-ordinal-forms`
-- [ ] W4 `mop-first-equation`
-- [ ] W5 `mop-relational-algebra`, `mop-eqs`
-- [ ] W6 `mop-second-equation`
-- [ ] W7 `mop-ordinality`, `mop-generative-empower`
-- [ ] W8 `mop-harmony-detector`, `mop-network-beta`, `kernel-method-label`
+- [x] W3 `emergy-source-terms`, `emergy-ordinal-forms`
+- [x] W4 `mop-first-equation`, `mop-seed-cli` — the First Equation, the seed's `mop` block, `--mop-out`, exit codes (the MOP CSV's `R_H` column follows with W8 `mop-harmony-detector`)
+- [x] W5 `mop-relational-algebra`, `mop-eqs`
+- [x] W6 `mop-second-equation`
+- [x] W7 `mop-ordinality` — the Ordinality record, Maximum Ordinality as strong connectivity, closure as a proxy (FR-ORD-001..003)
+- [x] W7 `mop-generative-empower` — one pathway at a time by maximum total empower; ADR 0015's emergent component retired (FR-ORD-004, 005)
+- [x] W8 `kernel-method-label` — `"expm"`, with `"incipient"` a deprecated alias (FR-KER-001, ADR 0022)
+- [x] W8 `mop-network-beta` — e^α from the empower each pathway carries, β by [23 Eq 5.5.2] with k = 1 (FR-MOP-008)
+- [x] W8 `mop-harmony-detector` — the residual [23 Eq 5.6.5], the verdict per construction, the constructor moved to `src/harmony.c` as `gia_harmony_assume_*`, the MOP CSV's `R_H`, and the per-seed verdict table (FR-HAR-001..004, FR-OUT-003)
 
 ## Continuous Concerns
 

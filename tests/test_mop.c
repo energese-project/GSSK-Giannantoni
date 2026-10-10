@@ -15,6 +15,9 @@
 #include "engine.h"
 #include "gia_status.h"
 #include "idc.h"
+#include "mop.h"
+#include "mop_seed.h"
+#include "relational.h"
 
 #include <complex.h>
 #include <float.h>
@@ -22,6 +25,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 /* vv-plan.md §3 */
 #define TOL_CLOSED   1e-12   /* closed form, well-conditioned: relative      */
@@ -921,6 +929,2003 @@ static void test_drift_projection(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 7.2 Emergy algebra in IDC form
+ * ------------------------------------------------------------------ */
+
+/* A source at transformity 1000 feeding a process that sends its output down
+ * n pathways, all replicating (co-production) or all partitioning. */
+static char *fan_seed(int n, const char *mode) {
+    static char buf[16384];
+    int  k, len;
+    len = snprintf(buf, sizeof buf,
+        "{\"nodes\":[{\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,\"quality_input\":1000.0},"
+        "{\"id\":\"proc\",\"type\":\"storage\",\"current_level\":5.0}");
+    for (k = 0; k < n; k++)
+        len += snprintf(buf + len, sizeof buf - (size_t)len,
+                        ",{\"id\":\"out%d\",\"type\":\"storage\",\"current_level\":0.0}", k);
+    len += snprintf(buf + len, sizeof buf - (size_t)len,
+        "],\"edges\":[{\"source\":\"sun\",\"target\":\"proc\",\"weight\":1.0}");
+    for (k = 0; k < n; k++)
+        len += snprintf(buf + len, sizeof buf - (size_t)len,
+                        ",{\"source\":\"proc\",\"target\":\"out%d\",\"weight\":0.5,"
+                        "\"output_mode\":\"%s\"}", k, mode);
+    snprintf(buf + len, sizeof buf - (size_t)len,
+        "],\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "\"generative_mode\":false}}");
+    return buf;
+}
+
+/* Source: [02 Eq 3.6-3.8]; [02 p. 23 rule 2].
+ * Oracle: a co-production with n products creates (n - 1) Em(u), where
+ * Em(u) is the emergy the process receives; a partition creates none. The
+ * process's source term, the model's emergy excess, and each product's
+ * emergy (the whole Em(u)) are checked for n = 2, 3, 4. */
+/* Verifies: FR-EM-002 (T-EM-03) */
+static void test_em_coproduction(void) {
+    int n, all = 1, part = 1;
+
+    printf("\n[T-EM-03] co-production creates (n - 1) Em(u)\n");
+    for (n = 2; n <= 4; n++) {
+        gia_model   m;
+        cJSON      *root;
+        const char *why = NULL;
+        double      phi = -1.0, em[8];
+        if (!load_seed(fan_seed(n, "replicate"), &m, &root)) { all = 0; continue; }
+        if (!gia_emergy_at(&m, 1.0, em, NULL) ||
+            gia_emergy_source_term(&m, 1.0, 1, &phi, &why) != GIA_OK ||
+            !near_c(phi, (n - 1) * em[1], TOL_CLOSED) ||
+            !near_c(gia_emergy_excess(&m, 1.0), (n - 1) * em[1], TOL_CLOSED) ||
+            !near_c(em[2], em[1], TOL_CLOSED)) {
+            printf("    n = %d: phi %.10g excess %.10g want %.10g\n", n, phi,
+                   gia_emergy_excess(&m, 1.0), (n - 1) * em[1]);
+            all = 0;
+        }
+        gia_model_free(&m); cJSON_Delete(root);
+        if (!load_seed(fan_seed(n, "partition"), &m, &root)) { part = 0; continue; }
+        if (gia_emergy_source_term(&m, 1.0, 1, &phi, &why) != GIA_OK ||
+            !near_c(phi, 0.0, TOL_CLOSED * 1e4)) part = 0;
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+    ok("co-production: Phi = excess = (n-1) Em(u), each product Em(u); n = 2,3,4", all);
+    ok("partition: Phi = 0", part);
+}
+
+/* The measured gate of ADR 0017: sun (quality 1) as energy, H (quality 1000)
+ * as a drawn control (use_ratio 0.01), F = k sun H = 0.3 * 10 * 2 = 6. */
+static const char *MEASURED_GATE =
+    "{\"nodes\":["
+    " {\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,\"quality_input\":1.0},"
+    " {\"id\":\"H\",\"type\":\"source\",\"value\":2.0,\"quality_input\":1000.0},"
+    " {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.3}},"
+    " {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0},"
+    " {\"id\":\"heat\",\"type\":\"sink\"}],"
+    "\"edges\":["
+    " {\"source\":\"sun\",\"target\":\"gate\",\"role\":\"energy\"},"
+    " {\"source\":\"H\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0.01},"
+    " {\"source\":\"gate\",\"target\":\"out\",\"weight\":1.0},"
+    " {\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}],"
+    "\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,\"generative_mode\":false}}";
+
+/* Source: [02 Eq 3.9, 3.12, 3.15]; ADR 0017.
+ * Oracle, by hand: Em(u1) = F * 1 = 6 (energy), Em(u2) = s F * 1000 = 60
+ * (drawn control), so Em(y) = Em(u1) + Em(u2) = 66 and the interaction's
+ * source term Phi(u1, u2) = 0. The mutation "Em(y) = k Em1 Em2" would give
+ * 0.3 * 6 * 60 = 108. */
+/* Verifies: FR-EM-004 (T-EM-04) */
+static void test_em_interaction(void) {
+    gia_model   m;
+    cJSON      *root;
+    const char *why = NULL;
+    double      em[5], phi = -1.0;
+
+    printf("\n[T-EM-04] a drawn interaction: Em(y) = Em(u1) + Em(u2), Phi = 0\n");
+    if (!load_seed(MEASURED_GATE, &m, &root)) { ok("measured gate loads", 0); return; }
+    ok("Em(y) = 6 + 60 = 66", gia_emergy_at(&m, 1.0, em, NULL) && near_c(em[3], 66.0, 1e-9));
+    ok("Phi(gate) = 0", gia_emergy_source_term(&m, 1.0, 2, &phi, &why) == GIA_OK &&
+                        fabs(phi) <= 1e-9 * 66.0);
+    ok("a boundary node is not a process: GIA_E_ARG",
+       gia_emergy_source_term(&m, 1.0, 0, &phi, &why) == GIA_E_ARG &&
+       gia_emergy_source_term(&m, 1.0, 9, &phi, &why) == GIA_E_ARG);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+/* Source: [02 Eq 3.23-3.26] on the totals of [02 Fig. 3.4] (Brown 1993):
+ * S = 10,000, F = 20,000, Z = 30,000, Y = 7,500.
+ *   Case A, 1 S + 1 F = 1/2 Z + 1/2 * 4 Y: 30,000 = 15,000 + 15,000.
+ *   Case B, S + F + Phi_D + Phi_E = Z + 6 Y with Phi_E = Phi_D / 2:
+ *     Phi_D + Phi_E = 75,000 - 30,000 = 45,000, so Phi_D = 30,000, Phi_E = 15,000. */
+/* Verifies: FR-EM-007, BR-008 (T-EM-07, VAL-04) */
+static void test_em_global_balance(void) {
+    const gia_balance_term inA[2]  = { { 10000.0, 1.0 }, { 20000.0, 1.0 } };
+    const gia_balance_term outA[2] = { { 30000.0, 0.5 }, { 7500.0, 0.5 * 4.0 } };
+    const gia_balance_term outB[2] = { { 30000.0, 1.0 }, { 7500.0, 6.0 } };
+    const double           w[2]    = { 1.0, 0.5 };
+    double                 res = -1.0, phi[2] = { 0.0, 0.0 };
+    const char            *why = NULL;
+
+    printf("\n[T-EM-07 / VAL-04] [02 Eq 3.23-3.26] global balance, Fig. 3.4 totals\n");
+    ok("case A balances: residual 0",
+       gia_emergy_global_balance(inA, 2, outA, 2, &res, &why) == GIA_OK && res == 0.0);
+    ok("case B: Phi_D = 30,000, Phi_E = 15,000",
+       gia_emergy_balance_solve(inA, 2, outB, 2, w, 2, phi, &why) == GIA_OK &&
+       phi[0] == 30000.0 && phi[1] == 15000.0);
+    ok("no source terms, or weights summing to 0: GIA_E_ARG / GIA_E_DOMAIN",
+       gia_emergy_balance_solve(inA, 2, outB, 2, w, 0, phi, &why) == GIA_E_ARG &&
+       gia_emergy_balance_solve(inA, 2, outB, 2, (const double[]){ 1.0, -1.0 }, 2, phi, &why)
+           == GIA_E_DOMAIN);
+}
+
+/* Source: [02 p. 23 rules 1-4], [02 Eq 3.8, 3.12, 3.16-3.17] — through the
+ * network engine: the four emergy rules in one model. A split shares emergy
+ * in proportion to flow (rule 3); a co-production gives each product the whole
+ * (rule 2); a drawn interaction sums its inputs (Eq 3.12); co-products
+ * reunited at one component count once (rule 4a). */
+/* Verifies: BR-003 (VAL-03) */
+static void test_val_emergy_rules(void) {
+    gia_model   m;
+    cJSON      *root;
+    double      em[8], q[8];
+    int         good = 1;
+    /* sun -> p; p splits to a and b (partition); a replicates to c1, c2; both
+     * c1 and c2 flow into r (reunion). */
+    static const char *seed =
+        "{\"nodes\":["
+        " {\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,\"quality_input\":100.0},"
+        " {\"id\":\"p\",\"type\":\"storage\",\"current_level\":4.0},"
+        " {\"id\":\"a\",\"type\":\"storage\",\"current_level\":2.0},"
+        " {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0},"
+        " {\"id\":\"c1\",\"type\":\"storage\",\"current_level\":1.0},"
+        " {\"id\":\"c2\",\"type\":\"storage\",\"current_level\":1.0},"
+        " {\"id\":\"r\",\"type\":\"storage\",\"current_level\":0.0}],"
+        "\"edges\":["
+        " {\"source\":\"sun\",\"target\":\"p\",\"weight\":1.0},"
+        " {\"source\":\"p\",\"target\":\"a\",\"weight\":0.3},"
+        " {\"source\":\"p\",\"target\":\"b\",\"weight\":0.1},"
+        " {\"source\":\"a\",\"target\":\"c1\",\"weight\":0.2,\"output_mode\":\"replicate\"},"
+        " {\"source\":\"a\",\"target\":\"c2\",\"weight\":0.2,\"output_mode\":\"replicate\"},"
+        " {\"source\":\"c1\",\"target\":\"r\",\"weight\":0.5},"
+        " {\"source\":\"c2\",\"target\":\"r\",\"weight\":0.5}],"
+        "\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,\"generative_mode\":false}}";
+
+    printf("\n[VAL-03] [02] the four emergy rules, through the network engine\n");
+    if (!load_seed(seed, &m, &root)) { ok("seed loads", 0); return; }
+    good = gia_emergy_at(&m, 1.0, em, NULL) && gia_network_state(&m, 1.0, q, NULL);
+    /* Rule 1: the sun's emergy reaches p: Em(p) = F(sun->p) * 100 = q_sun * 1 * 100. */
+    ok("rule 1: Em(p) = 10 * 1.0 * 100 = 1000", good && near_c(em[1], 1000.0, 1e-9));
+    /* Rule 3: a and b split p's emergy 0.3 : 0.1 of p's outflow. */
+    ok("rule 3: Em(a) : Em(b) = 0.3 : 0.1, summing to Em(p)",
+       good && near_c(em[2], 750.0, 1e-9) && near_c(em[3], 250.0, 1e-9));
+    /* Rule 2: each co-product carries the whole of a's emergy. */
+    ok("rule 2: Em(c1) = Em(c2) = Em(a)", good && near_c(em[4], em[2], 1e-9) &&
+                                          near_c(em[5], em[2], 1e-9));
+    /* Rule 4a: reunited at r, the co-products count once -- c1 and c2 each pass
+     * all their emergy to r, and r takes the larger, not the sum. */
+    ok("rule 4: Em(r) = max, not sum: Em(r) = Em(a)", good && near_c(em[6], em[2], 1e-9));
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+/* Source: NFR-LIM-001 (BR-009). 65 inflows into one component, and 65
+ * components with a co-production: refused with GIA_E_LIMIT, where the
+ * baseline silently dropped the 65th inflow and ignored ancestry past 64. */
+/* Verifies: NFR-LIM-001 (T-LIM-01) */
+static void test_em_limits(void) {
+    static char buf[16384];
+    gia_model   m;
+    cJSON      *root;
+    const char *why = NULL;
+    double      phi, em[70];
+    int         k, len, refused, tidy = 1;
+
+    printf("\n[T-LIM-01] emergy limits refuse, never truncate\n");
+    /* 65 sources, each into `hub`. */
+    len = snprintf(buf, sizeof buf, "{\"nodes\":[{\"id\":\"hub\",\"type\":\"storage\","
+                   "\"current_level\":0.0}");
+    for (k = 0; k < 65; k++)
+        len += snprintf(buf + len, sizeof buf - (size_t)len,
+                        ",{\"id\":\"s%d\",\"type\":\"source\",\"value\":1.0,"
+                        "\"quality_input\":1.0}", k);
+    len += snprintf(buf + len, sizeof buf - (size_t)len, "],\"edges\":[");
+    for (k = 0; k < 65; k++)
+        len += snprintf(buf + len, sizeof buf - (size_t)len,
+                        "%s{\"source\":\"s%d\",\"target\":\"hub\",\"weight\":1.0}",
+                        k ? "," : "", k);
+    snprintf(buf + len, sizeof buf - (size_t)len,
+             "],\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+             "\"generative_mode\":false}}");
+    if (!load_seed(buf, &m, &root)) { ok("65-inflow seed loads", 0); return; }
+    why = NULL;
+    refused = gia_emergy_source_term(&m, 1.0, 0, &phi, &why) == GIA_E_LIMIT &&
+              gia_emergy_check_limits(&m, &why) == GIA_E_LIMIT &&
+              !gia_emergy_at(&m, 1.0, em, NULL);
+    ok("65 inflows into one node: GIA_E_LIMIT, and gia_emergy_at refuses", refused);
+    ok("  and the reason names NFR-LIM-001", why && strstr(why, "NFR-LIM-001"));
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* 66 nodes (sun, proc, 64 products) with a co-production. */
+    if (!load_seed(fan_seed(64, "replicate"), &m, &root)) { ok("66-node seed loads", 0); return; }
+    ok("66 nodes with a co-production: GIA_E_LIMIT",
+       gia_emergy_check_limits(&m, &why) == GIA_E_LIMIT);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* At the limit, it works. */
+    if (!load_seed(fan_seed(60, "replicate"), &m, &root)) { ok("62-node seed loads", 0); return; }
+    tidy = gia_emergy_check_limits(&m, &why) == GIA_OK &&
+           gia_emergy_source_term(&m, 1.0, 1, &phi, &why) == GIA_OK;
+    ok("62 nodes, 60 co-products: within the limits, Phi computed", tidy);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+/* Source: [22 Eq 6-8], [06b Eq 6, 10].
+ * Oracle: the shapes and entries the equations print. A binary is a column
+ * of two equal branches, a duet a row of its two inputs, a duet-binary the
+ * specular 2 x 2. The mutation "transpose" turns the binary into a row and
+ * the duet into a column, and fails the shape checks. */
+/* Verifies: FR-EM-005 (T-EM-05) */
+static void test_em_ordinal_forms(void) {
+    gia_oform b = gia_oform_binary(7.0), d = gia_oform_duet(3.0, 5.0);
+    gia_oform f = gia_oform_duet_binary(2.0, -1.5);
+
+    printf("\n[T-EM-05] ordinal forms of the three processes\n");
+    ok("co-production: binary, a 2 x 1 column (Em(u); Em(u))",
+       b.kind == GIA_OF_BINARY && b.rows == 2 && b.cols == 1 &&
+       b.v[0][0] == 7.0 && b.v[1][0] == 7.0);
+    ok("interaction: duet, a 1 x 2 row [Em(u1), Em(u2)]",
+       d.kind == GIA_OF_DUET && d.rows == 1 && d.cols == 2 &&
+       d.v[0][0] == 3.0 && d.v[0][1] == 5.0);
+    ok("feedback: duet-binary [[a1, a2], [a2, a1]]",
+       f.kind == GIA_OF_DUET_BINARY && f.rows == 2 && f.cols == 2 &&
+       f.v[0][0] == 2.0 && f.v[0][1] == -1.5 && f.v[1][0] == -1.5 && f.v[1][1] == 2.0);
+    ok("signs survive (no clamping, NFR-NUM-006)", f.v[0][1] < 0.0);
+}
+
+/* Source: [06b Eq 2], [02 Eq 14.11.4-14.11.5]; PLAN R12.
+ * (a1; a2) o [b1, b2] = [(a1 b1; a2 b1), (a1 b2; a2 b2)]: unreduced, each
+ * entry the pair of factors; reduced, their products. l o l is the pair
+ * [l, l], and only its reduction is l^2. */
+/* Verifies: FR-EM-006 (T-EM-06) */
+static void test_em_circle_product(void) {
+    gia_oform  a = gia_oform_binary(0.0), b = gia_oform_duet(5.0, 7.0), l = gia_oform_scalar(3.0);
+    gia_oform  r;
+    gia_circle c;
+    const char *why = NULL;
+    int        i, j, pairs = 1, red = 1;
+
+    printf("\n[T-EM-06] the circle product and its cardinal reduction\n");
+    a.v[0][0] = 2.0; a.v[1][0] = -3.0;            /* (a1; a2) = (2; -3) */
+    ok("(a1; a2) o [b1, b2] is defined", gia_circle_product(&a, &b, &c, &why) == GIA_OK);
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < 2; j++)
+            if (c.pair[i][j][0] != a.v[i][0] || c.pair[i][j][1] != b.v[0][j]) pairs = 0;
+    ok("unreduced: entry (i, j) keeps the pair (a_i, b_j) [06b Eq 2]",
+       c.rows == 2 && c.cols == 2 && pairs);
+    r = gia_circle_reduce(&c);
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < 2; j++)
+            if (r.v[i][j] != a.v[i][0] * b.v[0][j]) red = 0;
+    ok("reduced: (a1 b1; a2 b1), (a1 b2; a2 b2)", r.rows == 2 && r.cols == 2 && red);
+
+    ok("l o l is defined", gia_circle_product(&l, &l, &c, &why) == GIA_OK);
+    ok("l o l is stored as the du-et [l, l], not as l^2 [02 Eq 14.11.5]",
+       c.rows == 1 && c.cols == 1 && c.pair[0][0][0] == 3.0 && c.pair[0][0][1] == 3.0);
+    r = gia_circle_reduce(&c);
+    ok("and reduces to l^2 = 9", r.rows == 1 && r.cols == 1 && r.v[0][0] == 9.0);
+
+    why = NULL;
+    ok("a row on the left, or a column on the right: GIA_E_ARG",
+       gia_circle_product(&b, &a, &c, &why) == GIA_E_ARG && why != NULL);
+}
+
+/* ------------------------------------------------------------------ *
+ * 7.3 MOP — the First Fundamental Equation
+ * ------------------------------------------------------------------ */
+
+static gia_beta affine(double complex a, double complex b, double p) {
+    gia_beta be;
+    memset(&be, 0, sizeof(be));
+    be.kind = GIA_BETA_AFFINE; be.a = a; be.b = b; be.p = p;
+    return be;
+}
+
+static double complex beta_at(const gia_beta *be, double t) {
+    return cpow(be->a + be->b * t, be->p);
+}
+
+/* (alpha'/alpha)^k alpha - beta at t, with alpha' by central difference
+ * (h = 1e-5 max(1, t)) of gia_mop_couple's own output, relative to |beta|.
+ * k integer uses gia_idc_of (FR-IDC-002); k = 1/2 the principal square root. */
+static double first_eq_residual(const gia_beta *be, gia_rational k, double t) {
+    double         h = 1e-5 * (t > 1.0 ? t : 1.0);
+    double complex al, ap, am, inc = 0.0, b = beta_at(be, t);
+    if (gia_mop_couple(be, k, t, &al, NULL) != GIA_OK ||
+        gia_mop_couple(be, k, t + h, &ap, NULL) != GIA_OK ||
+        gia_mop_couple(be, k, t - h, &am, NULL) != GIA_OK) return INFINITY;
+    if (k.den == 1) {
+        if (gia_idc_of(al, (ap - am) / (2.0 * h), k.num, &inc, NULL) != GIA_OK) return INFINITY;
+    } else {
+        inc = cpow((ap - am) / (2.0 * h) / al, (double)k.num / (double)k.den) * al;
+    }
+    return cabs(inc - b) / cabs(b);
+}
+
+/* Source: [23 Eq 5.4.2, 5.5.2]; PLAN R1; numerics N1.
+ * Oracle: the defining equation's residual, on the grid
+ * k in {1, 2, 3} x p in {0, 1/2, 1, 2} x b in {0, 0.25, 1}, with a real
+ * (a = 1.3) and complex (a = 1 + 0.5i, b scaled by 1 - 0.4i), at t = 0.5, 1, 2;
+ * plus k = 1/2 with real positive a, b. */
+/* Verifies: FR-MOP-001, NFR-NUM-001 (T-MOP-01) */
+static void test_mop_first_residual(void) {
+    static const double ps[] = { 0.0, 0.5, 1.0, 2.0 }, bs[] = { 0.0, 0.25, 1.0 };
+    static const double ts[] = { 0.5, 1.0, 2.0 };
+    double worst = 0.0, worst_half = 0.0;
+    int    k, ip, ib, it, cx;
+
+    printf("\n[T-MOP-01] First Equation: residual of (d~/dt)^k alpha = beta\n");
+    for (k = 1; k <= 3; k++)
+        for (ip = 0; ip < 4; ip++)
+            for (ib = 0; ib < 3; ib++)
+                for (cx = 0; cx < 2; cx++) {
+                    double complex a = cx ? 1.0 + 0.5 * I : 1.3;
+                    double complex b = cx ? bs[ib] * (1.0 - 0.4 * I) : bs[ib];
+                    gia_beta be = affine(a, b, ps[ip]);
+                    gia_rational kk = { k, 1 };
+                    for (it = 0; it < 3; it++) {
+                        double r = first_eq_residual(&be, kk, ts[it]);
+                        if (!(r <= worst)) worst = r;
+                    }
+                }
+    printf("    worst relative residual over 216 cases: %.3g\n", worst);
+    ok("k = 1,2,3 x p = 0,1/2,1,2 x b = 0,.25,1, real and complex: <= 1e-6",
+       worst <= TOL_RESIDUAL);
+    for (ip = 0; ip < 4; ip++)
+        for (ib = 0; ib < 3; ib++) {
+            gia_beta be = affine(1.3, bs[ib], ps[ip]);
+            gia_rational half = { 1, 2 };
+            for (it = 0; it < 3; it++) {
+                double r = first_eq_residual(&be, half, ts[it]);
+                if (!(r <= worst_half)) worst_half = r;
+            }
+        }
+    ok("k = 1/2, real positive a, b: <= 1e-6", worst_half <= TOL_RESIDUAL);
+}
+
+/* The printed forms of [23 Eq 5.5.7] and [23 Eq 5.5.8], as
+ * probes/eq_5_5_8_residual.py writes them. */
+static double printed_557(double a, double b, double p, double k, double t) {
+    double I_ = (pow(a + b * t, (p + k) / k) - pow(a, (p + k) / k)) * k / (b * (p + k));
+    return (1.0 / k) * pow(I_, k);
+}
+static double printed_558(double a, double b, double p, double k, double t) {
+    return (1.0 / (k * b)) * pow((k / (p + k)) * pow(a + b * t, p / k + 1.0), k);
+}
+static double printed_residual(double (*f)(double, double, double, double, double), double t) {
+    const double a = 1.0, b = 0.25, p = 1.0, k = 2.0, h = 1e-6;
+    double d = (f(a, b, p, k, t + h) - f(a, b, p, k, t - h)) / (2.0 * h), v = f(a, b, p, k, t);
+    return pow(d / v, k) * v - pow(a + b * t, p);
+}
+
+/* Source: [23 Eq 5.5.7-5.5.8]; PLAN X1; probes/eq_5_5_8_residual.py.
+ * The printed solutions leave residuals 1.25 and -0.625 at (1, 0.25, 1, 2),
+ * t = 1, where the derived one leaves 0. */
+/* Verifies: FR-MOP-001 (T-MOP-02) */
+static void test_mop_x1(void) {
+    double r7 = printed_residual(printed_557, 1.0), r8 = printed_residual(printed_558, 1.0);
+    gia_beta be = affine(1.0, 0.25, 1.0);
+    gia_rational k2 = { 2, 1 };
+
+    printf("\n[T-MOP-02] X1: the printed [23 Eq 5.5.7-5.5.8] do not solve Eq 5.5.2\n");
+    printf("    printed 5.5.7: %.6g   printed 5.5.8: %.6g   derived: %.3g\n", r7, r8,
+           first_eq_residual(&be, k2, 1.0));
+    ok("printed 5.5.7 residual = 1.25 (> 100x tol)", fabs(r7 - 1.25) < 1e-4 && fabs(r7) > 100 * TOL_RESIDUAL);
+    ok("printed 5.5.8 residual = -0.625 (> 100x tol)", fabs(r8 + 0.625) < 1e-4 && fabs(r8) > 100 * TOL_RESIDUAL);
+    ok("the derived solution's residual is <= 1e-6", first_eq_residual(&be, k2, 1.0) <= TOL_RESIDUAL);
+}
+
+/* Source: PLAN R1 ([23 Eq 5.5.5]: lower limit 0); numerics N1.
+ * alpha(0) = 0 exactly; as b -> 0 the solution tends to the b = 0 one,
+ * (beta^{1/k} t / k)^k, continuously and to 1e-12 (no separate naive branch). */
+/* Verifies: FR-MOP-001, NFR-NUM-002 (T-MOP-03) */
+static void test_mop_b_to_zero(void) {
+    double complex al;
+    gia_rational   k2 = { 2, 1 };
+    gia_beta       be;
+    double         b;
+    int            all = 1;
+    /* a = 1, p = 1, k = 2, t = 1: alpha(b = 0) = (1 * 1 / 2)^2 = 0.25. */
+    printf("\n[T-MOP-03] alpha(0) = 0; continuity through b = 0\n");
+    be = affine(1.0, 0.25, 1.0);
+    ok("alpha(0) = 0 exactly", gia_mop_couple(&be, k2, 0.0, &al, NULL) == GIA_OK && al == 0.0);
+    be = affine(1.0, 0.0, 1.0);
+    ok("b = 0: alpha = (beta^{1/k} t / k)^k = 0.25",
+       gia_mop_couple(&be, k2, 1.0, &al, NULL) == GIA_OK && near_c(al, 0.25, TOL_CLOSED));
+    for (b = 1e-6; b >= 1e-14; b /= 100.0) {
+        /* exact: [((1+b)^{3/2} - 1)/(3b/... )]^2 -> 0.25 (1 + b/2 + ...)^2; the
+         * first-order term is 0.25 * (1 + 3b/4 ... ); within 1e-12 once b <= 1e-12 */
+        be = affine(1.0, b, 1.0);
+        if (gia_mop_couple(&be, k2, 1.0, &al, NULL) != GIA_OK ||
+            !(cabs(al - 0.25) <= 0.25 * (b + 1e-14))) all = 0;
+    }
+    ok("b = 1e-6 .. 1e-14: alpha -> 0.25 with error O(b), no jump", all);
+}
+
+/* Source: [23 Eq 5.6.1]. */
+/* Verifies: FR-MOP-003 (T-MOP-04) */
+static void test_mop_matrioska(void) {
+    gia_beta      be[16];
+    gia_matrioska M;
+    gia_rational  k1 = { 1, 1 };
+    const char   *why = NULL;
+    int           i, j, related = 0, diag = 1, indep = 1;
+
+    printf("\n[T-MOP-04] the Matrioska: zero diagonal, N(N-1) independent couples\n");
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 4; j++)
+            be[i * 4 + j] = affine(1.0 + i, 0.1 * (j + 1), 1.0);
+    be[1 * 4 + 3].kind = GIA_BETA_NONE;                 /* one unrelated couple */
+    memset(&M, 0, sizeof M);
+    ok("solves N = 4", gia_mop_solve(4, be, k1, 1.0, &M, &why) == GIA_OK && M.N == 4);
+    if (!M.a || !M.related) {
+        ok("diagonal, couples and independence (not reached)", 0);
+        return;
+    }
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 4; j++) {
+            double complex want;
+            if (i == j) { if (M.related[i * 4 + j] || M.a[i * 4 + j] != 0.0) diag = 0; continue; }
+            if (!M.related[i * 4 + j]) continue;
+            related++;
+            (void)gia_mop_couple(&be[i * 4 + j], k1, 1.0, &want, NULL);
+            if (M.a[i * 4 + j] != want) indep = 0;
+        }
+    ok("diagonal: unrelated, 0", diag);
+    ok("N(N-1) - 1 = 11 related couples; the NONE couple is unrelated, not 0",
+       related == 11 && !M.related[1 * 4 + 3]);
+    ok("each entry is its couple solved alone", indep);
+    gia_matrioska_free(&M);
+    be[0 * 4 + 1] = affine(1.0, -1.0, 1.0);             /* a + b t = 0 at t = 1 */
+    ok("a failing couple: the status, nothing allocated",
+       gia_mop_solve(4, be, k1, 2.0, &M, &why) == GIA_E_DOMAIN);
+}
+
+/* Source: PLAN R1; numerics N1, §1. */
+/* Verifies: FR-MOP-002, NFR-NUM-004 (T-MOP-05) */
+static void test_mop_domain(void) {
+    double complex al = SENTINEL_C;
+    const char    *why;
+    gia_beta       be;
+    gia_rational   half = { 1, 2 }, k1 = { 1, 1 }, k0 = { 0, 1 }, kneg = { -1, 1 }, kbad = { 1, 0 };
+    int            untouched = 1;
+
+    printf("\n[T-MOP-05] the First Equation's domain\n");
+    why = NULL; be = affine(1.0 + 0.5 * I, 0.25, 1.0);
+    ok("non-integer k with complex a: GIA_E_DOMAIN, with a reason",
+       gia_mop_couple(&be, half, 1.0, &al, &why) == GIA_E_DOMAIN && why);
+    why = NULL; be = affine(1.0, -0.25, 1.0);
+    ok("non-integer k with b < 0: GIA_E_DOMAIN",
+       gia_mop_couple(&be, half, 1.0, &al, &why) == GIA_E_DOMAIN);
+    why = NULL; be = affine(1.0, -1.0, 1.0);
+    ok("a + b t = 0 on [0, t] (t* = 1 < 2): GIA_E_DOMAIN",
+       gia_mop_couple(&be, k1, 2.0, &al, &why) == GIA_E_DOMAIN && why);
+    ok("  but t = 0.5, before the zero, solves", gia_mop_couple(&be, k1, 0.5, &al, &why) == GIA_OK);
+    al = SENTINEL_C; why = NULL; be = affine(1.0, 0.25, -1.0);
+    ok("p = -k with b != 0: GIA_E_DOMAIN",
+       gia_mop_couple(&be, k1, 1.0, &al, &why) == GIA_E_DOMAIN && why);
+    if (al != SENTINEL_C) untouched = 0;
+    ok("k = 0, k < 0, den = 0: refused",
+       gia_mop_couple(&be, k0, 1.0, &al, &why) == GIA_E_DOMAIN &&
+       gia_mop_couple(&be, kneg, 1.0, &al, &why) == GIA_E_DOMAIN &&
+       gia_mop_couple(&be, kbad, 1.0, &al, &why) == GIA_E_ARG);
+    ok("outputs untouched on refusal", untouched);
+    ok("t < 0 is GIA_E_ARG", gia_mop_couple(&be, k1, -1.0, &al, &why) == GIA_E_ARG);
+}
+
+/* Source: [23 Eq 5.5.5-5.5.7]; PLAN R1; numerics N2. */
+/* Verifies: FR-MOP-004, NFR-NUM-004 (T-MOP-06) */
+static void test_mop_samples(void) {
+    static const double         ta[3] = { 0.0, 1.0, 2.0 };
+    static const double complex va[3] = { 1.0 + 0.5 * I, 1.25 + 0.4 * I, 1.5 + 0.3 * I };
+    /* Crosses the negative real axis between t = 1 and 2 (at -1 + 0i). */
+    static const double         tc[3] = { 0.0, 1.0, 2.0 };
+    static const double complex vc[3] = { 1.0 + 0.5 * I, -1.0 + 0.5 * I, -1.0 - 0.5 * I };
+    gia_beta      s, aff;
+    gia_rational  k1 = { 1, 1 }, k2 = { 2, 1 };
+    double complex x, y, lo, hi;
+    const char   *why = NULL;
+    int           all = 1, kk;
+    double        t;
+
+    printf("\n[T-MOP-06] sampled boundary conditions\n");
+    memset(&s, 0, sizeof s);
+    s.kind = GIA_BETA_SAMPLES; s.n = 3; s.t = ta; s.v = va;
+    /* Affine through the same points: beta = (1 + 0.5i) + (0.25 - 0.1i) t, p = 1. */
+    aff = affine(1.0 + 0.5 * I, 0.25 - 0.1 * I, 1.0);
+    for (kk = 1; kk <= 2; kk++)
+        for (t = 0.0; t <= 2.0 + 1e-12; t += 0.25) {
+            gia_rational k = kk == 1 ? k1 : k2;
+            if (gia_mop_couple(&s, k, t, &x, &why) != GIA_OK ||
+                gia_mop_couple(&aff, k, t, &y, &why) != GIA_OK ||
+                !near_c(x, y, TOL_QUAD)) all = 0;
+        }
+    ok("samples of an affine beta reproduce N1 to 1e-9 (k = 1, 2)", all);
+
+    s.t = tc; s.v = vc;
+    ok("a path across the negative real axis: solves at t = 2",
+       gia_mop_couple(&s, k2, 2.0, &x, &why) == GIA_OK);
+    (void)gia_mop_couple(&s, k2, 1.5 - 1e-7, &lo, &why);
+    (void)gia_mop_couple(&s, k2, 1.5 + 1e-7, &hi, &why);
+    ok("  continuously: no jump where it crosses (|da| ~ dt)", cabs(hi - lo) < 1e-5);
+    {
+        /* Independent oracle: the test unwraps the phase itself, step by step
+         * (|d theta| < pi per step), and integrates |beta|^{1/2} e^{i theta/2}
+         * by the composite midpoint rule, 400,000 steps. A principal root taken
+         * per point flips the integrand's sign past the crossing. */
+        const int      steps = 400000;
+        double         h = 2.0 / steps, th = carg(vc[0]), prev_arg = carg(vc[0]);
+        double complex acc = 0.0, want;
+        int            q;
+        for (q = 0; q < steps; q++) {
+            double         tm = (q + 0.5) * h, w = tm < 1.0 ? tm : tm - 1.0;
+            double complex bt = tm < 1.0 ? vc[0] + w * (vc[1] - vc[0]) : vc[1] + w * (vc[2] - vc[1]);
+            double         a = carg(bt), d = a - prev_arg;
+            if (d > M_PI) d -= 2.0 * M_PI;
+            if (d < -M_PI) d += 2.0 * M_PI;
+            th += d; prev_arg = a;
+            acc += sqrt(cabs(bt)) * cexp(I * th / 2.0) * h;
+        }
+        want = (acc / 2.0) * (acc / 2.0);         /* alpha = ((1/k) int)^k, k = 2 */
+        ok("  and agrees with an independently unwrapped integral (1e-6)",
+           near_c(x, want, 1e-6));
+    }
+    ok("t past the last sample: GIA_E_DOMAIN", gia_mop_couple(&s, k1, 2.5, &x, &why) == GIA_E_DOMAIN);
+    {
+        static const double         tz[2] = { 0.0, 1.0 };
+        static const double complex vz[2] = { 1.0, -1.0 };       /* through 0 at t = 1/2 */
+        s.t = tz; s.v = vz; s.n = 2;
+        ok("a segment through beta = 0: GIA_E_DOMAIN",
+           gia_mop_couple(&s, k1, 1.0, &x, &why) == GIA_E_DOMAIN);
+    }
+}
+
+/* E(x)'s series, long double: E(x) = sum_{n>=0} binom(q, n+1) x^n / q. */
+static long double e_series(long double q, long double x) {
+    long double term = q, sum = 0.0L;    /* binom(q, 1) = q */
+    int n;
+    for (n = 0; n < 60; n++) {
+        sum += term * powl(x, (long double)n);
+        term *= (q - (long double)(n + 1)) / (long double)(n + 2);
+    }
+    return sum / q;
+}
+
+/* Source: numerics.md N1; probes/first_equation_numerics.py.
+ * a = 1, b = 0.25, p = 1, k = 2, so q = 3/2 and alpha = (t/2 E(x))^2, x = bt.
+ * The naive closed form loses 5.9e-5 at x = 1e-11; the unified form keeps
+ * 1e-12 against the long-double series. */
+/* Verifies: NFR-NUM-002, FR-MOP-001 (T-NUM-01) */
+static void test_num_cancellation(void) {
+    static const double xs[] = { 1e-2, 1e-5, 1e-8, 1e-11 };
+    gia_beta     be = affine(1.0, 0.25, 1.0);
+    gia_rational k2 = { 2, 1 };
+    size_t       i;
+    int          all = 1;
+
+    printf("\n[T-NUM-01] no cancellation near t = 0\n");
+    for (i = 0; i < 4; i++) {
+        double         t = xs[i] / 0.25;
+        long double    S = (long double)t / 2.0L * e_series(1.5L, (long double)xs[i]);
+        double         want = (double)(S * S);
+        double complex al;
+        if (gia_mop_couple(&be, k2, t, &al, NULL) != GIA_OK ||
+            !(fabs(creal(al) - want) <= TOL_CLOSED * want)) {
+            printf("    x = %g: got %.17g want %.17g\n", xs[i], creal(al), want);
+            all = 0;
+        }
+    }
+    ok("relative error <= 1e-12 for x = 1e-2, 1e-5, 1e-8, 1e-11", all);
+}
+
+/* Verifies: NFR-NUM-003 (T-NUM-02) */
+static void test_num_overflow(void) {
+    gia_beta       be = affine(1e200, 0.0, 2.0);
+    gia_rational   k1 = { 1, 1 }, k3 = { 3, 1 };
+    double complex al = SENTINEL_C;
+    const char    *why = NULL;
+    printf("\n[T-NUM-02] never a non-finite value\n");
+    ok("alpha = beta t = 1e400 overflows: GIA_E_RANGE",
+       gia_mop_couple(&be, k1, 1.0, &al, &why) == GIA_E_RANGE && al == SENTINEL_C);
+    be = affine(1e300, 0.0, 3.0);         /* S = 1e300 t/3 finite, S^3 is not */
+    ok("S^k past DBL_MAX (k = 3): GIA_E_RANGE",
+       gia_mop_couple(&be, k3, 1.0, &al, &why) == GIA_E_RANGE);
+}
+
+static double complex q_sqrt_recip(double t, void *c) { (void)c; return 1.0 / sqrt(t); }
+static double complex q_smooth(double t, void *c) { (void)c; return cexp(I * 3.0 * t) * (1.0 + t * t); }
+
+/* Source: numerics N2; NFR-NUM-005. */
+/* Verifies: NFR-NUM-005, NFR-NUM-001 (T-NUM-03) */
+static void test_num_quadrature(void) {
+    double complex I_, exact;
+    double         err = -1.0;
+    const char    *why = NULL;
+    printf("\n[T-NUM-03] the quadrature reports its error, and refuses\n");
+    /* int_0^2 e^{3it} (1 + t^2) dt by parts. */
+    {
+        double complex w = 3.0 * I, e2 = cexp(2.0 * w);
+        exact = (e2 - 1.0) / w + (e2 * (4.0 / w - 4.0 / (w * w) + 2.0 / (w * w * w)) - 2.0 / (w * w * w));
+    }
+    ok("smooth integrand: converges to 1e-10",
+       gia_quad_gk15(q_smooth, NULL, 0.0, 2.0, 1e-10, 50, &I_, &err, &why) == GIA_OK &&
+       near_c(I_, exact, TOL_QUAD));
+    ok("  and its error estimate bounds the true error", err >= cabs(I_ - exact));
+    ok("an integrable singularity (1/sqrt t at 0) past 50 levels: GIA_E_CONVERGENCE",
+       gia_quad_gk15(q_sqrt_recip, NULL, 0.0, 1.0, 1e-14, 50, &I_, &err, &why) == GIA_E_CONVERGENCE);
+}
+
+/* Source: PLAN §1 B6, G6. */
+/* Verifies: NFR-NUM-006 (T-NUM-04) */
+static void test_num_no_clamp(void) {
+    gia_beta       be = affine(-2.0, 0.5, 1.0);
+    gia_rational   k1 = { 1, 1 }, k3 = { 3, 1 };
+    double complex al;
+    printf("\n[T-NUM-04] negative and complex coordinates survive\n");
+    /* k = 1: alpha = int_0^t (-2 + 0.5 s) ds = -2t + t^2/4. */
+    ok("negative beta: alpha = -2t + t^2/4 = -1.75 at t = 1",
+       gia_mop_couple(&be, k1, 1.0, &al, NULL) == GIA_OK && near_c(al, -1.75, TOL_CLOSED));
+    /* k = 3, beta = -1: alpha = (beta^{1/3} t/3)^3 = -t^3/27 (principal cube
+     * root e^{i pi/3}, cubed: e^{i pi} = -1). */
+    be = affine(-1.0, 0.0, 1.0);
+    ok("k = 3, beta = -1: alpha = -1/27 at t = 1, sign intact",
+       gia_mop_couple(&be, k3, 1.0, &al, NULL) == GIA_OK && near_c(al, -1.0 / 27.0, TOL_CLOSED));
+    be = affine(0.5 - 2.0 * I, 0.0, 1.0);
+    ok("complex beta, k = 1: alpha = beta t", gia_mop_couple(&be, k1, 2.0, &al, NULL) == GIA_OK &&
+                                               near_c(al, 1.0 - 4.0 * I, TOL_CLOSED));
+}
+
+/* ------------------------------------------------------------------ *
+ * 7.4 Relational algebra
+ * ------------------------------------------------------------------ */
+
+static const rel_t RI = { 1, 0, 0 }, RJ = { 0, 1, 0 }, RK = { 0, 0, 1 };
+
+static int rel_eq(rel_t a, rel_t b, double tol) {
+    return fabs(a.i - b.i) <= tol && fabs(a.j - b.j) <= tol && fabs(a.k - b.k) <= tol;
+}
+static rel_t R(double i, double j, double k) { rel_t r; r.i = i; r.j = j; r.k = k; return r; }
+
+/* Source: [23 Eq 5.1.3-5.1.5] (page image p. 3183); PLAN R2. */
+/* Verifies: FR-REL-001 (T-REL-01) */
+static void test_rel_table(void) {
+    rel_t u[3] = { RI, RJ, RK };
+    /* The printed table, row x column. */
+    rel_t want[3][3] = { { RI, RJ, RK }, { RJ, { -1, 0, 0 }, RK }, { RK, RK, { -1, 0, 0 } } };
+    int   a, b, all = 1, bilinear;
+    printf("\n[T-REL-01] the relational product, as printed\n");
+    for (a = 0; a < 3; a++)
+        for (b = 0; b < 3; b++)
+            if (!rel_eq(rel_mul(u[a], u[b]), want[a][b], 0.0)) all = 0;
+    ok("all nine products of [23 Eq 5.1.3-5.1.5]", all);
+    /* Bilinear: (2i - j + 3k) o (0.5i + 4j - k), expanded by hand from the
+     * table: i:  2*0.5 - (-1)(4)(-1)... */
+    {
+        rel_t x = R(2, -1, 3), y = R(0.5, 4, -1), p = rel_mul(x, y);
+        /* i: x_i y_i - x_j y_j - x_k y_k = 1 + 4 + 3 = 8
+         * j: x_i y_j + x_j y_i = 8 - 0.5 = 7.5
+         * k: x_i y_k + x_j y_k + x_k y_i + x_k y_j = -2 + 1 + 1.5 + 12 = 12.5 */
+        bilinear = rel_eq(p, R(8, 7.5, 12.5), 1e-15);
+    }
+    ok("bilinear: (2i - j + 3k) o (0.5i + 4j - k) = 8i + 7.5j + 12.5k by hand", bilinear);
+    ok("commutative: x o y = y o x",
+       rel_eq(rel_mul(R(2, -1, 3), R(0.5, 4, -1)), rel_mul(R(0.5, 4, -1), R(2, -1, 3)), 0.0));
+}
+
+/* Source: [23 Eq 5.1.3-5.1.5]; PLAN R2. */
+/* Verifies: FR-REL-004 (T-REL-02) */
+static void test_rel_left_to_right(void) {
+    printf("\n[T-REL-02] no reassociation\n");
+    ok("rel_mul3(j, j, k) = (j o j) o k = -k", rel_eq(rel_mul3(RJ, RJ, RK), R(0, 0, -1), 0.0));
+    ok("j o (j o k) = +k: the order is observable", rel_eq(rel_mul(RJ, rel_mul(RJ, RK)), RK, 0.0));
+}
+
+/* Source: [23 Eq 5.1.2]; PLAN R2; numerics N8. */
+/* Verifies: FR-REL-002 (T-REL-03) */
+static void test_rel_exp(void) {
+    rel_t       e;
+    const char *why = NULL;
+    double      a = 0.3, b = 1.2, c = -0.5, rho = sqrt(b * b + c * c), ea = exp(a);
+    int         cont = 1, k;
+    printf("\n[T-REL-03] the De Moivre exponential\n");
+    ok("Exp{a i + b j + c k} = e^a [cos rho, b sin rho/rho, c sin rho/rho]",
+       rel_exp(R(a, b, c), &e, &why) == GIA_OK &&
+       rel_eq(e, R(ea * cos(rho), ea * b * sin(rho) / rho, ea * c * sin(rho) / rho), 1e-15));
+    ok("rho = 0: e^a", rel_exp(R(a, 0, 0), &e, &why) == GIA_OK && rel_eq(e, R(ea, 0, 0), 0.0));
+    for (k = 3; k <= 9; k++) {
+        double r = pow(10.0, -k);
+        if (rel_exp(R(a, r, 0), &e, &why) != GIA_OK ||
+            !rel_eq(e, R(ea * cos(r), ea * r * (1.0 - r * r / 6.0), 0), 1e-15)) cont = 0;
+    }
+    ok("rho = 1e-3 .. 1e-9: continuous into the limit, series sin rho/rho", cont);
+    /* Not a power series: Exp(j pi/2) = j, whereas sum (j pi/2)^n/n! under the
+     * non-associative table depends on the bracketing. */
+    ok("Exp(j pi/2) = j", rel_exp(R(0, M_PI / 2.0, 0), &e, &why) == GIA_OK &&
+                          rel_eq(e, RJ, 1e-15));
+    ok("e^a past DBL_MAX: GIA_E_RANGE", rel_exp(R(800, 0, 0), &e, &why) == GIA_E_RANGE);
+}
+
+/* Source: [23 Eq A2.5-A2.6]; PLAN R3, X10; probes/ordinal_root_power.py. */
+/* Verifies: FR-REL-003 (T-REL-04) */
+static void test_rel_roots(void) {
+    rel_t       r, p;
+    const char *why = NULL;
+    int         N, l, unity = 1;
+    printf("\n[T-REL-04] ordinal roots: angle powers, and the table power apart\n");
+    for (N = 3; N <= 7; N++)
+        for (l = 1; l < N; l++)
+            if (rel_root_pow(N, l, N - 1, &p, &why) != GIA_OK || !rel_eq(p, RI, 1e-12)) unity = 0;
+    ok("rel_root_pow(N, l, N - 1) = 1 for N = 3..7, every l", unity);
+    ok("rel_root(4, 1) = (cos 2pi/3, sin(2pi/3)/sqrt2, sin(2pi/3)/sqrt2)",
+       rel_root(4, 1, &r, &why) == GIA_OK &&
+       rel_eq(r, R(cos(2 * M_PI / 3), sin(2 * M_PI / 3) / sqrt(2.0), sin(2 * M_PI / 3) / sqrt(2.0)), 1e-15));
+    p = rel_mul_pow(r, 3);
+    printf("    table cube of r(4,1): (%.6f, %.6f, %.6f)\n", p.i, p.j, p.k);
+    ok("X10: rel_mul_pow(r(4,1), 3) = (0.540721, 0, -0.665721), not 1",
+       rel_eq(p, R(0.540721, 0, -0.665721), 1e-6));
+    ok("rel_mul_pow(x, 0) = i; rel_root_pow(N, l, 0) = i",
+       rel_eq(rel_mul_pow(r, 0), RI, 0.0) && rel_root_pow(4, 1, 0, &p, &why) == GIA_OK &&
+       rel_eq(p, RI, 1e-15));
+    ok("N < 2, l outside 0..N-1, m < 0: GIA_E_ARG",
+       rel_root(1, 0, &r, &why) == GIA_E_ARG && rel_root(4, 4, &r, &why) == GIA_E_ARG &&
+       rel_root_pow(4, 1, -1, &p, &why) == GIA_E_ARG);
+}
+
+/* Source: PLAN §6 (no division or non-integer power in the relational
+ * algebra). k = 1: alpha = int beta componentwise, by hand. */
+/* Verifies: FR-MOP-007 (T-MOP-09) */
+static void test_mop_relational_couple(void) {
+    gia_beta     be[3];
+    gia_rational k1 = { 1, 1 }, k2 = { 2, 1 };
+    rel_t        al = { 99, 99, 99 };
+    const char  *why = NULL;
+    printf("\n[T-MOP-09] relational-valued couples\n");
+    be[0] = affine(2.0, 0.5, 1.0);      /* int_0^t (2 + s/2) = 2t + t^2/4  */
+    be[1] = affine(-1.0, 0.0, 1.0);     /* -t                               */
+    be[2] = affine(1.0, 1.0, 2.0);      /* int (1+s)^2 = ((1+t)^3 - 1)/3   */
+    ok("k = 1: componentwise, by hand at t = 2",
+       gia_mop_couple_rel(be, k1, 2.0, &al, &why) == GIA_OK &&
+       rel_eq(al, R(5.0, -2.0, 26.0 / 3.0), 1e-12));
+    al = R(99, 99, 99); why = NULL;
+    ok("k = 2: GIA_E_UNSUPPORTED, outputs untouched, reason given",
+       gia_mop_couple_rel(be, k2, 2.0, &al, &why) == GIA_E_UNSUPPORTED &&
+       rel_eq(al, R(99, 99, 99), 0.0) && why != NULL);
+}
+
+/* ------------------------------------------------------------------ *
+ * The EQS (FR-MOP-006)
+ * ------------------------------------------------------------------ */
+
+/* [23 Eq 7.1-7.5] written out as printed, bracket by bracket, for a test to
+ * compare against: no relational product involved. */
+static void eqs_by_hand(const gia_eqs_params *p, double S0, double F0, double T0, int l,
+                        double out[3]) {
+    double r2psi = p->psi2 * (p->eps[1] + 2.0 * M_PI * l) / (p->N - 1);
+    double B = cos(r2psi), C = sin(r2psi) / sqrt(2.0);
+    double E1 = (p->eps[0] + 4.0 * M_PI * l) / (p->N - 1);
+    double E2 = (p->eps[1] + 4.0 * M_PI * l) / (p->N - 1);
+    double E3 = (p->eps[2] + 4.0 * M_PI * l) / (p->N - 1);
+    out[0] = p->A * exp(p->psi1[0] * E1 * (B * S0 - C * (F0 + T0)));
+    out[1] = p->psi1[1] * E2 * (B * F0 + C * S0);
+    out[2] = p->psi1[2] * E3 * (B * T0 + C * S0 + C * (F0 + T0));
+}
+
+/* Source: [23 Eq 7.1-7.5]; PLAN R2, X11.
+ * N = 4 with given coordinates and factors, every l, by hand. */
+/* Verifies: FR-MOP-006 (T-MOP-08) */
+static void test_mop_eqs(void) {
+    gia_eqs_params p = { { 0.7, 1.1, -0.4 }, 0.9, { 0.2, 0.3, 0.3 }, 1.5, 4 };
+    rel_t          ref = { 0.6, -0.25, 0.8 };
+    double         got[3], want[3];
+    const char    *why = NULL;
+    int            l, all = 1;
+
+    printf("\n[T-MOP-08] the EQS operative form, N = 4\n");
+    for (l = 1; l <= 3; l++) {
+        eqs_by_hand(&p, ref.i, ref.j, ref.k, l, want);
+        if (gia_eqs(&p, ref, l, got, &why) != GIA_OK ||
+            !near_c(got[0], want[0], TOL_CLOSED) || !near_c(got[1], want[1], TOL_CLOSED) ||
+            !near_c(got[2], want[2], TOL_CLOSED)) {
+            printf("    l = %d: got %.15g %.15g %.15g want %.15g %.15g %.15g\n", l,
+                   got[0], got[1], got[2], want[0], want[1], want[2]);
+            all = 0;
+        }
+    }
+    ok("rho, phi, theta = [23 Eq 7.1-7.5] by hand, l = 1, 2, 3, 1e-12", all);
+    p.eps[2] = 0.31; why = NULL;
+    ok("X11: eps_2 != eps_3 refused, GIA_E_DOMAIN with a reason",
+       gia_eqs(&p, ref, 1, got, &why) == GIA_E_DOMAIN && why && strstr(why, "X11"));
+    p.eps[2] = 0.3;
+    ok("l outside 1..N-1, N < 3: GIA_E_ARG",
+       gia_eqs(&p, ref, 0, got, &why) == GIA_E_ARG && gia_eqs(&p, ref, 4, got, &why) == GIA_E_ARG);
+    p.A = 1.0; p.psi1[0] = 800.0; ref.i = -10.0;   /* B < 0 at l = 1, so S > 0 */
+    ok("rho overflow: GIA_E_RANGE", gia_eqs(&p, ref, 1, got, &why) == GIA_E_RANGE);
+}
+
+/* A fixed 64-bit LCG (vv-plan.md §6), mapped to [lo, hi). No global RNG. */
+static double lcg_uniform(unsigned long long *x, double lo, double hi) {
+    *x = *x * 6364136223846793005ULL + 1442695040888963407ULL;
+    return lo + (hi - lo) * (double)(*x >> 11) / 9007199254740992.0;
+}
+
+/* Source: [23 Eq 7.1.1, 7.2, 7.3]; probes/eqs_relational_product.py.
+ * Validation: the source's own brackets are the literal table's product
+ * of the De Moivre root and the reference coordinates, over 1000 draws. */
+/* Verifies: BR-005, BR-008, FR-MOP-006, FR-REL-001 (VAL-02) */
+static void test_val_eqs_brackets(void) {
+    unsigned long long x = 1;
+    double worst = 0.0;
+    int    n;
+    printf("\n[VAL-02] [23 Eq 7.1-7.3]'s brackets are rel_mul(root, ref)\n");
+    for (n = 0; n < 1000; n++) {
+        double psi = lcg_uniform(&x, -3, 3), S = lcg_uniform(&x, -2, 2);
+        double F = lcg_uniform(&x, -2, 2), T = lcg_uniform(&x, -2, 2);
+        double r = sqrt(2.0) * psi, B = cos(r), C = sin(r) / sqrt(2.0);
+        rel_t  got = rel_mul(R(B, C, C), R(S, F, T));
+        double d0 = fabs(got.i - (B * S - C * (F + T)));
+        double d1 = fabs(got.j - (B * F + C * S));
+        double d2 = fabs(got.k - (B * T + C * S + C * (F + T)));
+        if (d0 > worst) worst = d0;
+        if (d1 > worst) worst = d1;
+        if (d2 > worst) worst = d2;
+    }
+    printf("    worst |table product - printed bracket| over 1000 draws: %.3g\n", worst);
+    ok("1000 seeded draws: <= 1e-12", worst <= TOL_CLOSED);
+}
+
+/* Source: [23 Eq 6.1-6.3]; PLAN R4 (reconstructed oracle), R12.
+ * u = A' must solve u' + u^2 = 0 (derivatives by central differences of the
+ * returned A); B is specular; {c2, t} is c2 t: A(t) - A(0) = ln(1 + c2 t/c1);
+ * c1 + c2 t <= 0 is refused. The mutation ln(c1 + c2 + t) fails the
+ * reduction and the Riccati residual. */
+/* Verifies: FR-MOP-005 (T-MOP-07) */
+static void test_mop_second(void) {
+    const double complex a0 = 0.3 + 0.1 * I;
+    const double         c1 = 1.0, c2 = 0.5;
+    gia_second           s0, sp, sm, s;
+    gia_matrioska        r;
+    const char          *why = NULL;
+    double               t;
+    int                  ric = 1, spec = 1, red = 1, j;
+
+    printf("\n[T-MOP-07] the Second Equation's printed solution\n");
+    for (t = 0.25; t <= 2.0 + 1e-12; t += 0.25) {
+        const double h = 1e-3;
+        double complex u, up;
+        if (gia_mop_second(a0, c1, c2, 4, t, &s, NULL, &why) != GIA_OK ||
+            gia_mop_second(a0, c1, c2, 4, t + h, &sp, NULL, &why) != GIA_OK ||
+            gia_mop_second(a0, c1, c2, 4, t - h, &sm, NULL, &why) != GIA_OK ||
+            gia_mop_second(a0, c1, c2, 4, 0.0, &s0, NULL, &why) != GIA_OK) {
+            ric = spec = red = 0; continue;
+        }
+        u  = (sp.A - sm.A) / (2.0 * h);
+        up = (sp.A - 2.0 * s.A + sm.A) / (h * h);
+        if (!(cabs(up + u * u) <= TOL_RESIDUAL * cabs(u * u) * 10.0)) ric = 0;
+        if (s.B[0][0] != s.A || s.B[1][1] != s.A || s.B[0][1] != -s.A || s.B[1][0] != -s.A)
+            spec = 0;
+        if (!near_c(s.A - s0.A, log(1.0 + c2 * t / c1), TOL_CLOSED)) red = 0;
+    }
+    ok("u = A' solves u' + u^2 = 0 (central differences, 1e-5)", ric);
+    ok("B = [[A, -A], [-A, A]], exactly", spec);
+    ok("{c2, t} reduces to c2 t: A(t) - A(0) = ln(1 + c2 t / c1)", red);
+    ok("A(0) = alpha12(0) w, w = e^{2 pi i/(N - 1)}",
+       gia_mop_second(a0, c1, c2, 4, 0.0, &s, NULL, &why) == GIA_OK &&
+       near_c(s.A, a0 * cexp(2.0 * M_PI * I / 3.0) + log(c1), TOL_CLOSED));
+    {
+        const int      solved = gia_mop_second(a0, c1, c2, 5, 1.0, &s, &r, &why) == GIA_OK;
+        double complex eB11   = solved ? 1.0 + (cexp(2.0 * s.A) - 1.0) / 2.0 : 0.0;
+        int            row = solved, rest = solved;
+        ok("solves with a Matrioska row", solved);
+        if (solved) for (j = 1; j < 5; j++)
+            if (!r.related[j] || !near_c(r.a[j], eB11 * cexp(2.0 * M_PI * I * (j - 1) / 4.0), TOL_CLOSED))
+                row = 0;
+        if (solved) for (j = 5; j < 25; j++) if (r.related[j]) rest = 0;
+        ok("r_1j = (e^B)_11 w^{j-2}, e^B exact: I + (e^{2A} - 1)/2 M", row);
+        ok("only row 1 is related", rest && !r.related[0]);
+        if (solved) gia_matrioska_free(&r);
+    }
+    why = NULL;
+    ok("c1 + c2 t <= 0 on [0, t]: GIA_E_DOMAIN",
+       gia_mop_second(a0, 1.0, -0.5, 4, 3.0, &s, NULL, &why) == GIA_E_DOMAIN && why);
+    ok("c1 <= 0: GIA_E_DOMAIN; N < 2: GIA_E_ARG",
+       gia_mop_second(a0, 0.0, 1.0, 4, 1.0, &s, NULL, &why) == GIA_E_DOMAIN &&
+       gia_mop_second(a0, 1.0, 1.0, 1, 1.0, &s, NULL, &why) == GIA_E_ARG);
+    ok("e^{2A} past DBL_MAX (alpha12(0) = 400, N = 2): GIA_E_RANGE",
+       gia_mop_second(400.0, 1.0, 1.0, 2, 1.0, &s, NULL, &why) == GIA_E_RANGE);
+}
+
+/* ------------------------------------------------------------------ *
+ * The seed's `mop` block and the MOP CSV (IF-JSON-001, IF-OUT-002)
+ * ------------------------------------------------------------------ */
+
+/* Three components a, b, c (storages), a source and a sink: the sink and the
+ * source are habitat, not components (ADR 0021). %s is the `mop` member, with
+ * its leading comma, or "". */
+static const char *MOP_SEED_FMT =
+    "{\"system_name\":\"mop\",\"nodes\":["
+    " {\"id\":\"src\",\"type\":\"source\",\"initial_value\":1.0},"
+    " {\"id\":\"c\",\"type\":\"storage\",\"current_level\":1.0},"
+    " {\"id\":\"a\",\"type\":\"storage\",\"current_level\":1.0},"
+    " {\"id\":\"b\",\"type\":\"storage\",\"current_level\":1.0},"
+    " {\"id\":\"out\",\"type\":\"sink\"}],"
+    "\"edges\":["
+    " {\"source\":\"src\",\"target\":\"a\",\"weight\":0.1},"
+    " {\"source\":\"a\",\"target\":\"b\",\"weight\":0.1},"
+    " {\"source\":\"b\",\"target\":\"c\",\"weight\":0.1},"
+    " {\"source\":\"c\",\"target\":\"out\",\"weight\":0.1}],"
+    "\"simulation_params\":{\"t_val\":1.5,\"derivative_order\":2,\"generative_mode\":false}%s}";
+
+/* Loads the base seed with `mop` member text `mop` ("" for none) and parses
+ * the block. Returns the loader's status; -1 if the model itself failed. */
+static int mop_seed_try(const char *mop, gia_model *m, cJSON **root, gia_mop_seed *s,
+                        char *detail, size_t cap) {
+    char        buf[8192];
+    const char *why = NULL;
+    snprintf(buf, sizeof buf, MOP_SEED_FMT, mop);
+    memset(s, 0, sizeof(*s));
+    if (!load_seed(buf, m, root)) return -1;
+    return (int)gia_mop_seed_load(m, s, detail, cap, &why);
+}
+
+static void mop_seed_done(gia_model *m, cJSON *root, gia_mop_seed *s) {
+    gia_mop_seed_free(s);
+    gia_model_free(m);
+    cJSON_Delete(root);
+}
+
+static int node_is(const gia_model *m, int idx, const char *id) {
+    return idx >= 0 && idx < m->n_nodes && strcmp(m->nodes[idx].id, id) == 0;
+}
+
+/* Verifies: IF-JSON-001 (T-IN-01)
+ * Source: icd.md IF-JSON-001 (the block's grammar); [23 Eq 5.4.2] for the
+ * value check. Oracle: the parsed values are the literals of the seed text,
+ * and the affine couple a->b, beta = 1 + 0.25 t, k = 1, reaches the solver:
+ * alpha(1) = int_0^1 (1 + 0.25 s) ds = 1.125, by hand. */
+static void test_mop_seed_valid(void) {
+    gia_model    m;
+    cJSON       *root;
+    gia_mop_seed s;
+    char         det[128];
+    double complex al;
+    const char  *why = NULL;
+    int          st;
+
+    printf("\n[T-IN-01] valid mop blocks load, and their values reach the solver\n");
+    st = mop_seed_try("", &m, &root, &s, det, sizeof det);
+    ok("no mop block: GIA_OK, present = 0", st == GIA_OK && !s.present);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":["
+                      "{\"from\":\"a\",\"to\":\"c\",\"samples\":[[0,1,0],[1,2,0.5],[2,3,0]]},"
+                      "{\"from\":\"a\",\"to\":\"b\",\"a\":1.0,\"b\":0.25,\"p\":1.0}]}",
+                      &m, &root, &s, det, sizeof det);
+    ok("couples: affine and samples load", st == GIA_OK && s.present && s.n_couples == 2);
+    if (st == GIA_OK && s.n_couples == 2) {
+        const gia_mop_couple_spec *ab = &s.couples[0], *ac = &s.couples[1];
+        ok("k = 1 reads as 1/1; form is couples", s.k.num == 1 && s.k.den == 1 &&
+           s.form == GIA_MOP_BETA_COUPLES);
+        ok("couples sorted by (from, to) id: a__b before a__c",
+           node_is(&m, ab->from, "a") && node_is(&m, ab->to, "b") &&
+           node_is(&m, ac->from, "a") && node_is(&m, ac->to, "c"));
+        ok("affine: a = 1, b = 0.25, p = 1", ab->beta.kind == GIA_BETA_AFFINE &&
+           ab->beta.a == 1.0 && ab->beta.b == 0.25 && ab->beta.p == 1.0);
+        ok("samples: n = 3, [t, re, im] in order", ac->beta.kind == GIA_BETA_SAMPLES &&
+           ac->beta.n == 3 && ac->beta.t[1] == 1.0 && ac->beta.v[1] == 2.0 + 0.5 * I &&
+           ac->beta.t[2] == 2.0 && ac->beta.v[2] == 3.0);
+        ok("default reference: the first two components by id, a and b",
+           node_is(&m, s.ref[0], "a") && node_is(&m, s.ref[1], "b"));
+        ok("the affine couple reaches the solver: alpha(1) = 1.125",
+           gia_mop_couple(&ab->beta, s.k, 1.0, &al, &why) == GIA_OK &&
+           near_c(al, 1.125, TOL_CLOSED));
+        ok("the sampled couple solves at t_end", gia_mop_couple(&ac->beta, s.k, 1.5, &al, &why) == GIA_OK);
+        ok("no second_equation, no eqs", !s.has_second && !s.has_eqs);
+    }
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    st = mop_seed_try(",\"mop\":{\"k\":{\"num\":2,\"den\":4},\"reference\":[\"c\",\"a\"],"
+                      "\"beta\":[{\"from\":\"b\",\"to\":\"a\",\"a\":[1.0,0.5],\"b\":[0,-0.25],\"p\":2}],"
+                      "\"second_equation\":{\"alpha12_0\":[0.3,0.1],\"c1\":1.0,\"c2\":0.5},"
+                      "\"eqs\":{\"psi1\":[1,2,3],\"psi2\":0.5,\"epsilon\":[0.1,0.2,0.2],\"A\":2}}",
+                      &m, &root, &s, det, sizeof det);
+    ok("fraction k, complex a and b, reference, second_equation, eqs: load", st == GIA_OK);
+    if (st == GIA_OK) {
+        ok("k = {2, 4} is reduced to 1/2", s.k.num == 1 && s.k.den == 2);
+        ok("complex a = [1, 0.5], b = [0, -0.25]", s.n_couples == 1 &&
+           s.couples[0].beta.a == 1.0 + 0.5 * I && s.couples[0].beta.b == -0.25 * I &&
+           s.couples[0].beta.p == 2.0);
+        ok("reference [c, a]", node_is(&m, s.ref[0], "c") && node_is(&m, s.ref[1], "a"));
+        ok("second_equation: alpha12_0 = 0.3 + 0.1i, c1 = 1, c2 = 0.5",
+           s.has_second && s.alpha12_0 == 0.3 + 0.1 * I && s.c1 == 1.0 && s.c2 == 0.5);
+        ok("eqs: psi1, psi2, epsilon, A, and N = 3 components",
+           s.has_eqs && s.eqs.psi1[0] == 1 && s.eqs.psi1[1] == 2 && s.eqs.psi1[2] == 3 &&
+           s.eqs.psi2 == 0.5 && s.eqs.eps[0] == 0.1 && s.eqs.eps[1] == 0.2 &&
+           s.eqs.eps[2] == 0.2 && s.eqs.A == 2 && s.eqs.N == 3);
+    }
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    st = mop_seed_try(",\"mop\":{\"k\":2,\"beta\":\"network\"}", &m, &root, &s, det, sizeof det);
+    ok("\"beta\": \"network\" loads as the network form, no couples",
+       st == GIA_OK && s.form == GIA_MOP_BETA_NETWORK && s.n_couples == 0 && s.k.num == 2);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+}
+
+/* Verifies: IF-JSON-001, NFR-ROB-001 (T-IN-02)
+ * Source: icd.md IF-JSON-001; AGENTS.md (strict parsing). Oracle: each case
+ * below is a load error by the grammar -- GIA_E_ARG, a non-empty detail, and
+ * a zeroed seed with nothing allocated (ASan checks the last under
+ * test-mop-asan). The catalogue mutation "ignore unknown keys" fails the
+ * first three cases. */
+static void test_mop_seed_errors(void) {
+    static const struct { const char *what, *mop; } bad[] = {
+        {"unknown key in the block",         ",\"mop\":{\"k\":1,\"beta\":[],\"kk\":1}"},
+        {"unknown key in a couple",          ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0,\"p\":1,\"weight\":1}]}"},
+        {"unknown key in second_equation",   ",\"mop\":{\"k\":1,\"beta\":[],\"second_equation\":{\"alpha12_0\":1,\"c1\":1,\"c2\":0,\"lambda\":0}}"},
+        {"unknown key in eqs",               ",\"mop\":{\"k\":1,\"beta\":[],\"eqs\":{\"psi1\":[1,1,1],\"psi2\":1,\"epsilon\":[0,0,0],\"A\":1,\"B\":1}}"},
+        {"unknown key in k",                 ",\"mop\":{\"k\":{\"num\":1,\"den\":1,\"x\":0},\"beta\":[]}"},
+        {"mop is not an object",             ",\"mop\":[1]"},
+        {"k is a string",                    ",\"mop\":{\"k\":\"1\",\"beta\":[]}"},
+        {"k = 0",                            ",\"mop\":{\"k\":0,\"beta\":[]}"},
+        {"k = 1.5 (fractions are {num, den})", ",\"mop\":{\"k\":1.5,\"beta\":[]}"},
+        {"k without den",                    ",\"mop\":{\"k\":{\"num\":1},\"beta\":[]}"},
+        {"k with den = 0",                   ",\"mop\":{\"k\":{\"num\":1,\"den\":0},\"beta\":[]}"},
+        {"k missing",                        ",\"mop\":{\"beta\":[]}"},
+        {"beta missing",                     ",\"mop\":{\"k\":1}"},
+        {"beta a string other than network", ",\"mop\":{\"k\":1,\"beta\":\"graph\"}"},
+        {"beta an object",                   ",\"mop\":{\"k\":1,\"beta\":{}}"},
+        {"a couple that is not an object",   ",\"mop\":{\"k\":1,\"beta\":[1]}"},
+        {"unknown component",                ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"z\",\"a\":1,\"b\":0,\"p\":1}]}"},
+        {"a source is habitat, not a component", ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"src\",\"to\":\"a\",\"a\":1,\"b\":0,\"p\":1}]}"},
+        {"from == to",                       ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"a\",\"a\":1,\"b\":0,\"p\":1}]}"},
+        {"duplicate couple",                 ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0,\"p\":1},{\"from\":\"a\",\"to\":\"b\",\"a\":2,\"b\":0,\"p\":1}]}"},
+        {"from is a number",                 ",\"mop\":{\"k\":1,\"beta\":[{\"from\":1,\"to\":\"b\",\"a\":1,\"b\":0,\"p\":1}]}"},
+        {"affine without p",                 ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0}]}"},
+        {"a as [re] (one element)",          ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":[1],\"b\":0,\"p\":1}]}"},
+        {"a as a string",                    ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":\"1\",\"b\":0,\"p\":1}]}"},
+        {"affine and samples together",      ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0,\"p\":1,\"samples\":[[0,1,0],[1,1,0]]}]}"},
+        {"neither affine nor samples",       ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\"}]}"},
+        {"samples not increasing",           ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"samples\":[[0,1,0],[1,1,0],[1,2,0]]}]}"},
+        {"samples not starting at t = 0",    ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"samples\":[[0.5,1,0],[1,1,0]]}]}"},
+        {"a sample that is not [t, re, im]", ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"samples\":[[0,1],[1,1,0]]}]}"},
+        {"a single sample",                  ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"samples\":[[0,1,0]]}]}"},
+        {"a non-finite value (1e400)",       ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1e400,\"b\":0,\"p\":1}]}"},
+        {"reference of one id",              ",\"mop\":{\"k\":1,\"reference\":[\"a\"],\"beta\":[]}"},
+        {"reference naming the sink",        ",\"mop\":{\"k\":1,\"reference\":[\"a\",\"out\"],\"beta\":[]}"},
+        {"reference [a, a]",                 ",\"mop\":{\"k\":1,\"reference\":[\"a\",\"a\"],\"beta\":[]}"},
+        {"second_equation without c2",       ",\"mop\":{\"k\":1,\"beta\":[],\"second_equation\":{\"alpha12_0\":1,\"c1\":1}}"},
+        {"eqs psi1 of two",                  ",\"mop\":{\"k\":1,\"beta\":[],\"eqs\":{\"psi1\":[1,1],\"psi2\":1,\"epsilon\":[0,0,0],\"A\":1}}"},
+        {"eqs without A",                    ",\"mop\":{\"k\":1,\"beta\":[],\"eqs\":{\"psi1\":[1,1,1],\"psi2\":1,\"epsilon\":[0,0,0]}}"},
+    };
+    size_t i;
+    int    all = 1, detail = 1, zeroed = 1;
+
+    printf("\n[T-IN-02] malformed mop blocks are load errors\n");
+    for (i = 0; i < sizeof bad / sizeof bad[0]; i++) {
+        gia_model    m;
+        cJSON       *root;
+        gia_mop_seed s;
+        char         det[128] = "";
+        int          st = mop_seed_try(bad[i].mop, &m, &root, &s, det, sizeof det);
+        if (st != GIA_E_ARG) { all = 0; printf("    not a load error (%d): %s\n", st, bad[i].what); }
+        if (st == GIA_E_ARG && det[0] == '\0') { detail = 0; printf("    no detail: %s\n", bad[i].what); }
+        if (s.present || s.couples || s.n_couples) zeroed = 0;
+        if (st >= 0) mop_seed_done(&m, root, &s);
+    }
+    ok("every malformed case: GIA_E_ARG", all);
+    ok("every load error names its JSON path in detail", detail);
+    ok("on a load error the seed is zeroed, nothing allocated", zeroed);
+    {
+        gia_model    m;
+        cJSON       *root;
+        gia_mop_seed s;
+        int st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":[],\"kk\":1}", &m, &root, &s, NULL, 0);
+        ok("detail may be NULL", st == GIA_E_ARG);
+        if (st >= 0) mop_seed_done(&m, root, &s);
+    }
+}
+
+/* Reads a whole file; NULL if it cannot. */
+static char *slurp(const char *path) {
+    FILE  *f = fopen(path, "rb");
+    long   n;
+    char  *b;
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 0) { fclose(f); return NULL; }
+    rewind(f);
+    b = (char *)malloc((size_t)n + 1);
+    if (b && fread(b, 1, (size_t)n, f) != (size_t)n) { free(b); b = NULL; }
+    if (b) b[n] = '\0';
+    fclose(f);
+    return b;
+}
+
+/* Verifies: NFR-ROB-001 (T-ROB-01)
+ * Source: AGENTS.md §Fail-Safe. Oracle: the committed corpus tests/mop_fuzz/
+ * lists every case in INDEX; a case named ok_* loads, every other case is
+ * GIA_E_ARG, and none crashes (under test-mop-asan, none leaks or reads out of
+ * bounds). A seed the model loader itself rejects counts as an error. */
+static void test_mop_fuzz_corpus(void) {
+    char  *index = slurp("tests/mop_fuzz/INDEX");
+    char  *line, *save = NULL;
+    int    n = 0, right = 1;
+
+    printf("\n[T-ROB-01] the committed mop fuzz corpus\n");
+    ok("tests/mop_fuzz/INDEX is readable", index != NULL);
+    if (!index) return;
+    for (line = strtok_r(index, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+        char         path[512];
+        char        *text;
+        cJSON       *root;
+        gia_model    m;
+        gia_mop_seed s;
+        char         det[128];
+        const char  *why = NULL;
+        int          st, want_ok = strncmp(line, "ok_", 3) == 0;
+
+        if (line[0] == '\0' || line[0] == '#') continue;
+        snprintf(path, sizeof path, "tests/mop_fuzz/%s", line);
+        text = slurp(path);
+        if (!text) { right = 0; printf("    unreadable: %s\n", line); continue; }
+        n++;
+        memset(&s, 0, sizeof s);
+        root = cJSON_Parse(text);
+        if (!root || !(memset(&m, 0, sizeof m), gia_model_load(&m, root))) st = GIA_E_ARG;
+        else {
+            st = (int)gia_mop_seed_load(&m, &s, det, sizeof det, &why);
+            gia_mop_seed_free(&s);
+            gia_model_free(&m);
+        }
+        if (root) cJSON_Delete(root);
+        free(text);
+        if (want_ok ? st != GIA_OK : st != GIA_E_ARG) {
+            right = 0;
+            printf("    %s: status %d\n", line, st);
+        }
+    }
+    free(index);
+    printf("    %d cases\n", n);
+    ok("at least 30 cases", n >= 30);
+    ok("each ok_* case loads, each other case is GIA_E_ARG, none crashes", right);
+}
+
+/* Verifies: IF-OUT-002, FR-HAR-001 (T-OUT-01)
+ * Source: icd.md IF-OUT-002, [23 Eq 5.6.5]. Oracle: with N = 3 the one root
+ * is e^{i pi} = -1, and alpha_ac = -alpha_ab exactly when beta_ac = -beta_ab
+ * (k = 1, alpha = int beta), so R_H = 0 at every t > 0; at t = 0 alpha_12 = 0
+ * and the cell is empty. */
+static int net_idx(const gia_model *m, const char *id);
+
+static void test_mop_csv_rh(void) {
+    const char  *path = "bin/test_mop_rh.csv";
+    gia_model    m;
+    cJSON       *root;
+    gia_mop_seed s;
+    char         det[128], *text = NULL;
+    const char  *why = NULL;
+    int          st;
+
+    printf("\n[T-OUT-01] the MOP CSV's R_H column\n");
+    remove(path);
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":["
+                      "{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0.25,\"p\":1},"
+                      "{\"from\":\"a\",\"to\":\"c\",\"a\":-1,\"b\":-0.25,\"p\":1}]}",
+                      &m, &root, &s, det, sizeof det);
+    if (st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_OK) text = slurp(path);
+    {
+        int   rows = 0, empty0 = 0, zero = 1;
+        char *line = text, *nl;
+        while (line && (nl = strchr(line, '\n')) != NULL) {
+            char *cell;
+            *nl  = '\0';
+            cell = strrchr(line, ',');
+            if (rows == 1) empty0 = cell && cell[1] == '\0';
+            if (rows >= 2 && !(cell && cell[1] != '\0' && fabs(strtod(cell + 1, NULL)) < 1e-12)) zero = 0;
+            rows++;
+            line = nl + 1;
+        }
+        ok("alpha_ac = -alpha_ab, N = 3: R_H = 0 for t > 0", text && rows == 5 && zero);
+        ok("at t = 0, alpha_12 = 0: the R_H cell is empty", empty0);
+    }
+    if (st == GIA_OK) {
+        /* gia_mop_reference_row: ref = {c, a} puts c first, a second, b last. */
+        gia_matrioska full, row;
+        const int     n = m.n_nodes, ia = net_idx(&m, "a"), ib = net_idx(&m, "b"), ic = net_idx(&m, "c");
+        int           ref[2], good;
+        ref[0] = ic; ref[1] = ia;
+        full.N = n;
+        full.a = (double complex *)calloc((size_t)n * (size_t)n, sizeof(double complex));
+        full.related = (unsigned char *)calloc((size_t)n * (size_t)n, 1);
+        full.a[ic * n + ia] = 2.0; full.related[ic * n + ia] = 1;
+        full.a[ic * n + ib] = 3.0; full.related[ic * n + ib] = 1;
+        full.a[ia * n + ib] = 9.0; full.related[ia * n + ib] = 1;
+        good = gia_mop_reference_row(&m, ref, &full, &row, &why) == GIA_OK && row.N == 3 &&
+               row.a[1] == 2.0 && row.a[2] == 3.0 && row.related[1] && row.related[2] &&
+               !row.related[3];
+        if (good) gia_matrioska_free(&row);
+        ok("reference row {c, a}: alpha_12 = c->a, then c->b; one row only", good);
+        ref[1] = ic;
+        ok("a reference of one component twice, or a Matrioska of the wrong size: GIA_E_ARG",
+           gia_mop_reference_row(&m, ref, &full, &row, &why) == GIA_E_ARG &&
+           (full.N = 2, gia_mop_reference_row(&m, NULL, &full, &row, &why) == GIA_E_ARG));
+        full.N = n;
+        gia_matrioska_free(&full);
+    }
+    free(text);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+}
+
+/* Verifies: IF-OUT-002 (T-OUT-01)
+ * Source: icd.md IF-OUT-002. Oracle: the header is the interface's, by hand;
+ * the row at t = t_end holds gia_mop_couple's value for each couple (the
+ * solver itself is verified by T-MOP-01..06); a refusal writes no file. */
+static void test_mop_csv(void) {
+    const char  *path = "bin/test_mop_csv.csv";
+    gia_model    m;
+    cJSON       *root;
+    gia_mop_seed s;
+    char         det[128], *text;
+    const char  *why = NULL;
+    int          st;
+
+    printf("\n[T-OUT-01] the MOP CSV\n");
+    remove(path);
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":["
+                      "{\"from\":\"b\",\"to\":\"a\",\"a\":2,\"b\":0,\"p\":1},"
+                      "{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0.25,\"p\":1}]}",
+                      &m, &root, &s, det, sizeof det);
+    ok("writes", st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_OK);
+    text = slurp(path);
+    ok("header: time, then a__b, b__a (re, im) in id order, then R_H",
+       text && strncmp(text, "time,a__b_re,a__b_im,b__a_re,b__a_im,R_H\n", 41) == 0);
+    {
+        int rows = 0, last = 1;
+        if (text) {
+            char *p = text, *lastrow = NULL;
+            for (; *p; p++) if (*p == '\n') { rows++; if (p[1]) lastrow = p + 1; }
+            if (lastrow) {
+                double v[5];
+                double complex ab, ba;
+                int got = sscanf(lastrow, "%lf,%lf,%lf,%lf,%lf,", &v[0], &v[1], &v[2], &v[3], &v[4]);
+                last = got == 5 && near_c(v[0], 1.5, TOL_CLOSED) &&
+                       gia_mop_couple(&s.couples[0].beta, s.k, 1.5, &ab, &why) == GIA_OK &&
+                       gia_mop_couple(&s.couples[1].beta, s.k, 1.5, &ba, &why) == GIA_OK &&
+                       near_c(v[1] + v[2] * I, ab, 1e-9) && near_c(v[3] + v[4] * I, ba, 1e-9) &&
+                       near_c(ab, 1.5 + 0.125 * 2.25, TOL_CLOSED) && near_c(ba, 3.0, TOL_CLOSED);
+            } else last = 0;
+        }
+        ok("1 + steps rows, t = 0 .. t_end", rows == 5);
+        ok("row t_end: alpha_ab = 1.78125, alpha_ba = 3 (by hand)", text && last);
+        ok("R_H empty where undefined (a -> c unrelated)",
+           text && strstr(text, ",\n") != NULL && text[strlen(text) - 2] == ',');
+    }
+    free(text);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    remove(path);
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":-1,\"p\":1}]}",
+                      &m, &root, &s, det, sizeof det);
+    why = NULL;
+    ok("a + b t = 0 at t = 1 < t_end: GIA_E_DOMAIN, with a reason, no file",
+       st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_E_DOMAIN && why &&
+       (text = slurp(path)) == NULL);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    st = mop_seed_try(",\"mop\":{\"k\":2,\"beta\":\"network\"}", &m, &root, &s, det, sizeof det);
+    why = NULL;
+    ok("network beta with k = 2: GIA_E_UNSUPPORTED naming FR-MOP-008, no file",
+       st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_E_UNSUPPORTED && why &&
+       strstr(why, "FR-MOP-008") && (text = slurp(path)) == NULL);
+    ok("a seed without a mop block, or NULL: GIA_E_ARG",
+       gia_mop_write_csv(&m, NULL, path, 3, &why) == GIA_E_ARG);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+}
+
+/* ------------------------------------------------------------------ *
+ * Ordinality (ADR 0021; FR-ORD-001..004)
+ * ------------------------------------------------------------------ */
+
+#define ORD_S(id)  "{\"id\":\"" id "\",\"type\":\"storage\",\"current_level\":1.0}"
+#define ORD_I(id)  "{\"id\":\"" id "\",\"type\":\"interaction\",\"module\":{\"k\":0.1}}"
+#define ORD_SRC    "{\"id\":\"src\",\"type\":\"source\",\"initial_value\":1.0}"
+#define ORD_SINK   "{\"id\":\"out\",\"type\":\"sink\"}"
+#define ORD_HEAT   "{\"id\":\"heat\",\"type\":\"sink\"}"
+#define ORD_E(a, b)        "{\"source\":\"" a "\",\"target\":\"" b "\",\"weight\":0.1}"
+#define ORD_ER(a, b, role) "{\"source\":\"" a "\",\"target\":\"" b "\",\"weight\":0.1,\"role\":\"" role "\"}"
+#define ORD_EC(a, b, ur)   "{\"source\":\"" a "\",\"target\":\"" b "\",\"weight\":0.1,\"role\":\"control\",\"use_ratio\":" ur "}"
+#define ORD_EP(a, b)       "{\"source\":\"" a "\",\"target\":\"" b "\",\"weight\":0.1,\"output_mode\":\"replicate\"}"
+
+static int ord_load(const char *nodes, const char *edges, gia_model *m, cJSON **root) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+             "{\"system_name\":\"ord\",\"nodes\":[%s],\"edges\":[%s],"
+             "\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":2,\"generative_mode\":false}}",
+             nodes, edges);
+    return load_seed(buf, m, root);
+}
+
+static int rec_is(const gia_ordinality_rec *r, int k, int n22, int n2, int nhalf, int nun) {
+    return r->k == k && r->n22 == n22 && r->n2 == n2 && r->nhalf == nhalf && r->nunrelated == nun;
+}
+
+/* Checks one hand graph's record and verdict. */
+static void ord_case(const char *what, const char *nodes, const char *edges,
+                     int k, int n22, int n2, int nhalf, int nun, int maximum) {
+    gia_model          m;
+    cJSON             *root;
+    gia_ordinality_rec r = {-1, -1, -1, -1, -1};
+    const char        *why = NULL;
+    char               line[160];
+    int                good = 0;
+
+    if (ord_load(nodes, edges, &m, &root)) {
+        good = gia_ordinality_record(&m, &r, &why) == GIA_OK &&
+               rec_is(&r, k, n22, n2, nhalf, nun) &&
+               gia_at_maximum_ordinality(&m) == (maximum != 0);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+    snprintf(line, sizeof line, "%s: {%d, %d, %d, %d, %d}, %s", what, k, n22, n2, nhalf, nun,
+             maximum ? "at maximum" : "below");
+    ok(line, good);
+    if (!good)
+        printf("    got {%d, %d, %d, %d, %d}\n", r.k, r.n22, r.n2, r.nhalf, r.nunrelated);
+}
+
+/* Verifies: FR-ORD-001, FR-ORD-002 (T-ORD-01)
+ * Source: [22 Eq 6-8, 11.1], [10 §MOP], [23 Eq 3.2]; ADR 0021 decision 1.
+ * Oracle: each record is counted by hand from the graph drawn in its comment,
+ * by the first rule that applies: 2/2 mutual reachability (ADR 0014 walk),
+ * 2 both feeding one interaction module, 1/2 both products of one replicating
+ * process. Sources and sinks are habitat and never counted (the catalogue
+ * mutation "count sinks" changes k in every case). */
+static void test_ord_record(void) {
+    printf("\n[T-ORD-01] the Ordinality record, by hand\n");
+    /* src -> s; s -> a, s -> b (a split: partition); a -> out. No couple related. */
+    ord_case("pure split",
+             ORD_SRC "," ORD_S("s") "," ORD_S("a") "," ORD_S("b") "," ORD_SINK,
+             ORD_E("src", "s") "," ORD_E("s", "a") "," ORD_E("s", "b") "," ORD_E("a", "out"),
+             3, 0, 0, 0, 3, 0);
+    /* p -> a, p -> b, both replicate: (a, b) is 1/2. */
+    ord_case("one co-production",
+             ORD_S("p") "," ORD_S("a") "," ORD_S("b"),
+             ORD_EP("p", "a") "," ORD_EP("p", "b"),
+             3, 0, 0, 1, 2, 0);
+    /* a (energy) and b (control drawn at 0.5) feed I; d's control is read
+     * (use_ratio 0), so d feeds nothing; I -> c, I -> out (used). (a, b) is 2. */
+    ord_case("one interaction, and a read control",
+             ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d") "," ORD_I("I") "," ORD_SINK,
+             ORD_ER("a", "I", "energy") "," ORD_EC("b", "I", "0.5") "," ORD_EC("d", "I", "0") ","
+             ORD_E("I", "c") "," ORD_ER("I", "out", "used"),
+             4, 0, 1, 0, 5, 0);
+    /* a, b feed I; I -> c and I -> d replicate: (a, b) is 2, (c, d) is 1/2. */
+    ord_case("an interaction that co-produces",
+             ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d") "," ORD_I("I") "," ORD_SINK,
+             ORD_ER("a", "I", "energy") "," ORD_EC("b", "I", "0.5") "," ORD_EP("I", "c") ","
+             ORD_EP("I", "d") "," ORD_ER("I", "out", "used"),
+             4, 0, 1, 1, 4, 0);
+    /* a -> b -> c -> a. */
+    ord_case("strongly connected",
+             ORD_S("a") "," ORD_S("b") "," ORD_S("c"),
+             ORD_E("a", "b") "," ORD_E("b", "c") "," ORD_E("c", "a"),
+             3, 3, 0, 0, 0, 1);
+    /* src -> I (energy), a -> I (control 0.5), I -> out, I -> heat (used):
+     * the module accumulates nothing, and src, out, heat are habitat. One
+     * component. */
+    ord_case("module-only accumulator: one component, no couple",
+             ORD_SRC "," ORD_S("a") "," ORD_I("I") "," ORD_SINK "," ORD_HEAT,
+             ORD_ER("src", "I", "energy") "," ORD_EC("a", "I", "0.5") "," ORD_E("I", "out") ","
+             ORD_ER("I", "heat", "used"),
+             1, 0, 0, 0, 0, 0);
+    /* a <-> b, and both feed I: 2/2 is the first rule that applies, not 2. */
+    ord_case("2/2 takes precedence over 2",
+             ORD_S("a") "," ORD_S("b") "," ORD_I("I") "," ORD_SINK "," ORD_HEAT,
+             ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_ER("a", "I", "energy") ","
+             ORD_EC("b", "I", "0.5") "," ORD_E("I", "out") "," ORD_ER("I", "heat", "used"),
+             2, 1, 0, 0, 0, 1);
+    /* a -> I (energy) -> b -> a: the walk passes a module energy to product. */
+    ord_case("a pathway through a module is quantity-carrying",
+             ORD_S("a") "," ORD_S("b") "," ORD_I("I"),
+             ORD_ER("a", "I", "energy") "," ORD_E("I", "b") "," ORD_E("b", "a"),
+             2, 1, 0, 0, 0, 1);
+    /* a -> I by a drawn control: the module passes it only to its used leg, so
+     * a does not reach b, and the 2-cycle is not closed. */
+    ord_case("a drawn control reaches only the used leg",
+             ORD_SRC "," ORD_S("a") "," ORD_S("b") "," ORD_I("I") "," ORD_SINK,
+             ORD_ER("src", "I", "energy") "," ORD_EC("a", "I", "0.5") "," ORD_E("I", "b") ","
+             ORD_E("b", "a") "," ORD_ER("I", "out", "used"),
+             2, 0, 0, 0, 1, 0);
+    {
+        gia_model          m;
+        cJSON             *root = NULL;
+        gia_ordinality_rec r = {7, 7, 7, 7, 7};
+        const char        *why = NULL;
+        ok("NULL model or record: GIA_E_ARG, the record untouched",
+           gia_ordinality_record(NULL, &r, &why) == GIA_E_ARG && why && r.k == 7 &&
+           ord_load(ORD_S("a"), "", &m, &root) &&
+           gia_ordinality_record(&m, NULL, &why) == GIA_E_ARG);
+        if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    }
+}
+
+/* Verifies: FR-ORD-003, FR-ORD-004 (T-ORD-02)
+ * Source: [22 §12.1, Eq 11.1]; ADR 0021 decision 1. Oracle: two disjoint
+ * 2-cycles put every component on a closed pathway (closure 1, by hand) yet
+ * relate no couple across them, so they are not at maximum -- the catalogue
+ * mutation "cycle-coverage definition" says they are. */
+static void test_ord_maximum(void) {
+    gia_model m;
+    cJSON    *root = NULL;
+
+    printf("\n[T-ORD-02] Maximum Ordinality is strong connectivity, not closure\n");
+    ord_case("two disjoint 2-cycles",
+             ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d"),
+             ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_E("c", "d") "," ORD_E("d", "c"),
+             4, 2, 0, 0, 4, 0);
+    ok("two disjoint 2-cycles: closure 1",
+       ord_load(ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d"),
+                ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_E("c", "d") "," ORD_E("d", "c"),
+                &m, &root) && gia_closure(&m) == 1.0 && !gia_at_maximum_ordinality(&m));
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    /* a <-> b, with src and out attached: habitat is not counted by closure. */
+    ok("closure counts components only: a <-> b plus src and out is 1",
+       ord_load(ORD_SRC "," ORD_S("a") "," ORD_S("b") "," ORD_SINK,
+                ORD_E("src", "a") "," ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_E("b", "out"),
+                &m, &root) && gia_closure(&m) == 1.0 && gia_at_maximum_ordinality(&m));
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    ok("deprecated gia_ordinality returns gia_closure",
+       ord_load(ORD_S("a") "," ORD_S("b") "," ORD_S("c"), ORD_E("a", "b") "," ORD_E("b", "a"),
+                &m, &root) && gia_closure(&m) == 2.0 / 3.0 && gia_ordinality(&m) == gia_closure(&m));
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    ok("NULL: closure 0, not at maximum", gia_closure(NULL) == 0.0 && !gia_at_maximum_ordinality(NULL));
+}
+
+/* Loads a seed file. */
+static int ord_load_file(const char *path, gia_model *m, cJSON **root) {
+    char *text = slurp(path);
+    int   r;
+    if (!text) { *root = NULL; return 0; }
+    r = load_seed(text, m, root);
+    free(text);
+    return r;
+}
+
+/* Verifies: FR-ORD-002, FR-ORD-003, FR-ORD-004 (T-ORD-01, T-ORD-02)
+ * Source: ADR 0021 §3, the verdict table, hand-derived there from the walk.
+ * Oracle: the table's "After" column, row by row. */
+static void test_ord_adr_table(void) {
+    gia_model          m;
+    cJSON             *root = NULL;
+    gia_ordinality_rec r;
+    const char        *why = NULL;
+
+    printf("\n[ADR 0021 §3] every example's verdict\n");
+    ok("input.json: {2, 0, 0, 0, 1}, below maximum, closure 0.000",
+       ord_load_file("examples/giannantoni/input.json", &m, &root) &&
+       gia_ordinality_record(&m, &r, &why) == GIA_OK && rec_is(&r, 2, 0, 0, 0, 1) &&
+       !gia_at_maximum_ordinality(&m) && gia_closure(&m) == 0.0);
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    ok("closed_loop.json: {3, 3, 0, 0, 0}, at maximum, closure 1.000",
+       ord_load_file("examples/giannantoni/closed_loop.json", &m, &root) &&
+       gia_ordinality_record(&m, &r, &why) == GIA_OK && rec_is(&r, 3, 3, 0, 0, 0) &&
+       gia_at_maximum_ordinality(&m) && gia_closure(&m) == 1.0);
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+}
+
+static cJSON *gen_quiet(const gia_model *m);
+
+/* Verifies: FR-ORD-005 (T-ORD-04)
+ * Source: ADR 0021 §3, the "After" column's generative half. Oracle:
+ * input.json gains exactly consumer_1 -> store_1 (the only candidate) and
+ * becomes {2, 1, 0, 0, 0}, at maximum; closed_loop.json gains nothing. */
+static void test_ord_adr_table_generative(void) {
+    gia_model          m, ev;
+    cJSON             *root = NULL, *out = NULL;
+    gia_ordinality_rec r;
+    const char        *why = NULL;
+    int                good = 0;
+
+    printf("\n[ADR 0021 §3] the generative step on every example\n");
+    if (ord_load_file("examples/giannantoni/input.json", &m, &root)) {
+        const int e0 = m.n_edges;
+        out = gen_quiet(&m);
+        if (out && gia_model_load(&ev, out)) {
+            const gia_edge *e = &ev.edges[ev.n_edges - 1];
+            good = ev.n_edges == e0 + 1 && ev.n_nodes == m.n_nodes &&
+                   !strcmp(ev.nodes[e->from].id, "consumer_1") &&
+                   !strcmp(ev.nodes[e->to].id, "store_1") &&
+                   gia_ordinality_record(&ev, &r, &why) == GIA_OK && rec_is(&r, 2, 1, 0, 0, 0) &&
+                   gia_at_maximum_ordinality(&ev);
+            gia_model_free(&ev);
+        }
+        cJSON_Delete(out);
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+    ok("input.json: adds consumer_1 -> store_1 only; {2, 1, 0, 0, 0}, at maximum", good);
+    good = 0;
+    if (ord_load_file("examples/giannantoni/closed_loop.json", &m, &root)) {
+        out  = gen_quiet(&m);
+        good = out && gia_validate_mode(root, out) == GIA_MODE_FUNCTIONAL;
+        cJSON_Delete(out);
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+    ok("closed_loop.json: at maximum, nothing to add", good);
+}
+
+/* ------------------------------------------------------------------ *
+ * The generative step under Maximum Em-Power (ADR 0021 §2; FR-ORD-005)
+ * ------------------------------------------------------------------ */
+
+#define GEN_MAXC 5
+
+/* A graph of n storage components "a".."e" plus a source src -> a, with
+ * component edges adj[i][j] of weight w[i][j]. */
+typedef struct {
+    int    n;
+    int    adj[GEN_MAXC][GEN_MAXC];
+    double w[GEN_MAXC][GEN_MAXC];
+} gen_graph;
+
+/* Writes the seed, with `extra` added pathways (from[k] -> to[k], weight
+ * mean_w), as the engine writes them. */
+static void gen_json(const gen_graph *g, int extra, const int *from, const int *to,
+                     double mean_w, char *buf, size_t cap) {
+    size_t n = 0;
+    int    i, j, k;
+    n += (size_t)snprintf(buf + n, cap - n, "{\"system_name\":\"g\",\"nodes\":["
+                          "{\"id\":\"src\",\"type\":\"source\",\"initial_value\":1.0,"
+                          "\"quality_input\":1.0}");
+    for (i = 0; i < g->n; i++)
+        n += (size_t)snprintf(buf + n, cap - n, ",{\"id\":\"%c\",\"type\":\"storage\","
+                              "\"current_level\":%d}", 'a' + i, i + 1);
+    n += (size_t)snprintf(buf + n, cap - n, "],\"edges\":[{\"source\":\"src\",\"target\":\"a\","
+                          "\"weight\":1.0}");
+    for (i = 0; i < g->n; i++)
+        for (j = 0; j < g->n; j++)
+            if (g->adj[i][j])
+                n += (size_t)snprintf(buf + n, cap - n, ",{\"source\":\"%c\",\"target\":\"%c\","
+                                      "\"logic\":\"linear\",\"weight\":%.17g}",
+                                      'a' + i, 'a' + j, g->w[i][j]);
+    for (k = 0; k < extra; k++)
+        n += (size_t)snprintf(buf + n, cap - n, ",{\"source\":\"%c\",\"target\":\"%c\","
+                              "\"logic\":\"linear\",\"weight\":%.17g}",
+                              'a' + from[k], 'a' + to[k], mean_w);
+    snprintf(buf + n, cap - n, "],\"simulation_params\":{\"t_val\":1.0,"
+             "\"derivative_order\":2,\"generative_mode\":true}}");
+}
+
+/* Plain transitive closure of the component edges plus the extras. */
+static void gen_reach(const gen_graph *g, int extra, const int *from, const int *to,
+                      int r[GEN_MAXC][GEN_MAXC]) {
+    int i, j, k;
+    for (i = 0; i < g->n; i++)
+        for (j = 0; j < g->n; j++) r[i][j] = i == j || g->adj[i][j];
+    for (k = 0; k < extra; k++) r[from[k]][to[k]] = 1;
+    for (k = 0; k < g->n; k++)
+        for (i = 0; i < g->n; i++)
+            for (j = 0; j < g->n; j++)
+                if (r[i][k] && r[k][j]) r[i][j] = 1;
+}
+
+/* Total empower over the components a.. (not src), by the engine's emergy pass. */
+static int gen_empower(const char *json, double *total) {
+    gia_model m;
+    cJSON    *root;
+    double    em[GEN_MAXC + 1];
+    int       i, r;
+    if (!load_seed(json, &m, &root)) return 0;
+    r = gia_emergy_at(&m, m.t_end, em, NULL);
+    *total = 0.0;
+    for (i = 0; r && i < m.n_nodes; i++)
+        if (strcmp(m.nodes[i].id, "src") != 0) *total += em[i];
+    gia_model_free(&m);
+    cJSON_Delete(root);
+    return r;
+}
+
+/* The oracle: repeat, over ALL ordered pairs (i, j) with i in a sink SCC and
+ * j in a source SCC of a different SCC, the brute-force argmax of total
+ * empower, ties within 1e-9 relative to the first in (from, to) order, until
+ * strongly connected. Returns the number of additions (-1 on failure) and the
+ * initial #sources + #sinks in *bound. */
+static int gen_oracle(const gen_graph *g, double mean_w, int *from, int *to, int *bound) {
+    static char buf[8192];
+    int extra = 0;
+    *bound = -1;
+    for (;;) {
+        int    r[GEN_MAXC][GEN_MAXC], i, j, k, all = 1, n_src = 0, n_snk = 0;
+        int    is_src[GEN_MAXC], is_snk[GEN_MAXC], lead[GEN_MAXC], bi = -1, bj = -1;
+        double best = 0.0;
+        gen_reach(g, extra, from, to, r);
+        for (i = 0; i < g->n; i++) {
+            lead[i] = i;
+            for (j = 0; j < i; j++) if (r[i][j] && r[j][i]) { lead[i] = lead[j]; break; }
+        }
+        for (i = 0; i < g->n; i++) for (j = 0; j < g->n; j++) if (!r[i][j]) all = 0;
+        if (all || g->n < 2) return extra;
+        for (i = 0; i < g->n; i++) { is_src[i] = is_snk[i] = 1; }
+        for (i = 0; i < g->n; i++)
+            for (j = 0; j < g->n; j++)
+                if (lead[i] != lead[j] && r[i][j]) { is_snk[lead[i]] = 0; is_src[lead[j]] = 0; }
+        for (i = 0; i < g->n; i++) if (lead[i] == i) { n_src += is_src[i]; n_snk += is_snk[i]; }
+        if (*bound < 0) *bound = n_src + n_snk;
+        if (extra >= 2 * GEN_MAXC) return -1;
+        for (i = 0; i < g->n; i++) {
+            if (!is_snk[lead[i]]) continue;
+            for (j = 0; j < g->n; j++) {
+                double tot;
+                if (lead[i] == lead[j] || !is_src[lead[j]]) continue;
+                from[extra] = i; to[extra] = j;
+                gen_json(g, extra + 1, from, to, mean_w, buf, sizeof buf);
+                if (!gen_empower(buf, &tot)) return -1;
+                if (bi < 0 || tot > best + 1e-9 * (fabs(best) > 1.0 ? fabs(best) : 1.0)) {
+                    best = tot; bi = i; bj = j;
+                }
+            }
+        }
+        if (bi < 0) return -1;
+        from[extra] = bi; to[extra] = bj;
+        k = extra++;
+        (void)k;
+    }
+}
+
+/* gia_generate with its stdout report silenced. */
+static cJSON *gen_quiet(const gia_model *m) {
+    cJSON *out;
+    int    saved;
+    fflush(stdout);
+    saved = dup(fileno(stdout));
+    if (!freopen("/dev/null", "w", stdout)) { /* keep going: noise, not failure */ }
+    out = gia_generate(m);
+    fflush(stdout);
+    if (saved >= 0) { dup2(saved, fileno(stdout)); close(saved); }
+    return out;
+}
+
+static unsigned gen_lcg(unsigned *s) { *s = *s * 1664525u + 1013904223u; return *s >> 8; }
+
+/* Verifies: FR-ORD-005, FR-ORD-004 (T-ORD-04)
+ * Source: [02 Eq 5.3], [22 Eq 2, §12.1]; ADR 0021 §2. Oracle: for every graph
+ * of a fixed enumeration -- all 2^2 graphs on 2 components, all 2^6 on 3, and
+ * 40 each on 4 and 5 from vv-plan.md §6's LCG -- the pathways gia_generate
+ * appends equal, in order, the brute-force argmax above, computed from its own
+ * transitive closure and condensation; there are at most #sources + #sinks of
+ * them; the result is at Maximum Ordinality; and a second step adds nothing.
+ * The catalogue mutation "first candidate" fails wherever empower decides. */
+static void test_ord_generative(void) {
+    static char buf[8192];
+    unsigned    seed = 20261009u;
+    int         n_graphs = 0, agree = 1, bounded = 1, at_max = 1, fixed = 1, no_comp = 1;
+    int         decided = 0, nc, code;
+
+    printf("\n[T-ORD-04] the generative step: the argmax of total empower\n");
+    for (nc = 2; nc <= 5; nc++) {
+        int count = nc == 2 ? 4 : nc == 3 ? 64 : 40;
+        for (code = 0; code < count; code++) {
+            gen_graph g;
+            int       i, j, bit = 0, from[2 * GEN_MAXC], to[2 * GEN_MAXC], bound, want, n_e = 1;
+            double    sum_w = 1.0, mean_w;
+            gia_model m;
+            cJSON    *root, *out;
+
+            memset(&g, 0, sizeof g);
+            g.n = nc;
+            for (i = 0; i < nc; i++)
+                for (j = 0; j < nc; j++) {
+                    if (i == j) continue;
+                    g.adj[i][j] = nc <= 3 ? (code >> bit) & 1 : (gen_lcg(&seed) % 10) < 3;
+                    g.w[i][j]   = 0.1 * (double)(1 + gen_lcg(&seed) % 5);
+                    if (g.adj[i][j]) { sum_w += g.w[i][j]; n_e++; }
+                    bit++;
+                }
+            mean_w = sum_w / (double)n_e;
+            want   = gen_oracle(&g, mean_w, from, to, &bound);
+            gen_json(&g, 0, from, to, mean_w, buf, sizeof buf);
+            n_graphs++;
+            if (want < 0 || !load_seed(buf, &m, &root)) { agree = 0; continue; }
+            out = gen_quiet(&m);
+            if (!out) { agree = 0; gia_model_free(&m); cJSON_Delete(root); continue; }
+            {
+                const cJSON *edges = cJSON_GetObjectItemCaseSensitive(out, "edges");
+                int          seed_e = n_e, got = cJSON_GetArraySize(edges) - seed_e, k;
+                gia_model    ev;
+                cJSON       *out2;
+                if (got != want) agree = 0;
+                for (k = 0; k < got && k < want; k++) {
+                    const cJSON *e = cJSON_GetArrayItem(edges, seed_e + k);
+                    const cJSON *s = cJSON_GetObjectItemCaseSensitive(e, "source");
+                    const cJSON *t = cJSON_GetObjectItemCaseSensitive(e, "target");
+                    if (!cJSON_IsString(s) || !cJSON_IsString(t) ||
+                        s->valuestring[0] != 'a' + from[k] || t->valuestring[0] != 'a' + to[k]) {
+                        agree = 0;
+                        printf("    graph %d/%d step %d: got %s -> %s, argmax %c -> %c\n", nc,
+                               code, k, cJSON_IsString(s) ? s->valuestring : "?",
+                               cJSON_IsString(t) ? t->valuestring : "?", 'a' + from[k], 'a' + to[k]);
+                    }
+                }
+                if (want > 0 && bound > 0 && want > bound) bounded = 0;
+                if (cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(out, "nodes")) != nc + 1)
+                    no_comp = 0;
+                if (gia_model_load(&ev, out)) {
+                    if (!gia_at_maximum_ordinality(&ev)) at_max = 0;
+                    out2 = gen_quiet(&ev);
+                    if (!out2 || gia_validate_mode(out, out2) != GIA_MODE_FUNCTIONAL) fixed = 0;
+                    cJSON_Delete(out2);
+                    gia_model_free(&ev);
+                } else at_max = 0;
+                /* Count the graphs where empower, not order, chose the first step. */
+                if (want > 0 && (from[0] != 0 || to[0] != 0)) {
+                    int r[GEN_MAXC][GEN_MAXC], a, b, first = 1;
+                    gen_reach(&g, 0, from, to, r);
+                    for (a = 0; a < nc && first; a++)
+                        for (b = 0; b < nc && first; b++)
+                            if (a != b && !(r[a][b] && r[b][a])) {
+                                /* the first (from, to) in order that is a candidate */
+                                int sa = 1, sb = 1, x;
+                                for (x = 0; x < nc; x++) {
+                                    if (!(r[a][x] && r[x][a]) && r[a][x]) sa = 0;
+                                    if (!(r[b][x] && r[x][b]) && r[x][b]) sb = 0;
+                                }
+                                if (sa && sb && !(r[a][b] && r[b][a])) {
+                                    if (a != from[0] || b != to[0]) decided++;
+                                    first = 0;
+                                }
+                            }
+                }
+            }
+            cJSON_Delete(out);
+            gia_model_free(&m);
+            cJSON_Delete(root);
+        }
+    }
+    printf("    %d graphs; in %d the argmax is not the first candidate\n", n_graphs, decided);
+    ok("each pathway appended is the brute-force argmax of total empower", agree);
+    ok("at most #sources + #sinks additions", bounded);
+    ok("the result is at Maximum Ordinality", at_max);
+    ok("a second step adds nothing (a fixed point)", fixed);
+    ok("no component is ever added (ADR 0015's E is retired)", no_comp);
+    ok("empower decides: some graphs' first choice is not the first candidate", decided > 0);
+}
+
+/* Verifies: FR-ORD-004 (T-ORD-03)
+ * Source: ADR 0021 decision 1 (closure decides nothing). Oracle: two disjoint
+ * 2-cycles have closure 1, by hand, and are below maximum; the step still
+ * relates them. Gating the step on closure ("gate on closure") adds nothing. */
+static void test_ord_closure_decides_nothing(void) {
+    gia_model m, ev;
+    cJSON    *root = NULL, *out = NULL;
+    int       grew = 0;
+
+    printf("\n[T-ORD-03] closure decides nothing\n");
+    if (load_seed("{\"system_name\":\"c\",\"nodes\":["
+                  ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d") "],\"edges\":["
+                  ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_E("c", "d") "," ORD_E("d", "c") "],"
+                  "\"simulation_params\":{\"t_val\":1.0,\"generative_mode\":true}}", &m, &root)) {
+        ok("two disjoint 2-cycles: closure 1, below maximum",
+           gia_closure(&m) == 1.0 && !gia_at_maximum_ordinality(&m));
+        out = gen_quiet(&m);
+        grew = out && gia_model_load(&ev, out);
+        ok("the step still relates them, to Maximum Ordinality",
+           grew && gia_at_maximum_ordinality(&ev));
+        if (grew) gia_model_free(&ev);
+        cJSON_Delete(out);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    } else ok("loads", 0);
+}
+
+/* ------------------------------------------------------------------ *
+ * Boundary conditions from the network (FR-MOP-008, PLAN R8)
+ * ------------------------------------------------------------------ */
+
+/* src (quality 3) -> a; a -> b (reversible, so its share of a's outflow
+ * moves with Q_a - Q_b and E_ab varies in time) and a -> c, partitions;
+ * b -> c; c -> a closes a loop. b -> a and c -> b have no pathway. */
+static const char *NET_SEED =
+    "{\"system_name\":\"net\",\"nodes\":["
+    " {\"id\":\"src\",\"type\":\"source\",\"initial_value\":2.0,\"quality_input\":3.0},"
+    " {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5.0},"
+    " {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.5},"
+    " {\"id\":\"c\",\"type\":\"storage\",\"current_level\":0.5}],"
+    "\"edges\":["
+    " {\"source\":\"src\",\"target\":\"a\",\"weight\":0.5},"
+    " {\"source\":\"a\",\"target\":\"b\",\"logic\":\"reversible\",\"weight\":0.3},"
+    " {\"source\":\"a\",\"target\":\"c\",\"weight\":0.2},"
+    " {\"source\":\"b\",\"target\":\"c\",\"weight\":0.1},"
+    " {\"source\":\"c\",\"target\":\"a\",\"weight\":0.05}],"
+    "\"simulation_params\":{\"t_val\":2.0,\"derivative_order\":2,\"generative_mode\":false}}";
+
+/* The oracle's E_ij(t): the pass's empower at the origin, shared among its
+ * outgoing pathways in proportion to their flow (all partitions here), from
+ * gia_emergy_at, gia_network_state and gia_edge_flow -- not from
+ * gia_emergy_carried. */
+static double net_oracle(const gia_model *m, double t, int i, int j) {
+    double em[8], q[8], tot = 0.0, fij = 0.0;
+    int    e;
+    if (!gia_emergy_at(m, t, em, NULL) || !gia_network_state(m, t, q, NULL)) return -1.0;
+    for (e = 0; e < m->n_edges; e++) {
+        const gia_edge *ed = &m->edges[e];
+        double f;
+        if (ed->from != i) continue;
+        f = fabs(gia_edge_flow(m, ed, q, t));
+        tot += f;
+        if (ed->to == j) fij += f;
+    }
+    return tot > 0.0 ? em[i] * fij / tot : 0.0;
+}
+
+#define NET_HEADER "time,a__b_re,a__b_im,a__c_re,a__c_im,b__c_re,b__c_im,c__a_re,c__a_im,R_H\n"
+
+static int net_idx(const gia_model *m, const char *id) {
+    int i;
+    for (i = 0; i < m->n_nodes; i++) if (!strcmp(m->nodes[i].id, id)) return i;
+    return -1;
+}
+
+/* Verifies: FR-MOP-008 (T-MOP-10)
+ * Source: PLAN R8; [23 Eq 5.5.2] with k = 1. Oracle: e^{alpha_ij} equals the
+ * emergy the pass's empower puts on the pathway i -> j (net_oracle above, to
+ * 1e-12); couples with no pathway are unrelated; beta = alpha' is checked by
+ * its defining equation -- Simpson's rule on beta over [0.5, 1.5] equals
+ * alpha(1.5) - alpha(0.5) to 1e-6. The catalogue mutation "use quantity flow"
+ * (E = F) fails the first check, since the source's quality is 3. */
+static void test_mop_network(void) {
+    gia_model     m;
+    cJSON        *root = NULL;
+    gia_matrioska al, be, a0, a1;
+    const char   *why = NULL;
+    int           st, i, j, n;
+    int           match = 1, unrel = 1;
+
+    printf("\n[T-MOP-10] boundary conditions from the network\n");
+    if (!load_seed(NET_SEED, &m, &root)) { ok("loads", 0); return; }
+    n  = m.n_nodes;
+    st = gia_mop_network(&m, 1.0, &al, &be, &why);
+    ok("solves at t = 1", st == GIA_OK);
+    if (st == GIA_OK) {
+        static const char *rel[][2] = {{"a", "b"}, {"a", "c"}, {"b", "c"}, {"c", "a"}};
+        int want[8 * 8] = {0}, k;
+        for (k = 0; k < 4; k++) {
+            int a = net_idx(&m, rel[k][0]), b = net_idx(&m, rel[k][1]);
+            double E = net_oracle(&m, 1.0, a, b);
+            want[a * n + b] = 1;
+            if (!al.related[a * n + b] || !(E > 0.0) ||
+                !near_c(cexp(al.a[a * n + b]), E, TOL_CLOSED) || cimag(al.a[a * n + b]) != 0.0) {
+                match = 0;
+                printf("    %s -> %s: e^alpha = %.15g, oracle %.15g\n", rel[k][0], rel[k][1],
+                       creal(cexp(al.a[a * n + b])), E);
+            }
+        }
+        for (i = 0; i < n; i++)
+            for (j = 0; j < n; j++)
+                if (!want[i * n + j] && (al.related[i * n + j] || be.related[i * n + j])) unrel = 0;
+        ok("e^alpha_ij = the empower carried i -> j, for every pathway (1e-12)", match);
+        ok("no pathway (b -> a, c -> b, src -> a is habitat): unrelated", unrel);
+        {
+            /* Simpson on beta_ab over [0.5, 1.5], 100 intervals. */
+            int    a = net_idx(&m, "a"), b = net_idx(&m, "b"), s, ok_int = 1;
+            double sum = 0.0, h = 1.0 / 100.0, lhs, rhs = 0.0;
+            for (s = 0; s <= 100 && ok_int; s++) {
+                gia_matrioska bs;
+                double        w = (s == 0 || s == 100) ? 1.0 : (s % 2 ? 4.0 : 2.0);
+                if (gia_mop_network(&m, 0.5 + s * h, NULL, &bs, &why) != GIA_OK) { ok_int = 0; break; }
+                sum += w * creal(bs.a[a * n + b]);
+                gia_matrioska_free(&bs);
+            }
+            lhs = sum * h / 3.0;
+            if (ok_int && gia_mop_network(&m, 0.5, &a0, NULL, &why) == GIA_OK) {
+                if (gia_mop_network(&m, 1.5, &a1, NULL, &why) == GIA_OK) {
+                    rhs = creal(a1.a[a * n + b] - a0.a[a * n + b]);
+                    gia_matrioska_free(&a1);
+                } else ok_int = 0;
+                gia_matrioska_free(&a0);
+            } else ok_int = 0;
+            ok("beta = alpha' ([23 Eq 5.5.2], k = 1): int beta = delta alpha (1e-6)",
+               ok_int && fabs(lhs - rhs) <= 1e-6 * (fabs(rhs) > 1.0 ? fabs(rhs) : 1.0) && rhs != 0.0);
+        }
+        gia_matrioska_free(&al);
+        gia_matrioska_free(&be);
+    }
+    {
+        gia_matrioska b0 = {0, NULL, NULL};
+        int           a = net_idx(&m, "a"), b = net_idx(&m, "b");
+        ok("at t = 0 beta uses a one-sided difference: finite, related",
+           gia_mop_network(&m, 0.0, NULL, &b0, &why) == GIA_OK && b0.related[a * n + b] &&
+           isfinite(creal(b0.a[a * n + b])));
+        if (b0.a) gia_matrioska_free(&b0);
+    }
+    gia_model_free(&m);
+    cJSON_Delete(root);
+
+    /* A replicating origin gives each product its whole empower. */
+    if (load_seed("{\"system_name\":\"r\",\"nodes\":["
+                  "{\"id\":\"src\",\"type\":\"source\",\"initial_value\":2.0,\"quality_input\":3.0},"
+                  ORD_S("a") "," ORD_S("b") "," ORD_S("c") "],\"edges\":["
+                  "{\"source\":\"src\",\"target\":\"a\",\"weight\":0.5},"
+                  ORD_EP("a", "b") "," ORD_EP("a", "c") "],"
+                  "\"simulation_params\":{\"t_val\":1.0}}", &m, &root)) {
+        double em[8];
+        int    a = net_idx(&m, "a"), b = net_idx(&m, "b"), c = net_idx(&m, "c");
+        n = m.n_nodes;
+        al.a = NULL;
+        ok("replicate: e^alpha_ab = e^alpha_ac = Em(a), the whole",
+           gia_mop_network(&m, 1.0, &al, NULL, &why) == GIA_OK && gia_emergy_at(&m, 1.0, em, NULL) &&
+           near_c(cexp(al.a[a * n + b]), em[a], TOL_CLOSED) &&
+           near_c(cexp(al.a[a * n + c]), em[a], TOL_CLOSED));
+        if (al.a) gia_matrioska_free(&al);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+    /* A pathway that carries nothing has no logarithm. */
+    if (load_seed("{\"system_name\":\"z\",\"nodes\":[" ORD_S("a") "," ORD_S("b") "],\"edges\":["
+                  "{\"source\":\"a\",\"target\":\"b\",\"weight\":0.0}],"
+                  "\"simulation_params\":{\"t_val\":1.0}}", &m, &root)) {
+        why = NULL;
+        ok("a pathway carrying no emergy: GIA_E_RANGE, with a reason",
+           gia_mop_network(&m, 1.0, &al, NULL, &why) == GIA_E_RANGE && why);
+        ok("NULL model, t < 0: GIA_E_ARG",
+           gia_mop_network(NULL, 1.0, &al, NULL, &why) == GIA_E_ARG &&
+           gia_mop_network(&m, -1.0, &al, NULL, &why) == GIA_E_ARG);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+    {   /* IF-OUT-002 with "beta": "network": alpha = ln E per related couple. */
+        char         seed[2048], det[128], *text = NULL;
+        gia_mop_seed sd;
+        const char  *path = "bin/test_mop_net.csv";
+        size_t       len = strlen(NET_SEED);
+        memset(&sd, 0, sizeof sd);
+        memcpy(seed, NET_SEED, len - 1);
+        strcpy(seed + len - 1, ",\"mop\":{\"k\":1,\"beta\":\"network\"}}");
+        remove(path);
+        if (load_seed(seed, &m, &root) &&
+            gia_mop_seed_load(&m, &sd, det, sizeof det, &why) == GIA_OK &&
+            gia_mop_write_csv(&m, &sd, path, 4, &why) == GIA_OK)
+            text = slurp(path);
+        ok("--mop-out, network: a column pair per pathway, in id order",
+           text && strncmp(text, NET_HEADER, strlen(NET_HEADER)) == 0);
+        {
+            int good = 0;
+            if (text) {
+                char  *last = strrchr(text, '\n'), *p;
+                double v[9];
+                *last = '\0';
+                p = strrchr(text, '\n') + 1;
+                if (sscanf(p, "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf", &v[0], &v[1], &v[2], &v[3],
+                           &v[4], &v[5], &v[6], &v[7], &v[8]) == 9 &&
+                    gia_mop_network(&m, 2.0, &al, NULL, &why) == GIA_OK) {
+                    n    = m.n_nodes;
+                    good = near_c(v[0], 2.0, TOL_CLOSED) && v[2] == 0.0 &&
+                           near_c(v[1], creal(al.a[net_idx(&m, "a") * n + net_idx(&m, "b")]), 1e-12) &&
+                           near_c(v[7], creal(al.a[net_idx(&m, "c") * n + net_idx(&m, "a")]), 1e-12);
+                    gia_matrioska_free(&al);
+                }
+            }
+            ok("row t_end: alpha = ln E, imaginary part 0", good);
+            {   /* N = 3, row a: e^{alpha_ac}/e^{alpha_ab} > 0 is real, the root
+                 * is -1, so R_H = |alpha_ac/alpha_ab + 1| > 1 is written. */
+                char  *rh  = text ? strrchr(text, ',') : NULL;
+                double val = rh ? strtod(rh + 1, NULL) : 0.0;
+                ok("R_H of the network row is written, and is not harmonic", rh && val > 1.0);
+            }
+        }
+        free(text);
+        gia_mop_seed_free(&sd);
+        if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    }
+    {
+        double carried[4];
+        ok("gia_emergy_carried: NULL is GIA_E_ARG",
+           gia_emergy_carried(NULL, 0.0, carried, &why) == GIA_E_ARG);
+    }
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -937,6 +2942,43 @@ int main(void) {
     test_nl1410();
     test_solution_drift();
     test_drift_projection();
+    test_em_coproduction();
+    test_em_interaction();
+    test_em_global_balance();
+    test_val_emergy_rules();
+    test_em_limits();
+    test_em_ordinal_forms();
+    test_em_circle_product();
+    test_mop_first_residual();
+    test_mop_x1();
+    test_mop_b_to_zero();
+    test_mop_matrioska();
+    test_mop_domain();
+    test_mop_samples();
+    test_num_cancellation();
+    test_num_overflow();
+    test_num_quadrature();
+    test_num_no_clamp();
+    test_rel_table();
+    test_rel_left_to_right();
+    test_rel_exp();
+    test_rel_roots();
+    test_mop_relational_couple();
+    test_mop_eqs();
+    test_val_eqs_brackets();
+    test_mop_second();
+    test_mop_seed_valid();
+    test_mop_seed_errors();
+    test_mop_fuzz_corpus();
+    test_mop_csv();
+    test_mop_csv_rh();
+    test_ord_record();
+    test_ord_maximum();
+    test_ord_adr_table();
+    test_ord_generative();
+    test_ord_closure_decides_nothing();
+    test_ord_adr_table_generative();
+    test_mop_network();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);
