@@ -186,6 +186,9 @@ jobs:
       - name: Giannantoni generative engine tests
         run: make test-giannantoni
 
+      - name: Giannantoni CLI system tests
+        run: make test-mop-cli
+
       # Requirements traceability (docs/requirements/). Fails on an untraced
       # requirement, an orphan Verifies: tag, or an `implemented` claim no
       # test backs — the ways a green build can avoid being built to spec.

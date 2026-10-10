@@ -9,13 +9,15 @@
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20WebAssembly-lightgrey.svg)](#building)
 [![Coverage gate](https://img.shields.io/badge/coverage%20gate-%E2%89%A585%25-brightgreen.svg)](#testing)
 
-Two C99 engines over Howard T. Odum's Energy Systems Language: the GSSK kernel, and a second engine implementing Corrado Giannantoni's Incipient Differential Calculus and Maximum Ordinality Principle.
+Two C99 engines over Howard T. Odum's Energy Systems Language: the GSSK kernel, and a second engine built to pursue Corrado Giannantoni's Incipient Differential Calculus (IDC) and Maximum Ordinality Principle (MOP).
+
+> **Status.** The second engine does not yet implement IDC or the MOP. Its trajectories are the classical matrix exponential, its harmony matrix is assumed rather than derived, and its ordinality is a proxy. Every output it writes is labelled `implemented`, `classical`, `assumed`, `proxy` or `illustrative` in its run report; [docs/giannantoni_assessment.md](docs/giannantoni_assessment.md#status-of-record-planmd-2) is the status of record, and [PLAN.md](PLAN.md) is how the rest gets built, test-first from the sources.
 
 Forked from [energese-project/GSSK](https://github.com/energese-project/GSSK) to pursue the Giannantoni framework independently. The C surface is carried over; the Swift, Python, JavaScript and web trees are not.
 
 A model is a JSON description of storages, sources, sinks and the pathways between them. GSSK integrates the resulting system of ordinary differential equations — Euler, RK4, or adaptive Dormand–Prince — and tracks several carriers independently over the same network: energy, material, money, information. Odum's symbol vocabulary is implemented as node primitives and composite archetypes, with emergy and transformity accounting over the same topology, and deterministic snapshot/replay for reproducible runs. The C API is the surface; WebAssembly is built from the same sources.
 
-`bin/giannantoni_sim` is the second engine. It solves a network by matrix exponential rather than by stepping — `Q(t) = exp(A t) Q(0)`, exact wherever the flow matrix is constant — reports the derivative drift between the incipient and traditional calculi, carries emergy under Odum's non-conservative algebra, and can add components to a graph that is below maximum ordinality. It deliberately shares no headers with the kernel; [ADR 0011](docs/adr/0011-two-engines-declared-lossy-projection.md) records why.
+`bin/giannantoni_sim` is the second engine. It solves a network by matrix exponential rather than by stepping — `Q(t) = exp(A t) Q(0)`, exact wherever the flow matrix is constant, and classical rather than incipient — carries emergy under Odum's non-conservative algebra (implemented), reports the incipient/traditional derivative drift of a per-node φ that it invents rather than derives (illustrative), and can add components to a graph whose cycle coverage, a proxy for ordinality, is below one. It deliberately shares no headers with the kernel; [ADR 0011](docs/adr/0011-two-engines-declared-lossy-projection.md) records why.
 
 ## Quick Demo
 
@@ -53,7 +55,7 @@ make test
 make demo-giannantoni
 ```
 
-Runs the same binary three times with no configuration change between them. A seed below maximum ordinality gains a component and reports a generative run; one already closed reports a functional run; feeding the first run's own output back in is a fixed point. Which mode a run was in is decided by diffing the output graph against the seed, not by trusting a flag.
+Runs the same binary three times with no configuration change between them. A seed below maximum (proxy) ordinality gains a component and reports a generative run; one already closed reports a functional run; feeding the first run's own output back in is a fixed point. Which mode a run was in is decided by diffing the output graph against the seed, not by trusting a flag.
 
 ### Benchmark
 

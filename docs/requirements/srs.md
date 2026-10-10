@@ -340,7 +340,7 @@ output it produces shall be labelled `assumed`.
 The run report shall list every output column and quantity with one label from `implemented`,
 `classical`, `assumed`, `proxy`, `illustrative`.
 - **Source:** PLAN §2 (E1–E7), BR-009
-- **Verification:** T-OUT-02 · **Priority:** Must · **Status:** planned · **Task:** mop-claims-remediation
+- **Verification:** T-OUT-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-claims-remediation
 
 ### FR-OUT-002 — Refusals name their reason
 Every refusal shall name the feature and the source reason (equation or PLAN §6 row), on stderr for
