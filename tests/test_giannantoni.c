@@ -395,12 +395,14 @@ static void test_trajectories(void) {
     ok("trajectory file is readable", f != NULL);
     if (f) {
         if (fgets(line, sizeof(line), f)) {
-            ok("header names the incipient column",
-               strstr(line, "source_1_idc") != NULL);
-            ok("header names the traditional column",
-               strstr(line, "source_1_tdc") != NULL);
-            ok("header names the drift column",
-               strstr(line, "interaction_1_drift") != NULL);
+            /* IF-OUT-001 (T-OUT-01 checks the header exactly, in
+             * tests/mop_cli.sh): the projection drift replaces the columns
+             * that judged an invented phi (PLAN E4). */
+            ok("header names the projection-drift column",
+               strstr(line, "store_1_drift_proj") != NULL);
+            ok("header no longer carries _idc/_tdc/psi_network",
+               strstr(line, "_idc") == NULL && strstr(line, "_tdc") == NULL &&
+               strstr(line, "psi_network") == NULL);
         } else {
             ok("header is present", false);
         }
@@ -664,7 +666,7 @@ static void test_printer_matches_csv(void) {
     clearerr(stdout);
 
     /* Parse the printed per-component tables: rows are
-     * "  <time> <Q> | <idc> <tdc> <drift>". */
+     * "  <time> <Q> | <drift_proj>". */
     f = fopen(cap, "r");
     if (f) {
         int comp = -1;

@@ -880,6 +880,32 @@ static double module_gap(const gia_model *m, int ni, const double *q) {
 static bool advance_from(const gia_model *m, const double *q, double t0,
                          double h, double *out);
 
+/* Full augmented state at time t: components, then each waveform's own
+ * state, then the phantom 1. The waveform states are evaluated at t rather
+ * than reset, so a run broken at an event resumes the driver where it left
+ * off instead of restarting it. */
+static void augment_state(const gia_model *m, const double *q, double t,
+                          double *x, int dim) {
+    int i, n = m->n_nodes;
+    for (i = 0; i < dim; i++) x[i] = 0.0;
+    for (i = 0; i < n; i++) x[i] = q[i];
+    x[dim - 1] = 1.0;
+    for (i = 0; i < n; i++) {
+        const gia_forcing *f = &m->nodes[i].forcing;
+        int slot = forcing_slot(m, i);
+        if (slot < 0) continue;
+        switch (f->kind) {
+            case GIA_FORCE_SINE:
+                x[slot]     = sin(f->rate * t + f->phase);
+                x[slot + 1] = cos(f->rate * t + f->phase);
+                break;
+            case GIA_FORCE_RAMP:        x[slot] = t;                     break;
+            case GIA_FORCE_EXPONENTIAL: x[slot] = exp(f->rate * t);      break;
+            default: break;
+        }
+    }
+}
+
 /* Build A at `at` (state) and `t_at` (time), then apply exp(A h) to `q`. */
 static bool advance_from_at(const gia_model *m, const double *q,
                             const double *at, double t_at, double t0, double h,
@@ -897,28 +923,9 @@ static bool advance_from_at(const gia_model *m, const double *q,
     for (i = 0; i < dim * dim; i++) Ah.a[i] = A.a[i] * h;
     if (!gia_matrix_exp(&Ah, &E))         goto done;
 
-    /* Full augmented state at the interval start: components, then each
-     * waveform's own state, then the phantom 1. The waveform states are
-     * evaluated there rather than reset, so a run broken at an event resumes
-     * the driver where it left off instead of restarting it. */
     x = (double *)calloc((size_t)dim, sizeof(double));
     if (!x) goto done;
-    for (i = 0; i < n; i++) x[i] = q[i];
-    x[dim - 1] = 1.0;
-    for (i = 0; i < n; i++) {
-        const gia_forcing *f = &m->nodes[i].forcing;
-        int slot = forcing_slot(m, i);
-        if (slot < 0) continue;
-        switch (f->kind) {
-            case GIA_FORCE_SINE:
-                x[slot]     = sin(f->rate * t0 + f->phase);
-                x[slot + 1] = cos(f->rate * t0 + f->phase);
-                break;
-            case GIA_FORCE_RAMP:        x[slot] = t0;                    break;
-            case GIA_FORCE_EXPONENTIAL: x[slot] = exp(f->rate * t0);     break;
-            default: break;
-        }
-    }
+    augment_state(m, q, t0, x, dim);
 
     for (i = 0; i < n; i++) {
         double acc = 0.0;
@@ -2686,6 +2693,181 @@ bool gia_at_maximum_ordinality(gia_model *m) {
 }
 
 /* ================================================================== *
+ * 6b. Drift on network trajectories (FR-IDC-011, FR-IDC-014)
+ * ================================================================== */
+
+static gia_status drift_fail(gia_status st, const char *reason, const char **why) {
+    if (why) *why = reason;
+    return st;
+}
+
+/* FR-IDC-011. A constant flow matrix makes the solution exp(A t) Q(0), a
+ * superposition of exponentials with affine exponents, so the incipient and
+ * traditional solutions coincide term by term (PLAN R16) and the drift is
+ * zero by [06 §4 (i)] -- stated, not computed. */
+gia_status gia_solution_drift(const gia_model *m, int order, double *out,
+                              const char **why) {
+    int i;
+    if (!m || !out || m->n_nodes <= 0)
+        return drift_fail(GIA_E_ARG, "gia_solution_drift: NULL or empty model", why);
+    if (order < 1 || order > 4)
+        return drift_fail(GIA_E_ARG, "gia_solution_drift: order must be 1..4 (FR-IDC-011)", why);
+    if (!gia_flow_matrix_is_constant(m))
+        return drift_fail(GIA_E_UNSUPPORTED,
+                          "solution drift is defined only for a known equation [06 §4]; the "
+                          "sources define none for a network whose flow matrix is not "
+                          "constant (FR-IDC-011, PLAN §6)", why);
+    for (i = 0; i < m->n_nodes; i++) out[i] = 0.0;
+    return GIA_OK;
+}
+
+/* The flow balance F(Q, t) = A(Q, t) x(Q, t), and, when `second` is not NULL
+ * and A is constant, A^2 x as well -- exactly Q'' (numerics.md N7). */
+static bool flow_balance(const gia_model *m, const double *q, double t,
+                         double *first, double *second) {
+    gia_matrix A;
+    double    *x, *ax;
+    int        i, j, n = m->n_nodes, dim = n + forcing_extra_count(m) + 1;
+    bool       ok = false;
+
+    memset(&A, 0, sizeof(A));
+    x  = (double *)malloc((size_t)dim * sizeof(double));
+    ax = (double *)malloc((size_t)dim * sizeof(double));
+    if (!x || !ax || !gia_build_flow_matrix(m, q, t, &A)) goto done;
+    augment_state(m, q, t, x, dim);
+    for (i = 0; i < dim; i++) {
+        double acc = 0.0;
+        for (j = 0; j < dim; j++) acc += gia_matrix_at(&A, i, j) * x[j];
+        ax[i] = acc;
+    }
+    for (i = 0; i < n; i++) first[i] = ax[i];
+    if (second) {
+        for (i = 0; i < n; i++) {
+            double acc = 0.0;
+            for (j = 0; j < dim; j++) acc += gia_matrix_at(&A, i, j) * ax[j];
+            second[i] = acc;
+        }
+    }
+    ok = true;
+done:
+    gia_matrix_free(&A);
+    free(x); free(ax);
+    return ok;
+}
+
+/* A component in the sense of srs.md §1: not a module, not a boundary node. */
+static bool is_component(const gia_node *nd) {
+    return !nd->is_module && nd->kind != GIA_NODE_SOURCE &&
+           nd->kind != GIA_NODE_SINK && nd->kind != GIA_NODE_CONSTANT;
+}
+
+/* F at time s along the engine's own solution (numerics.md N7: Q at t +- h
+ * comes from the engine, not a re-integration). */
+static bool flow_at(const gia_model *m, double s, double *q, double *f) {
+    return gia_network_state(m, s, q, NULL) && flow_balance(m, q, s, f, NULL);
+}
+
+/* Richardson-extrapolated derivative of F at t with base step h:
+ * central where t - 2h >= 0 is not needed, one-sided at t near 0. */
+static bool flow_slope(const gia_model *m, double t, double h, double *d,
+                       double *q, double *f0, double *f1, double *f2) {
+    int    i, n = m->n_nodes, pass;
+    double hh;
+    bool   central = t - h >= 0.0;
+    double *est[2];
+
+    est[0] = d;
+    est[1] = (double *)malloc((size_t)n * sizeof(double));
+    if (!est[1]) return false;
+    for (pass = 0; pass < 2; pass++) {
+        hh = pass == 0 ? h : h / 2.0;
+        if (central) {
+            if (!flow_at(m, t + hh, q, f1) || !flow_at(m, t - hh, q, f2)) { free(est[1]); return false; }
+            for (i = 0; i < n; i++) est[pass][i] = (f1[i] - f2[i]) / (2.0 * hh);
+        } else {
+            if (!flow_at(m, t, q, f0) || !flow_at(m, t + hh, q, f1) ||
+                !flow_at(m, t + 2.0 * hh, q, f2)) { free(est[1]); return false; }
+            for (i = 0; i < n; i++)
+                est[pass][i] = (-3.0 * f0[i] + 4.0 * f1[i] - f2[i]) / (2.0 * hh);
+        }
+    }
+    /* Both forms are second order: (4 D(h/2) - D(h)) / 3. */
+    for (i = 0; i < n; i++) d[i] = (4.0 * est[1][i] - est[0][i]) / 3.0;
+    free(est[1]);
+    return true;
+}
+
+gia_status gia_drift_projection(const gia_model *m, double t, double dt,
+                                double *out, const char **why) {
+    double    *q = NULL, *f = NULL, *qq = NULL, *d1 = NULL, *d2 = NULL, *w0 = NULL,
+              *w1 = NULL, *w2 = NULL;
+    int        i, n;
+    gia_status st = GIA_OK;
+
+    if (!m || !out || m->n_nodes <= 0)
+        return drift_fail(GIA_E_ARG, "gia_drift_projection: NULL or empty model", why);
+    if (!(t >= 0.0) || !isfinite(t) || !isfinite(dt))
+        return drift_fail(GIA_E_ARG, "gia_drift_projection: t must be >= 0 and finite", why);
+    n  = m->n_nodes;
+    q  = (double *)malloc((size_t)n * sizeof(double));
+    f  = (double *)malloc((size_t)n * sizeof(double));
+    qq = (double *)malloc((size_t)n * sizeof(double));
+    d1 = (double *)malloc((size_t)n * sizeof(double));
+    d2 = (double *)malloc((size_t)n * sizeof(double));
+    w0 = (double *)malloc((size_t)n * sizeof(double));
+    w1 = (double *)malloc((size_t)n * sizeof(double));
+    w2 = (double *)malloc((size_t)n * sizeof(double));
+    if (!q || !f || !qq || !d1 || !d2 || !w0 || !w1 || !w2) {
+        st = drift_fail(GIA_E_NOMEM, "gia_drift_projection: out of memory", why);
+        goto done;
+    }
+    if (!gia_network_state(m, t, q, NULL)) {
+        st = drift_fail(GIA_E_DOMAIN, "gia_drift_projection: the network does not solve at t", why);
+        goto done;
+    }
+    if (gia_flow_matrix_is_constant(m)) {
+        /* Q'' = A^2 x exactly (N7). */
+        if (!flow_balance(m, q, t, f, d1)) {
+            st = drift_fail(GIA_E_NOMEM, "gia_drift_projection: flow matrix", why);
+            goto done;
+        }
+    } else {
+        double h0 = 1e-3 * (fabs(t) > 1.0 ? fabs(t) : 1.0);
+        if (!flow_balance(m, q, t, f, NULL) ||
+            !flow_slope(m, t, h0, d1, qq, w0, w1, w2) ||
+            !flow_slope(m, t, h0 / 2.0, d2, qq, w0, w1, w2)) {
+            st = drift_fail(GIA_E_DOMAIN, "gia_drift_projection: the network does not solve "
+                            "near t", why);
+            goto done;
+        }
+        for (i = 0; i < n; i++)
+            if (fabs(d1[i] - d2[i]) > 1e-6 * (fabs(d2[i]) + fabs(f[i]) + 1e-300)) {
+                st = drift_fail(GIA_E_CONVERGENCE,
+                                "gia_drift_projection: Q'' did not converge under "
+                                "extrapolation (numerics N7); a crossing or switch near t?",
+                                why);
+                goto done;
+            }
+        for (i = 0; i < n; i++) d1[i] = d2[i];
+    }
+    for (i = 0; i < n; i++) {
+        const gia_node *nd = &m->nodes[i];
+        double v = 0.0;
+        if (is_component(nd) && q[i] != 0.0)
+            v = (d1[i] - f[i] * f[i] / q[i]) * dt * dt / 2.0;
+        if (!isfinite(v)) {
+            st = drift_fail(GIA_E_RANGE, "gia_drift_projection: drift not finite (NFR-NUM-003)", why);
+            goto done;
+        }
+        qq[i] = v;
+    }
+    for (i = 0; i < n; i++) out[i] = qq[i];
+done:
+    free(q); free(f); free(qq); free(d1); free(d2); free(w0); free(w1); free(w2);
+    return st;
+}
+
+/* ================================================================== *
  * 7. Mode 1 — functional trajectories
  * ================================================================== */
 
@@ -2715,7 +2897,7 @@ bool gia_write_trajectories(const gia_model *m, const char *path, int steps) {
     FILE   *f;
     int     i, s;
     double  dt;
-    double *q, *idc, *tdc, *em, *tr;
+    double *q, *em, *tr, *dp;
 
     if (!m || !path) return false;
     if (steps < 1) steps = 1;
@@ -2727,49 +2909,46 @@ bool gia_write_trajectories(const gia_model *m, const char *path, int steps) {
         return false;
     }
 
-    /* Three columns per node: the incipient value, the traditional value, and
-     * the drift between them. The drift column is the reason the traditional
-     * one is computed at all -- it makes the 2006 critique a measurement. */
-    /* Per component: the network quantity Q from the matrix exponential, then
-     * the single-component analytic form and the drift between the calculi.
-     * The _Q column is the simulation -- it depends on the whole graph. The
-     * _idc/_tdc/_drift columns are the analytic form of Sections 1-3, which
-     * depends only on that component. */
+    /* IF-OUT-001. Per node: the network quantity Q from the matrix
+     * exponential (classical), its empower and transformity, and the
+     * output-projection drift of [09 Eq 13] over one output step
+     * (FR-IDC-014). The _idc/_tdc/_drift and psi_network columns are gone:
+     * they applied the drift identity to a per-node phi the engine invented,
+     * decoupled from Q (PLAN E4). */
     fprintf(f, "time");
     for (i = 0; i < m->n_nodes; i++)
-        fprintf(f, ",%s_Q,%s_Em,%s_Tr,%s_idc,%s_tdc,%s_drift",
-                m->nodes[i].id, m->nodes[i].id, m->nodes[i].id,
-                m->nodes[i].id, m->nodes[i].id, m->nodes[i].id);
-    fprintf(f, ",psi_network,conservation,emergy_excess\n");
+        fprintf(f, ",%s_Q,%s_Em,%s_Tr,%s_drift_proj",
+                m->nodes[i].id, m->nodes[i].id, m->nodes[i].id, m->nodes[i].id);
+    fprintf(f, ",conservation,emergy_excess\n");
 
-    q   = (double *)calloc((size_t)m->n_nodes, sizeof(double));
-    idc = (double *)calloc((size_t)m->n_nodes, sizeof(double));
-    tdc = (double *)calloc((size_t)m->n_nodes, sizeof(double));
-    em  = (double *)calloc((size_t)m->n_nodes, sizeof(double));
-    tr  = (double *)calloc((size_t)m->n_nodes, sizeof(double));
-    if (!q || !idc || !tdc || !em || !tr) {
-        free(q); free(idc); free(tdc); free(em); free(tr);
+    q  = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    em = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    tr = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    dp = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    if (!q || !em || !tr || !dp) {
+        free(q); free(em); free(tr); free(dp);
         fclose(f); return false;
     }
 
     dt = m->t_end / (double)steps;
     for (s = 0; s <= steps; s++) {
         double t = (double)s * dt;
-        double psi = 0.0;
+        bool   have_dp;
 
-        (void)gia_sample_at(m, t, q, idc, tdc, &psi);
-
+        (void)gia_sample_at(m, t, q, NULL, NULL, NULL);
         (void)gia_emergy_at(m, t, em, tr);
+        have_dp = gia_drift_projection(m, t, dt, dp, NULL) == GIA_OK;
 
         fprintf(f, "%.6f", t);
-        for (i = 0; i < m->n_nodes; i++)
-            fprintf(f, ",%.10g,%.10g,%.10g,%.10g,%.10g,%.10g",
-                    q[i], em[i], tr[i], idc[i], tdc[i], tdc[i] - idc[i]);
-        fprintf(f, ",%.10g,%.10g,%.10g\n", psi,
+        for (i = 0; i < m->n_nodes; i++) {
+            fprintf(f, ",%.10g,%.10g,%.10g,", q[i], em[i], tr[i]);
+            if (have_dp) fprintf(f, "%.10g", dp[i]);
+        }
+        fprintf(f, ",%.10g,%.10g\n",
                 gia_conservation_residual(m, t), gia_emergy_excess(m, t));
     }
 
-    free(q); free(idc); free(tdc); free(em); free(tr);
+    free(q); free(em); free(tr); free(dp);
     fclose(f);
     return true;
 }
@@ -3063,41 +3242,39 @@ done:
 void gia_print_trajectories(const gia_model *m, int steps) {
     int     i, s;
     double  dt;
-    double *q, *idc, *tdc;
+    double *q, *dp;
 
     if (!m || m->n_nodes <= 0) return;
     if (steps < 1) steps = 1;
     dt = m->t_end / (double)steps;
 
-    q   = (double *)malloc((size_t)m->n_nodes * sizeof(double));
-    idc = (double *)malloc((size_t)m->n_nodes * sizeof(double));
-    tdc = (double *)malloc((size_t)m->n_nodes * sizeof(double));
-    if (!q || !idc || !tdc) { free(q); free(idc); free(tdc); return; }
+    q  = (double *)malloc((size_t)m->n_nodes * sizeof(double));
+    dp = (double *)malloc((size_t)m->n_nodes * sizeof(double));
+    if (!q || !dp) { free(q); free(dp); return; }
 
     for (i = 0; i < m->n_nodes; i++) {
         const gia_node *nd = &m->nodes[i];
 
         printf("\n  %s  (%s, %s)\n", nd->id, gia_node_kind_name(nd->kind),
                nd->integrates ? "integrated" : "held, not integrated");
-        printf("  %12s %16s | %14s %14s %14s\n",
-               "time", "Q (network)", "phi idc", "phi tdc", "phi drift");
-        printf("  %12s %16s | %14s %14s %14s\n",
-               "------------", "----------------", "--------------",
-               "--------------", "--------------");
+        printf("  %12s %16s | %16s\n", "time", "Q (network)", "drift_proj");
+        printf("  %12s %16s | %16s\n", "------------", "----------------",
+               "----------------");
 
         for (s = 0; s <= steps; s++) {
             double t = (double)s * dt;
-            (void)gia_sample_at(m, t, q, idc, tdc, NULL);
-            printf("  %12.4f %16.6g | %14.6g %14.6g %14.6g\n",
-                   t, q[i], idc[i], tdc[i], tdc[i] - idc[i]);
+            (void)gia_sample_at(m, t, q, NULL, NULL, NULL);
+            if (gia_drift_projection(m, t, dt, dp, NULL) == GIA_OK)
+                printf("  %12.4f %16.6g | %16.6g\n", t, q[i], dp[i]);
+            else
+                printf("  %12.4f %16.6g | %16s\n", t, q[i], "(no estimate)");
         }
     }
 
     printf("\n  Q is the simulation: Q(t) = exp(A t) Q(0), where A is the flow\n");
-    printf("  matrix assembled from the pathway laws, so it depends on the\n");
-    printf("  whole graph. The phi columns are the single-component analytic\n");
-    printf("  form and ignore every edge -- they are where the drift theorem\n");
-    printf("  is checked against a closed form, not a trajectory of the system.\n");
+    printf("  matrix assembled from the pathway laws -- classical numerics.\n");
+    printf("  drift_proj is the output-projection drift of [09 Eq 13] over one\n");
+    printf("  output step: (Q'' - Q'^2/Q) dt^2/2 along that same trajectory.\n");
 
     printf("\n  network summary at horizon t = %g\n", m->t_end);
     printf("  %-20s %10s %16s %16s\n",
@@ -3114,14 +3291,10 @@ void gia_print_trajectories(const gia_model *m, int steps) {
     }
 
     {
-        double psi = 0.0;
         bool   constA = gia_flow_matrix_is_constant(m);
-        (void)gia_network_state(m, m->t_end, q, &psi);
         printf("\n  flow matrix         %s\n",
-               constA ? "constant -- incipient solution is exact"
-                      : "state-dependent (multiplicative junction)");
-        printf("  psi_network         %.6g%s\n", psi,
-               constA ? "  (exactly zero: the calculi agree)" : "");
+               constA ? "constant -- solution drift is exactly zero [06 §4 (i)]"
+                      : "state-dependent -- no solution drift is defined (FR-IDC-011)");
         double *em = (double *)calloc((size_t)m->n_nodes, sizeof(double));
         double *tr = (double *)calloc((size_t)m->n_nodes, sizeof(double));
         if (em && tr && gia_emergy_at(m, m->t_end, em, tr)) {
@@ -3162,6 +3335,6 @@ void gia_print_trajectories(const gia_model *m, int steps) {
         }
     }
 
-    free(q); free(idc); free(tdc);
+    free(q); free(dp);
 }
 

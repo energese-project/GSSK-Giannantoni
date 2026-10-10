@@ -157,6 +157,8 @@ typedef struct { int k, n22, n2, nhalf, nunrelated; } gia_ordinality_rec;
 gia_status gia_ordinality_record(const gia_model *m, gia_ordinality_rec *r, const char **why); /* FR-ORD-001,2 */
 bool       gia_at_maximum_ordinality(gia_model *m);    /* redefined: strong connectivity, FR-ORD-003 */
 double     gia_closure(gia_model *m);                  /* renamed proxy, FR-ORD-004 */
+gia_status gia_solution_drift(const gia_model *m, int order, double *out,
+                              const char **why);                              /* FR-IDC-011 */
 gia_status gia_drift_projection(const gia_model *m, double t, double dt,
                                 double *out /* per node */, const char **why); /* FR-IDC-014 */
 gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
@@ -198,7 +200,7 @@ then `conservation, emergy_excess`. Changes from baseline: `_idc`, `_tdc`, `_dri
 are removed (they applied the drift identity to invented per-node φ, PLAN E4); `_drift_proj` is added
 (FR-IDC-014). Every value is finite (NFR-NUM-003).
 - **Source:** srs FR-IDC-011, FR-IDC-014, FR-OUT-001
-- **Verification:** T-OUT-01 · **Priority:** Must · **Status:** planned · **Task:** idc-drift-coupled
+- **Verification:** T-OUT-01 · **Priority:** Must · **Status:** implemented · **Task:** idc-drift-coupled
 
 ### IF-OUT-002 — The MOP CSV
 Written when the seed has a `mop` block and `--mop-out PATH` is given. Columns: `time`; per related
