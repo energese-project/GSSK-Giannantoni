@@ -56,6 +56,11 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **Emergy source terms, the global balance, and limits that refuse rather than truncate** (PLAN.md W3 `emergy-source-terms`, FR-EM-004, FR-EM-007, NFR-LIM-001).
+  - `gia_emergy_source_term` returns a process's equivalent source term, emergy out minus emergy in [02 Eq 3.6–3.17]: `(n−1)·Em(u)` for a co-production with n products, 0 for a partition, and 0 for an interaction whose inputs are all drawn.
+  - `gia_emergy_global_balance` and `gia_emergy_balance_solve` evaluate [02 Eq 3.21] and solve it for the source terms. On the totals of [02 Fig. 3.4] they reproduce `Φ_D = 30,000` and `Φ_E = 15,000` (VAL-04).
+  - **Fixed:** the emergy pass silently dropped a node's inflows past the 64th, and ignored co-production ancestry past 64 nodes. It now refuses with `GIA_E_LIMIT` (`gia_emergy_check_limits`), `gia_emergy_at` returns false, and the trajectory CSV leaves the emergy cells empty.
+
 - **The nonlinear equation of [02 Eq 14.10.1], `gia_nl1410_roots`** (PLAN.md W2 `idc-nonlinear-14-10`, FR-IDC-009). Substituting `F = e^{ut}` reduces `F·(d̃²/dt²)F² + A F²·(d̃/dt)F + B F³ = 0` to `4u² + Au + B = 0`. The solutions are its two roots, not the "triplet" [02 Eq 14.10.2] prints (erratum X8). The test forms the equation's incipient residual with `gia_idc_of` for each root, and checks that no third candidate solves it.
 
 - **The incipient Taylor projection, `gia_idc_taylor`, validated against Giannantoni & Zoli 2009** (PLAN.md W2 `idc-taylor`, FR-IDC-010, VAL-01). `f*(t₀+Δ) = f(t₀) Σ_{k≤n} (aΔ)ᵏ/k!` with `a = f'/f` [09 Eq 10], evaluated by Horner. With n = 2 it reproduces [09]'s published 16.4, 3.01, 178.0, 172.06 and the 15–17 cm range. The tests also pin errata X4 (Eq 19 at τ₀ = 2 gives 156.0, not the printed 154.3) and X5 (the minimum scenario's net increase is 2.6125, not 1.91).

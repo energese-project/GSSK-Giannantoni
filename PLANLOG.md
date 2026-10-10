@@ -50,6 +50,14 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   drift as exactly zero for a constant flow matrix, and to refuse it otherwise. No function in the
   interface did either.
 
+### `emergy-source-terms`
+
+- **IF-API-005 gains the global-balance functions and a limit check.** FR-EM-007 asks the kernel to
+  "evaluate the global balance of [02 Eq 3.21] and solve it for one unknown source term", but no
+  interface carried it. `gia_emergy_global_balance` and `gia_emergy_balance_solve` now do, with each
+  term a `(value, weight)` pair. NFR-LIM-001 needs the refusal to be observable on its own, so
+  `gia_emergy_check_limits` reports `GIA_E_LIMIT`.
+
 ---
 
 ## [Revision 3] — 2026-10-09

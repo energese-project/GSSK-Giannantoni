@@ -921,6 +921,233 @@ static void test_drift_projection(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* ------------------------------------------------------------------ *
+ * 7.2 Emergy algebra in IDC form
+ * ------------------------------------------------------------------ */
+
+/* A source at transformity 1000 feeding a process that sends its output down
+ * n pathways, all replicating (co-production) or all partitioning. */
+static char *fan_seed(int n, const char *mode) {
+    static char buf[16384];
+    int  k, len;
+    len = snprintf(buf, sizeof buf,
+        "{\"nodes\":[{\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,\"quality_input\":1000.0},"
+        "{\"id\":\"proc\",\"type\":\"storage\",\"current_level\":5.0}");
+    for (k = 0; k < n; k++)
+        len += snprintf(buf + len, sizeof buf - (size_t)len,
+                        ",{\"id\":\"out%d\",\"type\":\"storage\",\"current_level\":0.0}", k);
+    len += snprintf(buf + len, sizeof buf - (size_t)len,
+        "],\"edges\":[{\"source\":\"sun\",\"target\":\"proc\",\"weight\":1.0}");
+    for (k = 0; k < n; k++)
+        len += snprintf(buf + len, sizeof buf - (size_t)len,
+                        ",{\"source\":\"proc\",\"target\":\"out%d\",\"weight\":0.5,"
+                        "\"output_mode\":\"%s\"}", k, mode);
+    snprintf(buf + len, sizeof buf - (size_t)len,
+        "],\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+        "\"generative_mode\":false}}");
+    return buf;
+}
+
+/* Source: [02 Eq 3.6-3.8]; [02 p. 23 rule 2].
+ * Oracle: a co-production with n products creates (n - 1) Em(u), where
+ * Em(u) is the emergy the process receives; a partition creates none. The
+ * process's source term, the model's emergy excess, and each product's
+ * emergy (the whole Em(u)) are checked for n = 2, 3, 4. */
+/* Verifies: FR-EM-002 (T-EM-03) */
+static void test_em_coproduction(void) {
+    int n, all = 1, part = 1;
+
+    printf("\n[T-EM-03] co-production creates (n - 1) Em(u)\n");
+    for (n = 2; n <= 4; n++) {
+        gia_model   m;
+        cJSON      *root;
+        const char *why = NULL;
+        double      phi = -1.0, em[8];
+        if (!load_seed(fan_seed(n, "replicate"), &m, &root)) { all = 0; continue; }
+        if (!gia_emergy_at(&m, 1.0, em, NULL) ||
+            gia_emergy_source_term(&m, 1.0, 1, &phi, &why) != GIA_OK ||
+            !near_c(phi, (n - 1) * em[1], TOL_CLOSED) ||
+            !near_c(gia_emergy_excess(&m, 1.0), (n - 1) * em[1], TOL_CLOSED) ||
+            !near_c(em[2], em[1], TOL_CLOSED)) {
+            printf("    n = %d: phi %.10g excess %.10g want %.10g\n", n, phi,
+                   gia_emergy_excess(&m, 1.0), (n - 1) * em[1]);
+            all = 0;
+        }
+        gia_model_free(&m); cJSON_Delete(root);
+        if (!load_seed(fan_seed(n, "partition"), &m, &root)) { part = 0; continue; }
+        if (gia_emergy_source_term(&m, 1.0, 1, &phi, &why) != GIA_OK ||
+            !near_c(phi, 0.0, TOL_CLOSED * 1e4)) part = 0;
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+    ok("co-production: Phi = excess = (n-1) Em(u), each product Em(u); n = 2,3,4", all);
+    ok("partition: Phi = 0", part);
+}
+
+/* The measured gate of ADR 0017: sun (quality 1) as energy, H (quality 1000)
+ * as a drawn control (use_ratio 0.01), F = k sun H = 0.3 * 10 * 2 = 6. */
+static const char *MEASURED_GATE =
+    "{\"nodes\":["
+    " {\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,\"quality_input\":1.0},"
+    " {\"id\":\"H\",\"type\":\"source\",\"value\":2.0,\"quality_input\":1000.0},"
+    " {\"id\":\"gate\",\"type\":\"interaction\",\"module\":{\"k\":0.3}},"
+    " {\"id\":\"out\",\"type\":\"storage\",\"current_level\":0.0},"
+    " {\"id\":\"heat\",\"type\":\"sink\"}],"
+    "\"edges\":["
+    " {\"source\":\"sun\",\"target\":\"gate\",\"role\":\"energy\"},"
+    " {\"source\":\"H\",\"target\":\"gate\",\"role\":\"control\",\"use_ratio\":0.01},"
+    " {\"source\":\"gate\",\"target\":\"out\",\"weight\":1.0},"
+    " {\"source\":\"gate\",\"target\":\"heat\",\"role\":\"used\"}],"
+    "\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,\"generative_mode\":false}}";
+
+/* Source: [02 Eq 3.9, 3.12, 3.15]; ADR 0017.
+ * Oracle, by hand: Em(u1) = F * 1 = 6 (energy), Em(u2) = s F * 1000 = 60
+ * (drawn control), so Em(y) = Em(u1) + Em(u2) = 66 and the interaction's
+ * source term Phi(u1, u2) = 0. The mutation "Em(y) = k Em1 Em2" would give
+ * 0.3 * 6 * 60 = 108. */
+/* Verifies: FR-EM-004 (T-EM-04) */
+static void test_em_interaction(void) {
+    gia_model   m;
+    cJSON      *root;
+    const char *why = NULL;
+    double      em[5], phi = -1.0;
+
+    printf("\n[T-EM-04] a drawn interaction: Em(y) = Em(u1) + Em(u2), Phi = 0\n");
+    if (!load_seed(MEASURED_GATE, &m, &root)) { ok("measured gate loads", 0); return; }
+    ok("Em(y) = 6 + 60 = 66", gia_emergy_at(&m, 1.0, em, NULL) && near_c(em[3], 66.0, 1e-9));
+    ok("Phi(gate) = 0", gia_emergy_source_term(&m, 1.0, 2, &phi, &why) == GIA_OK &&
+                        fabs(phi) <= 1e-9 * 66.0);
+    ok("a boundary node is not a process: GIA_E_ARG",
+       gia_emergy_source_term(&m, 1.0, 0, &phi, &why) == GIA_E_ARG &&
+       gia_emergy_source_term(&m, 1.0, 9, &phi, &why) == GIA_E_ARG);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+/* Source: [02 Eq 3.23-3.26] on the totals of [02 Fig. 3.4] (Brown 1993):
+ * S = 10,000, F = 20,000, Z = 30,000, Y = 7,500.
+ *   Case A, 1 S + 1 F = 1/2 Z + 1/2 * 4 Y: 30,000 = 15,000 + 15,000.
+ *   Case B, S + F + Phi_D + Phi_E = Z + 6 Y with Phi_E = Phi_D / 2:
+ *     Phi_D + Phi_E = 75,000 - 30,000 = 45,000, so Phi_D = 30,000, Phi_E = 15,000. */
+/* Verifies: FR-EM-007, BR-008 (T-EM-07, VAL-04) */
+static void test_em_global_balance(void) {
+    const gia_balance_term inA[2]  = { { 10000.0, 1.0 }, { 20000.0, 1.0 } };
+    const gia_balance_term outA[2] = { { 30000.0, 0.5 }, { 7500.0, 0.5 * 4.0 } };
+    const gia_balance_term outB[2] = { { 30000.0, 1.0 }, { 7500.0, 6.0 } };
+    const double           w[2]    = { 1.0, 0.5 };
+    double                 res = -1.0, phi[2] = { 0.0, 0.0 };
+    const char            *why = NULL;
+
+    printf("\n[T-EM-07 / VAL-04] [02 Eq 3.23-3.26] global balance, Fig. 3.4 totals\n");
+    ok("case A balances: residual 0",
+       gia_emergy_global_balance(inA, 2, outA, 2, &res, &why) == GIA_OK && res == 0.0);
+    ok("case B: Phi_D = 30,000, Phi_E = 15,000",
+       gia_emergy_balance_solve(inA, 2, outB, 2, w, 2, phi, &why) == GIA_OK &&
+       phi[0] == 30000.0 && phi[1] == 15000.0);
+    ok("no source terms, or weights summing to 0: GIA_E_ARG / GIA_E_DOMAIN",
+       gia_emergy_balance_solve(inA, 2, outB, 2, w, 0, phi, &why) == GIA_E_ARG &&
+       gia_emergy_balance_solve(inA, 2, outB, 2, (const double[]){ 1.0, -1.0 }, 2, phi, &why)
+           == GIA_E_DOMAIN);
+}
+
+/* Source: [02 p. 23 rules 1-4], [02 Eq 3.8, 3.12, 3.16-3.17] — through the
+ * network engine: the four emergy rules in one model. A split shares emergy
+ * in proportion to flow (rule 3); a co-production gives each product the whole
+ * (rule 2); a drawn interaction sums its inputs (Eq 3.12); co-products
+ * reunited at one component count once (rule 4a). */
+/* Verifies: BR-003 (VAL-03) */
+static void test_val_emergy_rules(void) {
+    gia_model   m;
+    cJSON      *root;
+    double      em[8], q[8];
+    int         good = 1;
+    /* sun -> p; p splits to a and b (partition); a replicates to c1, c2; both
+     * c1 and c2 flow into r (reunion). */
+    static const char *seed =
+        "{\"nodes\":["
+        " {\"id\":\"sun\",\"type\":\"source\",\"value\":10.0,\"quality_input\":100.0},"
+        " {\"id\":\"p\",\"type\":\"storage\",\"current_level\":4.0},"
+        " {\"id\":\"a\",\"type\":\"storage\",\"current_level\":2.0},"
+        " {\"id\":\"b\",\"type\":\"storage\",\"current_level\":2.0},"
+        " {\"id\":\"c1\",\"type\":\"storage\",\"current_level\":1.0},"
+        " {\"id\":\"c2\",\"type\":\"storage\",\"current_level\":1.0},"
+        " {\"id\":\"r\",\"type\":\"storage\",\"current_level\":0.0}],"
+        "\"edges\":["
+        " {\"source\":\"sun\",\"target\":\"p\",\"weight\":1.0},"
+        " {\"source\":\"p\",\"target\":\"a\",\"weight\":0.3},"
+        " {\"source\":\"p\",\"target\":\"b\",\"weight\":0.1},"
+        " {\"source\":\"a\",\"target\":\"c1\",\"weight\":0.2,\"output_mode\":\"replicate\"},"
+        " {\"source\":\"a\",\"target\":\"c2\",\"weight\":0.2,\"output_mode\":\"replicate\"},"
+        " {\"source\":\"c1\",\"target\":\"r\",\"weight\":0.5},"
+        " {\"source\":\"c2\",\"target\":\"r\",\"weight\":0.5}],"
+        "\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,\"generative_mode\":false}}";
+
+    printf("\n[VAL-03] [02] the four emergy rules, through the network engine\n");
+    if (!load_seed(seed, &m, &root)) { ok("seed loads", 0); return; }
+    good = gia_emergy_at(&m, 1.0, em, NULL) && gia_network_state(&m, 1.0, q, NULL);
+    /* Rule 1: the sun's emergy reaches p: Em(p) = F(sun->p) * 100 = q_sun * 1 * 100. */
+    ok("rule 1: Em(p) = 10 * 1.0 * 100 = 1000", good && near_c(em[1], 1000.0, 1e-9));
+    /* Rule 3: a and b split p's emergy 0.3 : 0.1 of p's outflow. */
+    ok("rule 3: Em(a) : Em(b) = 0.3 : 0.1, summing to Em(p)",
+       good && near_c(em[2], 750.0, 1e-9) && near_c(em[3], 250.0, 1e-9));
+    /* Rule 2: each co-product carries the whole of a's emergy. */
+    ok("rule 2: Em(c1) = Em(c2) = Em(a)", good && near_c(em[4], em[2], 1e-9) &&
+                                          near_c(em[5], em[2], 1e-9));
+    /* Rule 4a: reunited at r, the co-products count once -- c1 and c2 each pass
+     * all their emergy to r, and r takes the larger, not the sum. */
+    ok("rule 4: Em(r) = max, not sum: Em(r) = Em(a)", good && near_c(em[6], em[2], 1e-9));
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
+/* Source: NFR-LIM-001 (BR-009). 65 inflows into one component, and 65
+ * components with a co-production: refused with GIA_E_LIMIT, where the
+ * baseline silently dropped the 65th inflow and ignored ancestry past 64. */
+/* Verifies: NFR-LIM-001 (T-LIM-01) */
+static void test_em_limits(void) {
+    static char buf[16384];
+    gia_model   m;
+    cJSON      *root;
+    const char *why = NULL;
+    double      phi, em[70];
+    int         k, len, refused, tidy = 1;
+
+    printf("\n[T-LIM-01] emergy limits refuse, never truncate\n");
+    /* 65 sources, each into `hub`. */
+    len = snprintf(buf, sizeof buf, "{\"nodes\":[{\"id\":\"hub\",\"type\":\"storage\","
+                   "\"current_level\":0.0}");
+    for (k = 0; k < 65; k++)
+        len += snprintf(buf + len, sizeof buf - (size_t)len,
+                        ",{\"id\":\"s%d\",\"type\":\"source\",\"value\":1.0,"
+                        "\"quality_input\":1.0}", k);
+    len += snprintf(buf + len, sizeof buf - (size_t)len, "],\"edges\":[");
+    for (k = 0; k < 65; k++)
+        len += snprintf(buf + len, sizeof buf - (size_t)len,
+                        "%s{\"source\":\"s%d\",\"target\":\"hub\",\"weight\":1.0}",
+                        k ? "," : "", k);
+    snprintf(buf + len, sizeof buf - (size_t)len,
+             "],\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":1,"
+             "\"generative_mode\":false}}");
+    if (!load_seed(buf, &m, &root)) { ok("65-inflow seed loads", 0); return; }
+    why = NULL;
+    refused = gia_emergy_source_term(&m, 1.0, 0, &phi, &why) == GIA_E_LIMIT &&
+              gia_emergy_check_limits(&m, &why) == GIA_E_LIMIT &&
+              !gia_emergy_at(&m, 1.0, em, NULL);
+    ok("65 inflows into one node: GIA_E_LIMIT, and gia_emergy_at refuses", refused);
+    ok("  and the reason names NFR-LIM-001", why && strstr(why, "NFR-LIM-001"));
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* 66 nodes (sun, proc, 64 products) with a co-production. */
+    if (!load_seed(fan_seed(64, "replicate"), &m, &root)) { ok("66-node seed loads", 0); return; }
+    ok("66 nodes with a co-production: GIA_E_LIMIT",
+       gia_emergy_check_limits(&m, &why) == GIA_E_LIMIT);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    /* At the limit, it works. */
+    if (!load_seed(fan_seed(60, "replicate"), &m, &root)) { ok("62-node seed loads", 0); return; }
+    tidy = gia_emergy_check_limits(&m, &why) == GIA_OK &&
+           gia_emergy_source_term(&m, 1.0, 1, &phi, &why) == GIA_OK;
+    ok("62 nodes, 60 co-products: within the limits, Phi computed", tidy);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -937,6 +1164,11 @@ int main(void) {
     test_nl1410();
     test_solution_drift();
     test_drift_projection();
+    test_em_coproduction();
+    test_em_interaction();
+    test_em_global_balance();
+    test_val_emergy_rules();
+    test_em_limits();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

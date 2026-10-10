@@ -60,6 +60,11 @@
 /* Branch cap for the n-et. The binary (duet) case is n = 2. */
 #define GIA_MAX_BRANCHES     16
 
+/* The emergy pass combines at most this many inflows into one node, and tracks
+ * co-production ancestry across at most this many components; past either it
+ * refuses with GIA_E_LIMIT rather than truncating (NFR-LIM-001). */
+#define GIA_MAX_INFLOWS      64
+
 /* ================================================================== *
  * 1. Exponential form:  f(t) = e^phi(t)
  *
@@ -646,6 +651,40 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr);
  * thing Giannantoni says a conservative calculus cannot express -- reported
  * rather than argued about. */
 double gia_emergy_excess(const gia_model *m, double t);
+
+/* FR-EM-002, FR-EM-004 — the equivalent source term of one process [02 Eq 3.6-3.17]:
+ * the emergy it sends onward minus the emergy it receives, at t. A partition
+ * gives 0; a co-production with n products gives (n - 1) Em(u) [02 Eq 3.8]; an
+ * interaction whose inputs are all drawn gives 0, since Em(y) = Em(u1) + Em(u2)
+ * [02 Eq 3.9, 3.12, 3.15]. `node` must be a component or a module (a source,
+ * sink or constant is not a process: GIA_E_ARG). A model past the emergy pass's
+ * fixed limits -- more than GIA_MAX_INFLOWS inflows into one node, or more than
+ * 64 components with a co-production -- is GIA_E_LIMIT (NFR-LIM-001). */
+gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
+                                  double *phi, const char **why);
+
+/* The emergy pass's limits, checked on their own: GIA_E_LIMIT when the model
+ * exceeds them (NFR-LIM-001). gia_emergy_at returns false in that case, and
+ * the trajectory CSV leaves its emergy cells empty, rather than truncating. */
+gia_status gia_emergy_check_limits(const gia_model *m, const char **why);
+
+/* FR-EM-007 — the global emergy balance of [02 Eq 3.18-3.26]: weighted inputs
+ * plus source terms against weighted outputs, sum(w v)_in + sum Phi = sum(w v)_out,
+ * the weights being the co-injection, co-production and re-normalisation
+ * factors. */
+typedef struct { double value, weight; } gia_balance_term;
+
+/* residual = sum(w v)_in - sum(w v)_out. */
+gia_status gia_emergy_global_balance(const gia_balance_term *in, int n_in,
+                                     const gia_balance_term *out, int n_out,
+                                     double *residual, const char **why);
+
+/* Solve the balance for source terms that are fixed multiples of one unknown,
+ * Phi_k = phi_w[k] x: phi[k] = phi_w[k] (sum_out - sum_in) / sum(phi_w). */
+gia_status gia_emergy_balance_solve(const gia_balance_term *in, int n_in,
+                                    const gia_balance_term *out, int n_out,
+                                    const double *phi_w, int n_phi, double *phi,
+                                    const char **why);
 
 /* ================================================================== *
  * 6. Ordinality

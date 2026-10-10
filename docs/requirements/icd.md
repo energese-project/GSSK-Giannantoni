@@ -163,6 +163,15 @@ gia_status gia_drift_projection(const gia_model *m, double t, double dt,
                                 double *out /* per node */, const char **why); /* FR-IDC-014 */
 gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
                                   double *phi, const char **why);               /* FR-EM-002, 004 */
+gia_status gia_emergy_check_limits(const gia_model *m, const char **why);       /* NFR-LIM-001 */
+typedef struct { double value, weight; } gia_balance_term;
+gia_status gia_emergy_global_balance(const gia_balance_term *in, int n_in,
+                                     const gia_balance_term *out, int n_out,
+                                     double *residual, const char **why);       /* FR-EM-007 */
+gia_status gia_emergy_balance_solve(const gia_balance_term *in, int n_in,
+                                    const gia_balance_term *out, int n_out,
+                                    const double *phi_w, int n_phi, double *phi,
+                                    const char **why);                          /* FR-EM-007 */
 ```
 `gia_ordinality` keeps its name for one release, returns `gia_closure`, and is marked deprecated.
 - **Source:** srs §2.5, FR-IDC-014

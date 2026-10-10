@@ -2325,8 +2325,6 @@ static void coproduct_ancestry(const gia_model *m, const bool *is_back,
  * `mask` is n entries per contribution. Groups are merged transitively: an
  * inflow bridging two existing groups joins them, because all three then trace
  * to one co-production. */
-#define GIA_MAX_INFLOWS 64
-
 static double combine_inflows(int n, int count, const char *masks,
                               const double *vals) {
     double gval[GIA_MAX_INFLOWS];
@@ -2387,6 +2385,8 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
     bool    ok = false;
 
     if (!m || m->n_nodes <= 0) return false;
+    /* NFR-LIM-001: refuse, never truncate. */
+    if (gia_emergy_check_limits(m, NULL) != GIA_OK) return false;
     n = m->n_nodes;
 
     q       = (double *)calloc((size_t)n, sizeof(double));
@@ -2498,31 +2498,28 @@ done:
     return ok;
 }
 
-double gia_emergy_excess(const gia_model *m, double t) {
-    double *em = NULL, *q = NULL, *flow = NULL, *out_em = NULL;
+/* The emergy each node receives (em) and sends onward (out_em) at t, under
+ * the same rules as gia_emergy_at. */
+static bool emergy_out(const gia_model *m, double t, double *em, double *out_em) {
+    double *q = NULL, *flow = NULL, *out_tot = NULL;
     bool   *is_back = NULL;
     char   *colour = NULL;
-    double  excess = 0.0, *out_tot = NULL;
-    int     i, n;
+    int     i, n = m->n_nodes;
+    bool    ok = false;
 
-    if (!m || m->n_nodes <= 0) return 0.0;
-    n = m->n_nodes;
-
-    em      = (double *)calloc((size_t)n, sizeof(double));
     q       = (double *)calloc((size_t)n, sizeof(double));
-    out_em  = (double *)calloc((size_t)n, sizeof(double));
     out_tot = (double *)calloc((size_t)n, sizeof(double));
     colour  = (char   *)calloc((size_t)n, sizeof(char));
     flow    = (double *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
                                sizeof(double));
     is_back = (bool   *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1),
                                sizeof(bool));
-    if (!em || !q || !out_em || !out_tot || !colour || !flow || !is_back)
-        goto done;
+    if (!q || !out_tot || !colour || !flow || !is_back) goto done;
 
     if (!gia_emergy_at(m, t, em, NULL))        goto done;
     if (!gia_network_state(m, t, q, NULL))     goto done;
 
+    for (i = 0; i < n; i++) out_em[i] = 0.0;
     for (i = 0; i < m->n_edges; i++) flow[i] = gia_edge_flow(m, &m->edges[i], q, t);
     for (i = 0; i < n; i++)
         if (colour[i] == 0) mark_back_edges(m, colour, is_back, i);
@@ -2547,20 +2544,134 @@ double gia_emergy_excess(const gia_model *m, double t) {
         else
             out_em[a] += (out_tot[a] > 0.0) ? em[a] * (f / out_tot[a]) : 0.0;
     }
-
-    /* Emergy created, component by component. A partition contributes nothing:
-     * what leaves equals what arrived. A replication contributes the whole
-     * inflow again for every product past the first. */
-    for (i = 0; i < n; i++) {
-        double made = out_em[i] - em[i];
-        if (!m->nodes[i].integrates) continue;   /* a boundary source is not creating */
-        if (made > 0.0) excess += made;
-    }
-
+    ok = true;
 done:
-    free(em); free(q); free(out_em); free(out_tot); free(colour);
-    free(flow); free(is_back);
+    free(q); free(out_tot); free(colour); free(flow); free(is_back);
+    return ok;
+}
+
+double gia_emergy_excess(const gia_model *m, double t) {
+    double *em = NULL, *out_em = NULL, excess = 0.0;
+    int     i, n;
+
+    if (!m || m->n_nodes <= 0) return 0.0;
+    n = m->n_nodes;
+    em     = (double *)calloc((size_t)n, sizeof(double));
+    out_em = (double *)calloc((size_t)n, sizeof(double));
+    if (em && out_em && emergy_out(m, t, em, out_em)) {
+        /* Emergy created, component by component. A partition contributes
+         * nothing: what leaves equals what arrived. A replication contributes
+         * the whole inflow again for every product past the first. */
+        for (i = 0; i < n; i++) {
+            double made = out_em[i] - em[i];
+            if (!m->nodes[i].integrates) continue;   /* a boundary source is not creating */
+            if (made > 0.0) excess += made;
+        }
+    }
+    free(em); free(out_em);
     return excess;
+}
+
+static gia_status em_fail(gia_status st, const char *reason, const char **why) {
+    if (why) *why = reason;
+    return st;
+}
+
+/* NFR-LIM-001. */
+gia_status gia_emergy_check_limits(const gia_model *m, const char **why) {
+    int b, i, replicates = 0;
+    if (!m || m->n_nodes <= 0)
+        return em_fail(GIA_E_ARG, "gia_emergy_check_limits: NULL or empty model", why);
+    for (i = 0; i < m->n_edges; i++)
+        if (m->edges[i].from >= 0 && m->edges[i].out_mode == GIA_OUT_REPLICATE) replicates = 1;
+    if (replicates && m->n_nodes > GIA_MAX_INFLOWS)
+        return em_fail(GIA_E_LIMIT,
+                       "the emergy pass tracks co-production ancestry across at most "
+                       "GIA_MAX_INFLOWS (64) nodes; this model has more and a co-production "
+                       "(NFR-LIM-001)", why);
+    for (b = 0; b < m->n_nodes; b++) {
+        int count = 0;
+        for (i = 0; i < m->n_edges; i++)
+            if (m->edges[i].from >= 0 && m->edges[i].to == b &&
+                m->edges[i].role != GIA_ROLE_USED) count++;
+        if (count > GIA_MAX_INFLOWS)
+            return em_fail(GIA_E_LIMIT,
+                           "a node has more than GIA_MAX_INFLOWS (64) inflows, which the "
+                           "emergy pass cannot combine under rule 4 (NFR-LIM-001)", why);
+    }
+    return GIA_OK;
+}
+
+/* FR-EM-002, FR-EM-004. */
+gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
+                                  double *phi, const char **why) {
+    double    *em, *out_em;
+    gia_status st;
+    if (!m || !phi || m->n_nodes <= 0)
+        return em_fail(GIA_E_ARG, "gia_emergy_source_term: NULL or empty model", why);
+    if (node < 0 || node >= m->n_nodes)
+        return em_fail(GIA_E_ARG, "gia_emergy_source_term: node out of range", why);
+    if (!m->nodes[node].is_module &&
+        (m->nodes[node].kind == GIA_NODE_SOURCE || m->nodes[node].kind == GIA_NODE_SINK ||
+         m->nodes[node].kind == GIA_NODE_CONSTANT))
+        return em_fail(GIA_E_ARG, "gia_emergy_source_term: a source, sink or constant is "
+                       "habitat, not a process ([02 Eq 3.6])", why);
+    if ((st = gia_emergy_check_limits(m, why)) != GIA_OK) return st;
+    em     = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    out_em = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+    if (!em || !out_em || !emergy_out(m, t, em, out_em)) {
+        free(em); free(out_em);
+        return em_fail(GIA_E_DOMAIN, "gia_emergy_source_term: the network does not solve "
+                       "at t", why);
+    }
+    *phi = out_em[node] - em[node];
+    free(em); free(out_em);
+    return GIA_OK;
+}
+
+static gia_status balance_sums(const gia_balance_term *in, int n_in,
+                               const gia_balance_term *out, int n_out,
+                               double *sin, double *sout, const char **why) {
+    int i;
+    if ((n_in > 0 && !in) || (n_out > 0 && !out) || n_in < 0 || n_out < 0)
+        return em_fail(GIA_E_ARG, "gia_emergy balance: NULL terms or negative count", why);
+    *sin = *sout = 0.0;
+    for (i = 0; i < n_in; i++)  *sin  += in[i].weight * in[i].value;
+    for (i = 0; i < n_out; i++) *sout += out[i].weight * out[i].value;
+    if (!isfinite(*sin) || !isfinite(*sout))
+        return em_fail(GIA_E_RANGE, "gia_emergy balance: a sum is not finite", why);
+    return GIA_OK;
+}
+
+/* FR-EM-007 — [02 Eq 3.21]. */
+gia_status gia_emergy_global_balance(const gia_balance_term *in, int n_in,
+                                     const gia_balance_term *out, int n_out,
+                                     double *residual, const char **why) {
+    double     a, b;
+    gia_status st;
+    if (!residual) return em_fail(GIA_E_ARG, "gia_emergy_global_balance: residual is NULL", why);
+    if ((st = balance_sums(in, n_in, out, n_out, &a, &b, why)) != GIA_OK) return st;
+    *residual = a - b;
+    return GIA_OK;
+}
+
+gia_status gia_emergy_balance_solve(const gia_balance_term *in, int n_in,
+                                    const gia_balance_term *out, int n_out,
+                                    const double *phi_w, int n_phi, double *phi,
+                                    const char **why) {
+    double     a, b, w = 0.0, x;
+    int        k;
+    gia_status st;
+    if (!phi_w || !phi || n_phi < 1)
+        return em_fail(GIA_E_ARG, "gia_emergy_balance_solve: no source terms to solve for", why);
+    if ((st = balance_sums(in, n_in, out, n_out, &a, &b, why)) != GIA_OK) return st;
+    for (k = 0; k < n_phi; k++) w += phi_w[k];
+    if (w == 0.0 || !isfinite(w))
+        return em_fail(GIA_E_DOMAIN, "gia_emergy_balance_solve: the source-term weights sum "
+                       "to zero, so the unknown is not determined", why);
+    x = (b - a) / w;
+    for (k = 0; k < n_phi; k++) phi[k] = phi_w[k] * x;
+    return GIA_OK;
 }
 
 /* ================================================================== *
@@ -2933,19 +3044,23 @@ bool gia_write_trajectories(const gia_model *m, const char *path, int steps) {
     dt = m->t_end / (double)steps;
     for (s = 0; s <= steps; s++) {
         double t = (double)s * dt;
-        bool   have_dp;
+        bool   have_dp, have_em;
 
         (void)gia_sample_at(m, t, q, NULL, NULL, NULL);
-        (void)gia_emergy_at(m, t, em, tr);
+        /* A model past the emergy pass's limits is refused, not truncated
+         * (NFR-LIM-001): its emergy cells are left empty. */
+        have_em = gia_emergy_at(m, t, em, tr);
         have_dp = gia_drift_projection(m, t, dt, dp, NULL) == GIA_OK;
 
         fprintf(f, "%.6f", t);
         for (i = 0; i < m->n_nodes; i++) {
-            fprintf(f, ",%.10g,%.10g,%.10g,", q[i], em[i], tr[i]);
+            fprintf(f, ",%.10g,", q[i]);
+            if (have_em) fprintf(f, "%.10g,%.10g,", em[i], tr[i]); else fprintf(f, ",,");
             if (have_dp) fprintf(f, "%.10g", dp[i]);
         }
-        fprintf(f, ",%.10g,%.10g\n",
-                gia_conservation_residual(m, t), gia_emergy_excess(m, t));
+        fprintf(f, ",%.10g,", gia_conservation_residual(m, t));
+        if (have_em) fprintf(f, "%.10g", gia_emergy_excess(m, t));
+        fprintf(f, "\n");
     }
 
     free(q); free(em); free(tr); free(dp);

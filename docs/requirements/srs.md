@@ -151,7 +151,7 @@ returning on a feedback pathway shall not be re-injected; independent inputs sha
 For an interaction whose inputs are all drawn, the product's emergy shall equal the sum of the drawn
 inputs' emergy, so the equivalent source term `Φ(u₁, u₂)` is zero.
 - **Source:** [02 Eq 3.9, 3.12, 3.15]; ADR 0017
-- **Verification:** T-EM-04 · **Priority:** Must · **Status:** planned · **Task:** emergy-source-terms
+- **Verification:** T-EM-04 · **Priority:** Must · **Status:** implemented · **Task:** emergy-source-terms
 
 ### FR-EM-005 — Ordinal forms of the three processes
 The kernel shall construct co-production as a binary (two branches, each `Em(u)`), interaction as a
@@ -170,7 +170,7 @@ shall map each pair to its product; `l ∘ l` shall be stored as `[l, l]` and re
 Given input emergies, co-injection, co-production and re-normalisation factors and source terms, the
 kernel shall evaluate the global balance of [02 Eq 3.21] and solve it for one unknown source term.
 - **Source:** [02 Eq 3.18–3.26]
-- **Verification:** T-EM-07, VAL-04 · **Priority:** Could · **Status:** planned · **Task:** emergy-source-terms
+- **Verification:** T-EM-07, VAL-04 · **Priority:** Could · **Status:** implemented · **Task:** emergy-source-terms
 
 ### 2.3 Maximum Ordinality Principle
 
@@ -438,7 +438,7 @@ Exceeding any fixed limit shall be refused with `GIA_E_LIMIT`. (Defect at baseli
 and `gia_emergy_at` in `src/engine.c` silently ignore a component's inflows beyond 64, and co-production
 masks beyond 64 components.)
 - **Source:** BR-009
-- **Verification:** T-LIM-01 · **Priority:** Must · **Status:** planned · **Task:** emergy-source-terms
+- **Verification:** T-LIM-01 · **Priority:** Must · **Status:** implemented · **Task:** emergy-source-terms
 
 ### NFR-ROB-001 — Hostile seeds
 The `mop` block parser shall reject malformed input with an error and never crash; it shall be fuzzed
