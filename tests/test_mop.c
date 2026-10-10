@@ -706,6 +706,53 @@ static void test_val_zoli_2009(void) {
        near_c(v17 - 0.4, 2.6125, TOL_CLOSED) && fabs((v17 - 0.4) - 1.91) > 0.5);
 }
 
+/* The defining residual of [02 Eq 14.10.1] for F = e^{ut} at t, each
+ * incipient derivative taken by gia_idc_of on the function's own value and
+ * slope: F (d~/dt)^2 (F^2) + A F^2 (d~/dt) F + B F^3, divided by F^3. */
+static double complex nl1410_residual(double complex u, double complex A, double complex B,
+                                      double t) {
+    double complex F = cexp(u * t), dF = u * F, F2 = F * F, dF2 = 2.0 * u * F2;
+    double complex d2F2 = 0.0, d1F = 0.0;
+    (void)gia_idc_of(F2, dF2, 2, &d2F2, NULL);
+    (void)gia_idc_of(F, dF, 1, &d1F, NULL);
+    return (F * d2F2 + A * F2 * d1F + B * F * F2) / (F * F2);
+}
+
+/* Source: [02 Eq 14.10.1-14.10.2]; PLAN X8.
+ * Oracle: the equation's incipient residual for F = e^{ut}, formed with
+ * gia_idc_of (FR-IDC-002, already verified) at several t, for each returned
+ * root; and the count: a quadratic has two roots, and the [02 Eq 14.10.2]
+ * "triplet" has no third. */
+/* Verifies: FR-IDC-009 (T-IDC-08) */
+static void test_nl1410(void) {
+    static const double complex AB[3][2] = { { 3.0, -1.0 }, { -2.0 + I, 0.5 }, { 1.0, 5.0 } };
+    double complex u[2];
+    const char    *why = NULL;
+    int            k, all = 1, distinct = 1, third = 0;
+
+    printf("\n[T-IDC-08] [02 Eq 14.10.1]: 4u^2 + Au + B = 0\n");
+    for (k = 0; k < 3; k++) {
+        int    i;
+        double t;
+        if (gia_nl1410_roots(AB[k][0], AB[k][1], u, &why) != GIA_OK) { all = distinct = 0; continue; }
+        if (cabs(u[0] - u[1]) < 1e-6) distinct = 0;
+        for (i = 0; i < 2; i++)
+            for (t = 0.0; t <= 1.0; t += 0.25)
+                if (!(cabs(nl1410_residual(u[i], AB[k][0], AB[k][1], t)) <=
+                      TOL_CLOSED * (1.0 + cabs(u[i]) * cabs(u[i])))) all = 0;
+        /* No third solution: u = 0 and u = -A/4 (the remaining natural
+         * candidates for a "triplet") leave a residual. */
+        if (cabs(nl1410_residual(0.0, AB[k][0], AB[k][1], 0.5)) <= 1e-6 ||
+            cabs(nl1410_residual(-AB[k][0] / 4.0, AB[k][0], AB[k][1], 0.5)) <= 1e-6) third = 1;
+    }
+    ok("each root: incipient residual of Eq 14.10.1 = 0, 3 (A, B) x 5 t, 1e-12", all);
+    ok("two distinct roots for each (A, B)", distinct);
+    ok("X8: no third solution (u = 0 and u = -A/4 leave a residual)", !third);
+    ok("non-finite A is GIA_E_DOMAIN; NULL u is GIA_E_ARG",
+       gia_nl1410_roots(NAN, 1.0, u, &why) == GIA_E_DOMAIN &&
+       gia_nl1410_roots(1.0, 1.0, NULL, &why) == GIA_E_ARG);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -719,6 +766,7 @@ int main(void) {
     test_idc_refusals();
     test_idc_taylor();
     test_val_zoli_2009();
+    test_nl1410();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

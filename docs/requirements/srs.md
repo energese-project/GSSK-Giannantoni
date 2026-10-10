@@ -93,7 +93,7 @@ Riccati residual of the result. The printed substitution of [06 Eq 3.17] shall n
 For constants `A, B`, the kernel shall return the two roots of `4u² + A u + B = 0` as the solutions
 `F = e^{ut}` of `F·(d̃²/dt²)F² + A F²·(d̃/dt)F + B F³ = 0`.
 - **Source:** [02 Eq 14.10.1–14.10.2]; X8
-- **Verification:** T-IDC-08 · **Priority:** Could · **Status:** planned · **Task:** idc-nonlinear-14-10
+- **Verification:** T-IDC-08 · **Priority:** Could · **Status:** implemented · **Task:** idc-nonlinear-14-10
 
 ### FR-IDC-010 — Incipient Taylor projection
 Given `f(t₀) ≠ 0`, `f'(t₀)`, a horizon Δ and an order `n ≥ 0`, the kernel shall compute

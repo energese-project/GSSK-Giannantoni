@@ -128,6 +128,14 @@ gia_status gia_riccati_eval(const gia_lde2_sol *sol, double t,
 gia_status gia_idc_taylor(double f0, double df0, double dt, int n,
                           double *out, const char **why);
 
+/* FR-IDC-009 — [02 Eq 14.10.1]: F (d~^2/dt^2) F^2 + A F^2 (d~/dt) F + B F^3 = 0.
+ * Substituting F = e^{ut}, every incipient derivative of an exponential with
+ * affine exponent is exact, and the equation reduces to (4u^2 + A u + B) e^{3ut}
+ * = 0. Its solutions are the two roots of 4u^2 + A u + B = 0, not the
+ * "triplet" printed at [02 Eq 14.10.2] (PLAN X8). */
+gia_status gia_nl1410_roots(double complex A, double complex B,
+                            double complex u[2], const char **why);
+
 /* FR-IDC-013 — what the sources do not define is refused by name, with the
  * reason (PLAN §6). `feature` is one of:
  *   "riccati_duet"     the direct duet form [06 Eq 3.22] (PLAN X3)

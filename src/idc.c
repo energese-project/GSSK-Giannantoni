@@ -569,6 +569,23 @@ gia_status gia_idc_taylor(double f0, double df0, double dt, int n,
     return GIA_OK;
 }
 
+/* FR-IDC-009 — [02 Eq 14.10.1], PLAN X8: the roots of 4u^2 + A u + B = 0, by
+ * the stable form of numerics N3 applied to u^2 + (A/4) u + B/4. */
+gia_status gia_nl1410_roots(double complex A, double complex B,
+                            double complex u[2], const char **why) {
+    double complex a1, a0, sq, q;
+    if (!u) return fail(GIA_E_ARG, "gia_nl1410_roots: u is NULL", why);
+    if (!finite_c(A) || !finite_c(B))
+        return fail(GIA_E_DOMAIN, "gia_nl1410_roots: A and B must be finite", why);
+    a1 = A / 4.0; a0 = B / 4.0;
+    sq = csqrt(a1 * a1 - 4.0 * a0);
+    q  = cabs(a1 + sq) >= cabs(a1 - sq) ? a1 + sq : a1 - sq;
+    if (q == 0.0) { u[0] = u[1] = 0.0; return GIA_OK; }
+    u[0] = -q / 2.0;
+    u[1] = a0 / u[0];
+    return GIA_OK;
+}
+
 /* FR-IDC-013 — PLAN §6. */
 gia_status gia_idc_refuse(const char *feature, const char **why) {
     if (!feature) return fail(GIA_E_ARG, "gia_idc_refuse: feature is NULL", why);
