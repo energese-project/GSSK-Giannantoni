@@ -157,14 +157,14 @@ inputs' emergy, so the equivalent source term `Φ(u₁, u₂)` is zero.
 The kernel shall construct co-production as a binary (two branches, each `Em(u)`), interaction as a
 duet `[Em(u₁), Em(u₂)]`, and feedback as the duet-binary `[[a₁, a₂], [a₂, a₁]]`.
 - **Source:** [22 Eq 6–8], [06b Eq 6, 10], [10 §Incipient Derivative]
-- **Verification:** T-EM-05 · **Priority:** Should · **Status:** planned · **Task:** emergy-ordinal-forms
+- **Verification:** T-EM-05 · **Priority:** Should · **Status:** implemented · **Task:** emergy-ordinal-forms
 
 ### FR-EM-006 — Circle product
 The circle product shall keep every pair of factors in the outer arrangement
 (`(a₁; a₂) ∘ [b₁, b₂] = [(a₁·b₁; a₂·b₁), (a₁·b₂; a₂·b₂)]` before reduction), and its cardinal reduction
 shall map each pair to its product; `l ∘ l` shall be stored as `[l, l]` and reduce to `l²`.
 - **Source:** [02 Eq 14.11.4–14.11.5], [06b Eq 2–3]; PLAN R12
-- **Verification:** T-EM-06 · **Priority:** Should · **Status:** planned · **Task:** emergy-ordinal-forms
+- **Verification:** T-EM-06 · **Priority:** Should · **Status:** implemented · **Task:** emergy-ordinal-forms
 
 ### FR-EM-007 — Global emergy balance arithmetic
 Given input emergies, co-injection, co-production and re-normalisation factors and source terms, the

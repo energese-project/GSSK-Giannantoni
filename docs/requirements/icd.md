@@ -164,6 +164,16 @@ gia_status gia_drift_projection(const gia_model *m, double t, double dt,
 gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
                                   double *phi, const char **why);               /* FR-EM-002, 004 */
 gia_status gia_emergy_check_limits(const gia_model *m, const char **why);       /* NFR-LIM-001 */
+typedef enum { GIA_OF_SCALAR, GIA_OF_BINARY, GIA_OF_DUET, GIA_OF_DUET_BINARY } gia_oform_kind;
+typedef struct { gia_oform_kind kind; int rows, cols; double v[2][2]; } gia_oform;
+gia_oform  gia_oform_scalar(double a);
+gia_oform  gia_oform_binary(double em_u);                                       /* FR-EM-005 */
+gia_oform  gia_oform_duet(double em_u1, double em_u2);
+gia_oform  gia_oform_duet_binary(double a1, double a2);
+typedef struct { int rows, cols; double pair[2][2][2]; } gia_circle;
+gia_status gia_circle_product(const gia_oform *a, const gia_oform *b, gia_circle *out,
+                              const char **why);                                /* FR-EM-006 */
+gia_oform  gia_circle_reduce(const gia_circle *c);
 typedef struct { double value, weight; } gia_balance_term;
 gia_status gia_emergy_global_balance(const gia_balance_term *in, int n_in,
                                      const gia_balance_term *out, int n_out,

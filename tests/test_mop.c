@@ -1148,6 +1148,66 @@ static void test_em_limits(void) {
     gia_model_free(&m); cJSON_Delete(root);
 }
 
+/* Source: [22 Eq 6-8], [06b Eq 6, 10].
+ * Oracle: the shapes and entries the equations print. A binary is a column
+ * of two equal branches, a duet a row of its two inputs, a duet-binary the
+ * specular 2 x 2. The mutation "transpose" turns the binary into a row and
+ * the duet into a column, and fails the shape checks. */
+/* Verifies: FR-EM-005 (T-EM-05) */
+static void test_em_ordinal_forms(void) {
+    gia_oform b = gia_oform_binary(7.0), d = gia_oform_duet(3.0, 5.0);
+    gia_oform f = gia_oform_duet_binary(2.0, -1.5);
+
+    printf("\n[T-EM-05] ordinal forms of the three processes\n");
+    ok("co-production: binary, a 2 x 1 column (Em(u); Em(u))",
+       b.kind == GIA_OF_BINARY && b.rows == 2 && b.cols == 1 &&
+       b.v[0][0] == 7.0 && b.v[1][0] == 7.0);
+    ok("interaction: duet, a 1 x 2 row [Em(u1), Em(u2)]",
+       d.kind == GIA_OF_DUET && d.rows == 1 && d.cols == 2 &&
+       d.v[0][0] == 3.0 && d.v[0][1] == 5.0);
+    ok("feedback: duet-binary [[a1, a2], [a2, a1]]",
+       f.kind == GIA_OF_DUET_BINARY && f.rows == 2 && f.cols == 2 &&
+       f.v[0][0] == 2.0 && f.v[0][1] == -1.5 && f.v[1][0] == -1.5 && f.v[1][1] == 2.0);
+    ok("signs survive (no clamping, NFR-NUM-006)", f.v[0][1] < 0.0);
+}
+
+/* Source: [06b Eq 2], [02 Eq 14.11.4-14.11.5]; PLAN R12.
+ * (a1; a2) o [b1, b2] = [(a1 b1; a2 b1), (a1 b2; a2 b2)]: unreduced, each
+ * entry the pair of factors; reduced, their products. l o l is the pair
+ * [l, l], and only its reduction is l^2. */
+/* Verifies: FR-EM-006 (T-EM-06) */
+static void test_em_circle_product(void) {
+    gia_oform  a = gia_oform_binary(0.0), b = gia_oform_duet(5.0, 7.0), l = gia_oform_scalar(3.0);
+    gia_oform  r;
+    gia_circle c;
+    const char *why = NULL;
+    int        i, j, pairs = 1, red = 1;
+
+    printf("\n[T-EM-06] the circle product and its cardinal reduction\n");
+    a.v[0][0] = 2.0; a.v[1][0] = -3.0;            /* (a1; a2) = (2; -3) */
+    ok("(a1; a2) o [b1, b2] is defined", gia_circle_product(&a, &b, &c, &why) == GIA_OK);
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < 2; j++)
+            if (c.pair[i][j][0] != a.v[i][0] || c.pair[i][j][1] != b.v[0][j]) pairs = 0;
+    ok("unreduced: entry (i, j) keeps the pair (a_i, b_j) [06b Eq 2]",
+       c.rows == 2 && c.cols == 2 && pairs);
+    r = gia_circle_reduce(&c);
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < 2; j++)
+            if (r.v[i][j] != a.v[i][0] * b.v[0][j]) red = 0;
+    ok("reduced: (a1 b1; a2 b1), (a1 b2; a2 b2)", r.rows == 2 && r.cols == 2 && red);
+
+    ok("l o l is defined", gia_circle_product(&l, &l, &c, &why) == GIA_OK);
+    ok("l o l is stored as the du-et [l, l], not as l^2 [02 Eq 14.11.5]",
+       c.rows == 1 && c.cols == 1 && c.pair[0][0][0] == 3.0 && c.pair[0][0][1] == 3.0);
+    r = gia_circle_reduce(&c);
+    ok("and reduces to l^2 = 9", r.rows == 1 && r.cols == 1 && r.v[0][0] == 9.0);
+
+    why = NULL;
+    ok("a row on the left, or a column on the right: GIA_E_ARG",
+       gia_circle_product(&b, &a, &c, &why) == GIA_E_ARG && why != NULL);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -1169,6 +1229,8 @@ int main(void) {
     test_em_global_balance();
     test_val_emergy_rules();
     test_em_limits();
+    test_em_ordinal_forms();
+    test_em_circle_product();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

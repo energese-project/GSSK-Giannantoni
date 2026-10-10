@@ -823,7 +823,7 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
 - [x] W2 `idc-taylor` — incipient Taylor projection, [09] validation (FR-IDC-010, VAL-01)
 - [x] W2 `idc-nonlinear-14-10` — [02 Eq 14.10.1] (FR-IDC-009)
 - [x] W2 `idc-drift-coupled` — solution drift and output-projection drift (FR-IDC-011, 014)
-- [ ] W3 `emergy-source-terms`, `emergy-ordinal-forms`
+- [x] W3 `emergy-source-terms`, `emergy-ordinal-forms`
 - [ ] W4 `mop-first-equation`
 - [ ] W5 `mop-relational-algebra`, `mop-eqs`
 - [ ] W6 `mop-second-equation`

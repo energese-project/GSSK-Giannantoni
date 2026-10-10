@@ -56,6 +56,11 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The ordinal forms of the emergy processes, and the circle product** (PLAN.md W3 `emergy-ordinal-forms`, FR-EM-005, FR-EM-006).
+  - `gia_oform_*` builds co-production as a binary (a column of two `Em(u)` branches), interaction as a duet (a row `[Em(u₁), Em(u₂)]`), and feedback as the specular duet-binary `[[a₁, a₂], [a₂, a₁]]` [22 Eq 6–8].
+  - `gia_circle_product` keeps every pair of factors, so `(a₁; a₂) ∘ [b₁, b₂] = [(a₁b₁; a₂b₁), (a₁b₂; a₂b₂)]` before reduction [06b Eq 2]. `l ∘ l` is the du-et `[l, l]`, not `l²` [02 Eq 14.11.5].
+  - `gia_circle_reduce` is the cardinal reduction that maps each pair to its product (PLAN R12).
+
 - **Emergy source terms, the global balance, and limits that refuse rather than truncate** (PLAN.md W3 `emergy-source-terms`, FR-EM-004, FR-EM-007, NFR-LIM-001).
   - `gia_emergy_source_term` returns a process's equivalent source term, emergy out minus emergy in [02 Eq 3.6–3.17]: `(n−1)·Em(u)` for a co-production with n products, 0 for a partition, and 0 for an interaction whose inputs are all drawn.
   - `gia_emergy_global_balance` and `gia_emergy_balance_solve` evaluate [02 Eq 3.21] and solve it for the source terms. On the totals of [02 Fig. 3.4] they reproduce `Φ_D = 30,000` and `Φ_E = 15,000` (VAL-04).

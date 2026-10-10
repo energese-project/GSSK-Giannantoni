@@ -2629,6 +2629,72 @@ gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
     return GIA_OK;
 }
 
+/* FR-EM-005 — [22 Eq 6-8]. */
+static gia_oform oform(gia_oform_kind kind, int rows, int cols) {
+    gia_oform f;
+    memset(&f, 0, sizeof(f));
+    f.kind = kind; f.rows = rows; f.cols = cols;
+    return f;
+}
+
+gia_oform gia_oform_scalar(double a) {
+    gia_oform f = oform(GIA_OF_SCALAR, 1, 1);
+    f.v[0][0] = a;
+    return f;
+}
+
+gia_oform gia_oform_binary(double em_u) {
+    gia_oform f = oform(GIA_OF_BINARY, 2, 1);
+    f.v[0][0] = em_u; f.v[1][0] = em_u;
+    return f;
+}
+
+gia_oform gia_oform_duet(double em_u1, double em_u2) {
+    gia_oform f = oform(GIA_OF_DUET, 1, 2);
+    f.v[0][0] = em_u1; f.v[0][1] = em_u2;
+    return f;
+}
+
+gia_oform gia_oform_duet_binary(double a1, double a2) {
+    gia_oform f = oform(GIA_OF_DUET_BINARY, 2, 2);
+    f.v[0][0] = a1; f.v[0][1] = a2;
+    f.v[1][0] = a2; f.v[1][1] = a1;
+    return f;
+}
+
+/* FR-EM-006 — [06b Eq 2], [02 Eq 14.11.5]; PLAN R12. */
+gia_status gia_circle_product(const gia_oform *a, const gia_oform *b, gia_circle *out,
+                              const char **why) {
+    int i, j;
+    if (!a || !b || !out)
+        return em_fail(GIA_E_ARG, "gia_circle_product: NULL argument", why);
+    if (a->cols != 1 || b->rows != 1 || a->rows < 1 || a->rows > 2 || b->cols < 1 || b->cols > 2)
+        return em_fail(GIA_E_ARG, "gia_circle_product: the left factor must be a column "
+                       "(a1; a2) and the right a row [b1, b2] ([06b Eq 2])", why);
+    memset(out, 0, sizeof(*out));
+    out->rows = a->rows; out->cols = b->cols;
+    for (i = 0; i < a->rows; i++)
+        for (j = 0; j < b->cols; j++) {
+            out->pair[i][j][0] = a->v[i][0];
+            out->pair[i][j][1] = b->v[0][j];
+        }
+    return GIA_OK;
+}
+
+/* The cardinal reduction: each pair to its product. */
+gia_oform gia_circle_reduce(const gia_circle *c) {
+    gia_oform f;
+    int       i, j;
+    memset(&f, 0, sizeof(f));
+    if (!c) return f;
+    f.kind = (c->rows == 1 && c->cols == 1) ? GIA_OF_SCALAR : GIA_OF_DUET_BINARY;
+    f.rows = c->rows; f.cols = c->cols;
+    for (i = 0; i < c->rows; i++)
+        for (j = 0; j < c->cols; j++)
+            f.v[i][j] = c->pair[i][j][0] * c->pair[i][j][1];
+    return f;
+}
+
 static gia_status balance_sums(const gia_balance_term *in, int n_in,
                                const gia_balance_term *out, int n_out,
                                double *sin, double *sout, const char **why) {

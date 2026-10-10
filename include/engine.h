@@ -668,6 +668,44 @@ gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
  * the trajectory CSV leaves its emergy cells empty, rather than truncating. */
 gia_status gia_emergy_check_limits(const gia_model *m, const char **why);
 
+/* FR-EM-005 — the ordinal forms of the three emergy processes [22 Eq 6-8],
+ * [06b Eq 6, 10], [10 §Incipient Derivative]:
+ *
+ *   co-production  binary       (a; a)            a column: 2 x 1, each branch Em(u)
+ *   interaction    duet         [a1, a2]          a row:    1 x 2
+ *   feedback       duet-binary  [[a1, a2],
+ *                                [a2, a1]]        2 x 2, specular
+ *
+ * Shapes matter: a binary is two branches of one thing, a duet two things
+ * held together, and the circle product below reads them that way. */
+typedef enum { GIA_OF_SCALAR, GIA_OF_BINARY, GIA_OF_DUET, GIA_OF_DUET_BINARY } gia_oform_kind;
+typedef struct {
+    gia_oform_kind kind;
+    int            rows, cols;      /* 1 or 2 each */
+    double         v[2][2];         /* v[row][col] */
+} gia_oform;
+
+gia_oform gia_oform_scalar(double a);
+gia_oform gia_oform_binary(double em_u);
+gia_oform gia_oform_duet(double em_u1, double em_u2);
+gia_oform gia_oform_duet_binary(double a1, double a2);
+
+/* FR-EM-006 — the circle product [02 Eq 14.11.4-14.11.5], [06b Eq 2-3]; PLAN R12.
+ * It is structural: every pair of factors is kept in the outer arrangement,
+ *
+ *     (a1; a2) o [b1, b2] = [ (a1 b1; a2 b1), (a1 b2; a2 b2) ]   before reduction,
+ *
+ * so out.pair[i][j] = {a_i, b_j} for a column a (rows x 1) and a row b
+ * (1 x cols); two scalars give one pair, l o l = [l, l], a "du-et of real
+ * numbers", not l^2. The cardinal reduction maps each pair to its product.
+ * A left factor that is not a column, or a right one that is not a row, is
+ * GIA_E_ARG. */
+typedef struct { int rows, cols; double pair[2][2][2]; } gia_circle;
+
+gia_status gia_circle_product(const gia_oform *a, const gia_oform *b, gia_circle *out,
+                              const char **why);
+gia_oform  gia_circle_reduce(const gia_circle *c);
+
 /* FR-EM-007 — the global emergy balance of [02 Eq 3.18-3.26]: weighted inputs
  * plus source terms against weighted outputs, sum(w v)_in + sum Phi = sum(w v)_out,
  * the weights being the co-injection, co-production and re-normalisation

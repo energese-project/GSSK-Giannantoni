@@ -58,6 +58,13 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   term a `(value, weight)` pair. NFR-LIM-001 needs the refusal to be observable on its own, so
   `gia_emergy_check_limits` reports `GIA_E_LIMIT`.
 
+### `emergy-ordinal-forms`
+
+- **IF-API-005 gains the ordinal forms and the circle product.** FR-EM-005 and FR-EM-006 had no
+  interface. A form records its shape as well as its entries: a binary is a column, a duet a row,
+  a duet-binary is 2 × 2. It needs the shape because the circle product of [06b Eq 2] is defined
+  as a column ∘ a row.
+
 ---
 
 ## [Revision 3] — 2026-10-09
