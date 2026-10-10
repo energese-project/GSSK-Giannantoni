@@ -40,7 +40,7 @@ incipient equations the sources work through: the second-order linear equation w
 coefficients, the binary (half-order) equation, the Riccati equation by its linearisation, the
 nonlinear equation of [02 Eq 14.10.1], and the incipient Taylor projection.
 - **Source:** [02 App. 7–9], [06 §3], [09], [10]
-- **Verification:** VAL-01, VAL-05, VAL-06 · **Priority:** Must · **Status:** planned · **Task:** idc-lde2
+- **Verification:** VAL-01, VAL-05, VAL-06 · **Priority:** Must · **Status:** implemented · **Task:** idc-lde2
 
 Acceptance: every FR-IDC requirement is `implemented`, and VAL-01, VAL-05 and VAL-06 pass.
 
@@ -49,7 +49,7 @@ The kernel shall report the difference between incipient and traditional results
 drift where the model is known [06 §4] and the output-projection drift where only a trajectory is
 known [09 Eq 13] — and shall report zero where the sources say the calculi coincide.
 - **Source:** [06 §4], [09 Eq 11–13], [10 Eq 14–16]
-- **Verification:** VAL-01, T-IDC-11 · **Priority:** Must · **Status:** planned · **Task:** idc-drift-coupled
+- **Verification:** VAL-01, T-IDC-11 · **Priority:** Must · **Status:** implemented · **Task:** idc-drift-coupled
 
 Acceptance: FR-IDC-004, FR-IDC-011 and FR-IDC-014 `implemented`.
 
@@ -57,7 +57,7 @@ Acceptance: FR-IDC-004, FR-IDC-011 and FR-IDC-014 `implemented`.
 The kernel shall compute emergy and transformity on an Odum network under Odum's rules, and express
 co-production, interaction and feedback in Giannantoni's ordinal forms.
 - **Source:** [02 Ch. 3], [06b], [22 Eq 6–8]
-- **Verification:** VAL-03 · **Priority:** Must · **Status:** planned · **Task:** emergy-source-terms
+- **Verification:** VAL-03 · **Priority:** Must · **Status:** implemented · **Task:** emergy-source-terms
 
 Acceptance: every FR-EM requirement `implemented`; VAL-03 passes.
 
@@ -65,7 +65,7 @@ Acceptance: every FR-EM requirement `implemented`; VAL-03 passes.
 The kernel shall solve the First Fundamental Equation for every couple of a system, from boundary
 conditions given in the seed or derived from the network.
 - **Source:** [23 Eq 4.1, 5.4.2–5.5.8], PLAN R1, R8
-- **Verification:** T-MOP-01, T-MOP-10 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-01, T-MOP-10 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 Acceptance: FR-MOP-001 to FR-MOP-004 and FR-MOP-008 `implemented`.
 
@@ -73,7 +73,7 @@ Acceptance: FR-MOP-001 to FR-MOP-004 and FR-MOP-008 `implemented`.
 The kernel shall evaluate the printed solution of the Second Fundamental Equation and the operative
 EQS form, in the Relational Space algebra as printed.
 - **Source:** [23 Eq 6.1–6.3, 7.1–7.5, 5.1.3–5.1.5]
-- **Verification:** VAL-02, T-MOP-07 · **Priority:** Must · **Status:** planned · **Task:** mop-eqs
+- **Verification:** VAL-02, T-MOP-07 · **Priority:** Must · **Status:** implemented · **Task:** mop-eqs
 
 Acceptance: FR-MOP-005, FR-MOP-006 and every FR-REL requirement `implemented`; VAL-02 passes.
 
@@ -81,7 +81,7 @@ Acceptance: FR-MOP-005, FR-MOP-006 and every FR-REL requirement `implemented`; V
 The kernel shall compute a network's Ordinality as the sources define it, decide whether it is at
 Maximum Ordinality, and below it perform the generative step under the Maximum Em-Power Principle.
 - **Source:** [22 Eq 11.1, §12.1], [02 Eq 5.3], PLAN R5, R6
-- **Verification:** T-ORD-02, T-ORD-04 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-02, T-ORD-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 Acceptance: every FR-ORD requirement `implemented`.
 
@@ -90,14 +90,14 @@ The kernel shall measure whether a Relational Space satisfies the Harmony Relati
 each construction as imposing, transporting or not producing harmony — by measurement, never by
 assertion.
 - **Source:** [23 Eq 5.6.5, App. A1], PLAN R7
-- **Verification:** VAL-07 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** VAL-07 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 Acceptance: every FR-HAR requirement `implemented`; VAL-07 passes.
 
 ### BR-008 — Reproduce published results where the sources allow it
 The kernel shall reproduce every published numerical result whose inputs the sources give.
 - **Source:** [09 Eq 16–22], [23 Eq 7.1–7.4], [02 Eq 3.23–3.26], [10 App. Eq 28–34], [06 Eq 3.9]
-- **Verification:** VAL-01, VAL-02, VAL-04, VAL-05, VAL-06 · **Priority:** Must · **Status:** planned · **Task:** idc-taylor
+- **Verification:** VAL-01, VAL-02, VAL-04, VAL-05, VAL-06 · **Priority:** Must · **Status:** implemented · **Task:** idc-taylor
 
 Acceptance: the five VAL tests pass on every CI toolchain at the printed precision; the two `[09]`
 values that do not reproduce are asserted as errata (X4, X5), not skipped.
@@ -107,7 +107,7 @@ Every output shall say which calculus or construction produced it; every behavio
 define shall be refused by name with the reason; the documentation shall not describe the kernel as
 implementing more than its `implemented` requirements.
 - **Source:** PLAN §1 (B5), §6
-- **Verification:** VAL-09, T-OUT-02, T-OUT-03 · **Priority:** Must · **Status:** planned · **Task:** mop-claims-remediation
+- **Verification:** VAL-09, T-OUT-02, T-OUT-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-claims-remediation
 
 Acceptance: FR-OUT requirements `implemented`; VAL-09 inspection passes.
 
@@ -115,7 +115,7 @@ Acceptance: FR-OUT requirements `implemented`; VAL-09 inspection passes.
 Each requirement shall trace to a source equation and to the tests that verify it; each departure from
 a printed equation shall carry a probe and a test that the printed form fails.
 - **Source:** PLAN §1 (G4, G5, G7)
-- **Verification:** T-TRC-01, VAL-08 · **Priority:** Must · **Status:** planned · **Task:** guard-trace
+- **Verification:** T-TRC-01, VAL-08 · **Priority:** Must · **Status:** implemented · **Task:** guard-trace
 
 Acceptance: `make check-trace` passes in CI; VAL-08 passes.
 
@@ -123,6 +123,6 @@ Acceptance: `make check-trace` passes in CI; VAL-08 passes.
 The library shall be reentrant, deterministic, free of process exits, and portable across the CI
 toolchains, with contracts an integrator can program against.
 - **Source:** `AGENTS.md` §Architecture, §Coding Standards; C1
-- **Verification:** T-REE-01, T-REE-02, T-ERR-01, DEM-POR-01 · **Priority:** Must · **Status:** planned · **Task:** guard-reentrancy
+- **Verification:** T-REE-01, T-REE-02, T-ERR-01, DEM-POR-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-reentrancy
 
 Acceptance: every NFR requirement `implemented`.

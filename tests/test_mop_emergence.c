@@ -75,6 +75,16 @@ static void test_residual(void) {
         gia_matrioska_free(&m);
     }
     ok("harmonic Matrioska, N = 4, 5, 7: R_H < 1e-9", all);
+    {   /* X9: [23 Eq 5.6.5] read literally from j = 1 says alpha_12 = w_1 alpha_12,
+         * w_1 = e^{2 pi i/(N-1)}; on the same harmonic Matrioska that reading
+         * has residual |w_1 - 1| = 2 sin(pi/(N-1)), not 0. */
+        int bad = 1;
+        for (k = 0; k < 3; k++) {
+            const double complex w1 = cexp(2.0 * M_PI * I / (double)(Ns[k] - 1));
+            if (!(cabs(w1 - 1.0) > 0.5)) bad = 0;
+        }
+        ok("X9: the literal j = 1 term alpha_12 = w_1 alpha_12 fails a harmonic Matrioska", bad);
+    }
 
     for (k = 0; k < 20; k++) {
         gia_matrioska m;

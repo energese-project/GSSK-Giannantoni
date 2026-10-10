@@ -28,6 +28,10 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **All 88 requirements are `implemented`.** The BR-* acceptance lines were checked against `main`,
+  and NFR-DET-002, NFR-POR-001, IF-API-002 and IF-API-004 were flipped. The README's status note now
+  describes what the second engine implements, where it previously said it implemented none of it.
+
 - **The harmony constructor moves to `src/harmony.c`, renamed `gia_harmony_assume_*`** (FR-HAR-004).
   - Seven functions are renamed: `gia_ordinal_root`, `gia_harmony_init`, `_free`, `_at`,
     `_reconstruct`, `_row_residual` and `_reduction_residual` each become
@@ -91,6 +95,9 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **The Guix toolchain pack is no longer attached to releases.** At ~450 MB it is produced on demand instead (`guix.yml`, run by hand with `pack-toolchain`). Releases still ship the Guix-built `gssk.wasm`, its hashes and the recipe.
 
 ### Added
+
+- **`make check-errata`** (VAL-08, in CI): every erratum in PLAN.md §5 has a test assertion naming
+  it. X6 and X9 gain theirs.
 
 - **The harmony detector** (FR-HAR-001…003, FR-OUT-003, VAL-07).
   - `gia_harmony_residual` computes R_H of [23 Eq 5.6.5]. `gia_harmony_verdict` runs vv-plan.md
@@ -243,6 +250,11 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
 
 ### Fixed
+
+- **CI now runs three suites it had been skipping**: `test-mop-emergence`, `test-kernel-method` and
+  `test-coverage-gate` were in `CI_TESTS` but had no step in `deploy.yml`.
+  `make check-ci-matrix` (DEM-POR-01, in CI) now fails on any such gap, on a missing toolchain, and
+  on `-Werror` leaving `CFLAGS`.
 
 - **The generative step is reentrant** (PLAN.md W1 `guard-reentrancy`, NFR-REE-001). `gia_generate` sorted its open components through a file-scope `static const gia_model *sort_model` read by the `qsort` comparator, so two models generating on two threads could sort by each other's ids. ThreadSanitizer reported the race at `src/engine.c:2918`. Each sort element now carries its id. Two other writable statics, found by the new structural check in a `-O0` build, are now `const`: `RULE` in `src/validation.c` and `prim` in `src/projection.c`. Output is unchanged.
 

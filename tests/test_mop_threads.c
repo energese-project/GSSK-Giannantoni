@@ -142,7 +142,7 @@ int main(void) {
     dup2(saved, STDOUT_FILENO);
     close(saved); close(devnull);
 
-    /* Verifies: NFR-REE-001 (T-REE-01) */
+    /* Verifies: NFR-REE-001, BR-011 (T-REE-01) */
     if (!ref_a || !ref_b) {
         printf("  %-58s FAIL\n", "both seeds load and generate sequentially");
         failures++;

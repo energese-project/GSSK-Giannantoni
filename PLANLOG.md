@@ -238,6 +238,37 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
 - **The MOP CSV's `R_H` column** is the residual of the reference row at each time. The cell is
   empty where the residual is undefined: N < 3, a row couple unrelated, or `α₁₂ = 0` at `t = 0`.
 
+### `requirements-status`
+
+After W0–W8 merged (main at `5a0748a`), each BR row of stakeholder.md was checked against its own
+acceptance line. Each requirement still `planned` was checked against its verification. All 88 are
+now `implemented`. What the check found, and what was changed so that it holds:
+
+- **Two suites were in `CI_TESTS` but not in `deploy.yml`:** `test-mop-emergence` and
+  `test-kernel-method`. `test-coverage-gate`, from W1, was in the same state. The Makefile says
+  "add a suite here when you add its step to deploy.yml", and the step had not been added. All
+  three ran, and passed, locally and on `main`, but CI never ran them. They are now steps.
+  `scripts/check_ci_matrix.sh` (DEM-POR-01, in CI) now fails on any `CI_TESTS` suite without a
+  step. `test-advanced` stays exempt, as the Makefile records. The check also fails if a toolchain
+  leaves the matrix or `-Werror` leaves `CFLAGS`.
+- **VAL-08 had no check, and two errata had no named test.**
+  - X6 (the co-production/interaction exponents) is now asserted in T-ORD-01: a co-production
+    counts as ½, not as an interaction.
+  - X9 (the literal j = 1 term of [23 Eq 5.6.5]) is now asserted in `test_mop_emergence.c`.
+  - The X1 and X3 assertions now carry their erratum's name.
+  - `scripts/check_errata.sh` fails on any erratum in PLAN §5 that no assertion names.
+- **IF-API-002 and IF-API-004 were never flipped**, though every function they declare is built
+  and called (`check-api-called`). Flipped.
+- **VAL-09, the inspection.** README.md, AGENTS.md and `docs/*.md` were read for claims beyond
+  `implemented` requirements. None was found. The README instead *under*-stated: it said the
+  engine "does not yet implement IDC or the MOP", called ordinality a proxy, and said the generative
+  step adds components. It now lists what is implemented, and says the network trajectories remain
+  the classical matrix exponential and the harmony constructor is `assumed`. PLAN §6's exclusions
+  stay documented in PLAN.md and `docs/giannantoni_assessment.md`.
+- **Tags.** BR-004, BR-006, BR-009 and BR-011 had no `Verifies:` tag. They are now tagged on the
+  tests their verification line names: T-MOP-01, T-MOP-10, T-ORD-02, T-ORD-04, T-OUT-02, T-OUT-03
+  and T-REE-01.
+
 ---
 
 ## [Revision 3] — 2026-10-09

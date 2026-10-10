@@ -90,7 +90,7 @@ Ownership: `gia_lde2_sol` is allocated by `*_solve` and freed by `gia_lde2_free`
 caller's function pointers and `ctx` without copying, so `ctx` must outlive it. `t` must lie in
 `[0, t_max]`, else `GIA_E_ARG`.
 - **Source:** srs §2.1
-- **Verification:** T-API-02 · **Priority:** Must · **Status:** planned · **Task:** idc-lde2
+- **Verification:** T-API-02 · **Priority:** Must · **Status:** implemented · **Task:** idc-lde2
 
 ### IF-API-003 — `relational.h`
 ```c
@@ -160,7 +160,7 @@ gia_status gia_construct_eqs(const gia_beta *in, int N, gia_matrioska *out, void
 `gia_matrioska` is allocated by the producing function and freed by `gia_matrioska_free`; `related[i*N+j]`
 is 0 for unrelated couples, whose `a` entry is unspecified.
 - **Source:** srs §2.3, §2.6
-- **Verification:** T-API-02 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-API-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### IF-API-005 — `engine.h` additions
 ```c

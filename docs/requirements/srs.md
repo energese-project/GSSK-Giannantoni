@@ -412,7 +412,7 @@ The same binary on the same input shall produce byte-identical output.
 Every catalogue test shall pass, at its stated tolerance, on every CI toolchain (macOS clang, Linux
 clang, Linux GCC); no result may depend on a libm difference beyond those tolerances.
 - **Source:** vv-plan.md §4
-- **Verification:** DEM-POR-01 · **Priority:** Must · **Status:** planned · **Task:** guard-reentrancy
+- **Verification:** DEM-POR-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-reentrancy
 
 ### NFR-REE-001 — Reentrant
 The Giannantoni units shall hold no file-scope or static mutable state; two models processed on two
@@ -450,7 +450,7 @@ with a committed corpus.
 The Giannantoni units shall compile without warnings under `-std=c99 -Wall -Wextra -Werror` with GCC,
 Linux clang and Apple clang.
 - **Source:** `AGENTS.md` §Tech Stack
-- **Verification:** DEM-POR-01 · **Priority:** Must · **Status:** planned · **Task:** guard-reentrancy
+- **Verification:** DEM-POR-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-reentrancy
 
 ### NFR-PERF-001 — Scale
 The kernel shall solve the First Equation for N = 64 (4,032 couples) at 1,000 output times, affine-power
