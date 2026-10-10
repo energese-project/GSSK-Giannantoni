@@ -99,7 +99,7 @@ For constants `A, B`, the kernel shall return the two roots of `4u² + A u + B =
 Given `f(t₀) ≠ 0`, `f'(t₀)`, a horizon Δ and an order `n ≥ 0`, the kernel shall compute
 `f*(t₀+Δ) = f(t₀) Σ_{k=0}^{n} (aΔ)ᵏ/k!` with `a = f'(t₀)/f(t₀)`.
 - **Source:** [09 Eq 10, 16–22], [10 Eq 13]; PLAN R10
-- **Verification:** T-IDC-09, VAL-01 · **Priority:** Must · **Status:** planned · **Task:** idc-taylor
+- **Verification:** T-IDC-09, VAL-01 · **Priority:** Must · **Status:** implemented · **Task:** idc-taylor
 
 ### FR-IDC-011 — Solution drift on network trajectories
 For a network whose flow matrix is constant, the kernel shall report solution drift as exactly zero

@@ -118,6 +118,16 @@ gia_status gia_riccati_eval(const gia_lde2_sol *sol, double t,
                             double complex *f, double complex *trad_residual,
                             const char **why);
 
+/* FR-IDC-010 — the incipient Taylor projection [09 Eq 10], [10 Eq 13]
+ * (PLAN R10, numerics.md N9):
+ *
+ *     f*(t0 + dt) = f(t0) sum_{k=0}^{n} (a dt)^k / k!,   a = f'(t0)/f(t0),
+ *
+ * by Horner in a dt. f(t0) = 0 is GIA_E_DOMAIN; n < 0 is GIA_E_ARG;
+ * n > 170 (the factorial range of a double) is GIA_E_LIMIT. [09] uses n = 2. */
+gia_status gia_idc_taylor(double f0, double df0, double dt, int n,
+                          double *out, const char **why);
+
 /* FR-IDC-013 — what the sources do not define is refused by name, with the
  * reason (PLAN §6). `feature` is one of:
  *   "riccati_duet"     the direct duet form [06 Eq 3.22] (PLAN X3)
