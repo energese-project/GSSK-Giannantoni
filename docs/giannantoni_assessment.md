@@ -17,7 +17,7 @@ prints for the same output (`label.<name>:` lines in its run report, checked by 
 | # | Feature | What the code does | Label |
 |---|---|---|---|
 | E1 | "A second engine implementing IDC and MOP" | See E2–E8 | Overclaim — withdrawn from README |
-| E2 | Kernel `"method": "incipient"` (`src/gssk.c`) | Padé (3,3) `expm(A·dt)`; `limit` linearised | `classical` |
+| E2 | Kernel `"method": "incipient"` (`src/gssk.c`) | Padé (3,3) `expm(A·dt)`; `limit` linearised. Renamed `"expm"`, with `"incipient"` a deprecated alias that prints a notice (ADR 0022, `kernel-method-label`) | `classical` |
 | E3 | MOP engine trajectories `_Q` | `gia_matrix_exp`, `Q(t) = exp(A t) Q(0)` | `classical` |
 | E4 | `_idc`, `_tdc`, `_drift`, `psi_network` | Removed (`idc-drift-coupled`). They applied the drift identity to a per-node φ invented by `phi_for_node`, decoupled from `_Q`. Replaced by solution drift (exactly 0 for a constant flow matrix, refused otherwise, FR-IDC-011) and `_drift_proj`, the `[09 Eq 13]` output-projection drift of the solved trajectory (FR-IDC-014) | `implemented` |
 | E4b | Drift from `φ = ln Q_i` | Not built, and must not be: it would report drift for constant-coefficient networks, contradicting `[06 §4 (i)]` | — |

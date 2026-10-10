@@ -376,7 +376,7 @@ directly and more accurately.
     }
   ],
   "config": {
-    "method": "incipient",           // "euler" | "rk4" | "incipient"
+    "method": "expm",                // "euler" | "rk4" | "expm" ("incipient": deprecated alias)
     "t_start": 0.0, "t_end": 120.0, "dt": 1.0
   }
 }

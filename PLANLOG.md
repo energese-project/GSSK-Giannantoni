@@ -172,6 +172,17 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
 - **`label.generative_step` becomes `implemented`** (E7), and `docs/giannantoni_assessment.md`'s rows
   E6–E8 are updated to match.
 
+### `kernel-method-label`
+
+- **T-KER-01 is `tests/kernel_method.sh` (`make test-kernel-method`, in CI).** The catalogue calls it
+  a "kernel regression". The golden-file regression suite cannot express "two runs are
+  byte-identical, and one prints a notice", and ADR 0018 forbids adding golden files. Two examples
+  (`decay_model`, `diffusion_model`) are run under both spellings. The test also checks the
+  round-trip that ADR 0022 decision 4 promises.
+- **An unknown `method` string still silently becomes `auto`.** This is unchanged, and out of this
+  task's scope. Note that before this change `"expm"` fell into exactly that path: the red run's
+  serialisation check caught it.
+
 ---
 
 ## [Revision 3] — 2026-10-09

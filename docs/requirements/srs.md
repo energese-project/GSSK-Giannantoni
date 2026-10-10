@@ -361,7 +361,7 @@ The GSSK kernel shall accept `"method": "expm"`, and shall accept `"method": "in
 deprecated alias that produces byte-identical output and prints one notice that it is the matrix
 exponential.
 - **Source:** PLAN R15
-- **Verification:** T-KER-01 · **Priority:** Should · **Status:** planned · **Task:** kernel-method-label
+- **Verification:** T-KER-01 · **Priority:** Should · **Status:** implemented · **Task:** kernel-method-label
 
 ---
 

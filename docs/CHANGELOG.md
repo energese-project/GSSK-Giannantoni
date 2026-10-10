@@ -28,6 +28,13 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **The kernel's matrix-exponential method is `"expm"`** (FR-KER-001, ADR 0022).
+  - `"incipient"` still loads. It runs the same code path, with byte-identical output, and now prints
+    one notice per load on stderr saying it is the matrix exponential and naming `expm`.
+  - A model serialises back the spelling it was loaded with.
+  - The schema enum gains `"expm"`.
+  - `make test-kernel-method` (T-KER-01) is in CI.
+
 - **ADR 0015's emergent component is retired.** The generative step no longer adds an
   `emergent_quality_N` node with `emerged_from` and `ordinality_rank`, and it no longer adds
   `ordinal_ascent` or `emergent_feedback_loop` legs. Its tests are retired or revised, as vv-plan.md

@@ -228,6 +228,11 @@ test-mop: directories $(TARGET_TEST_MOP)
 test-mop-cli: directories $(TARGET_SIM)
 	@sh $(TEST_DIR)/mop_cli.sh
 
+# FR-KER-001 (T-KER-01, ADR 0022): "expm" and its deprecated alias "incipient".
+.PHONY: test-kernel-method
+test-kernel-method: directories $(TARGET_CLI) $(BIN_DIR)/dump_serialized
+	@sh $(TEST_DIR)/kernel_method.sh
+
 # Reentrancy, memory and structure of the Giannantoni units (NFR-REE-001,
 # NFR-MEM-001, NFR-ERR-001, NFR-SEP-001; vv-plan.md §7.8).
 #
@@ -1080,7 +1085,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop test-mop-cli test-mop-threads check-symbols \
+           test-gnp-loop test-giannantoni test-mop test-mop-cli test-kernel-method test-mop-threads check-symbols \
            test-guard-no-skip test-coverage-gate check-api-called \
            test-api-called check-trace check-version test-schema
 

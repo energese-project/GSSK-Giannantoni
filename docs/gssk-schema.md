@@ -188,7 +188,8 @@ paired via `coupled_edge`:
 | `"auto"` | **(Default)** Kernel selects IDC where all edges are constant/linear/interaction. Runs IDC and RK4 in parallel each step and cross-validates. If error < `solver_tolerance` → uses IDC result (`CONFIDENCE_HIGH`). If error ≥ tolerance → uses RK4 (`CONFIDENCE_DEGRADED`, cybernetic adjustments frozen). |
 | `"rk4"` | Classic RK4. Recommended for models with limit/threshold edges. |
 | `"euler"` | First-order Euler. For debugging or very stiff step requirements only. |
-| `"incipient"` | Force IDC. Eligible edges use matrix-exponential; ineligible fall back silently to RK4. No dual cross-validation. |
+| `"expm"` | Force the matrix exponential (Padé (3,3) `exp(A·dt)`, `limit` edges linearised). No dual cross-validation. A classical method, not Giannantoni's incipient calculus ([ADR 0022](adr/0022-kernel-method-expm.md)). |
+| `"incipient"` | **Deprecated** alias of `"expm"`: the same code path, byte-identical output, and one notice on stderr per load. |
 
 > [!TIP]
 > Leave `method` unset (or `"auto"`) for all production models. The kernel will use
