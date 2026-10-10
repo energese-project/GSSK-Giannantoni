@@ -73,6 +73,18 @@ jobs:
       - name: Regression guard — no silent SKIPPED
         run: make test-guard-no-skip
 
+      # FR-OUT-004: the simulation tests as a readable report on the run's
+      # summary page — per model, the verdict, the deviation from its golden
+      # file, and a sparkline per node, so a reviewer can see what each
+      # simulation did, not only that it passed. Once per run (Linux gcc), and
+      # `always()` so a failing `make test` still gets its report.
+      - name: Simulation report → job summary
+        if: always() && runner.os == 'Linux' && matrix.cc == 'gcc'
+        run: make -s sim-report >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Simulation report self-test
+        run: make test-sim-report
+
       # Unit suites, not CSV regressions. The node-type gate is the check that
       # stops a mistyped `type` silently becoming a storage node.
       - name: Node type validation tests
@@ -296,6 +308,18 @@ jobs:
 
       - name: Schema conformance — examples/ must match gssk.schema.json
         run: make test-schema
+
+      # FR-BRG-002: docs/results/level1_survey.md is generated, so a change
+      # that moves a number must regenerate it (make level1-survey).
+      - name: Level 1 survey — published table matches a fresh run
+        run: make check-level1
+
+      # The survey is the kernel checked against the exact solution, so it is
+      # the other half of "the simulations do what we expect": put it on the
+      # summary page beside the regression report.
+      - name: Level 1 survey → job summary
+        if: success()
+        run: cat docs/results/level1_survey.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: ASan + UBSan — build
         env:

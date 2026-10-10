@@ -246,8 +246,8 @@
       "properties": {
         "waveform": {
           "type": "string",
-          "enum": ["step", "impulse", "ramp", "sawtooth", "square", "sine", "exponential", "jitter"],
-          "description": "Which waveform. With tau = t - t_on and frac(x) = x - floor(x): step -> v0 if t < t_on else v1. impulse -> area/w on [t_on, t_on+w) else 0, where w is config.dt so the INTEGRAL is `area` at any dt. ramp -> v0 if t < t_on else v0 + slope*tau. sawtooth -> mean + amplitude*(2*frac((tau-phase)/period) - 1). square -> mean+amplitude while frac((tau-phase)/period) < duty, else mean-amplitude. sine -> mean + amplitude*sin(2*PI*(tau-phase)/period). exponential -> v0 if t < t_on else v0*exp(rate*tau). jitter -> mean + amplitude*(2u-1), u from the instance RNG, LATCHED once per accepted step."
+          "enum": ["step", "impulse", "ramp", "sawtooth", "square", "sine", "exponential", "jitter", "table"],
+          "description": "Which waveform. With tau = t - t_on and frac(x) = x - floor(x): step -> v0 if t < t_on else v1. impulse -> area/w on [t_on, t_on+w) else 0, where w is config.dt so the INTEGRAL is `area` at any dt. ramp -> v0 if t < t_on else v0 + slope*tau. sawtooth -> mean + amplitude*(2*frac((tau-phase)/period) - 1). square -> mean+amplitude while frac((tau-phase)/period) < duty, else mean-amplitude. sine -> mean + amplitude*sin(2*PI*(tau-phase)/period). exponential -> v0 if t < t_on else v0*exp(rate*tau). jitter -> mean + amplitude*(2u-1), u from the instance RNG, LATCHED once per accepted step. table -> a data series (h8c, Schema v5 §7): `times` and `values`, joined by `interpolation` and continued past the ends by `extrapolation`."
         },
         "t_on":      { "type": "number", "description": "Onset time. Defaults to config.t_start. Used by step, impulse, ramp and exponential as the switch-on point, and by the periodic waveforms as the origin of tau." },
         "v0":        { "type": "number", "description": "step: value before t_on. ramp/exponential: value at t_on." },
@@ -261,8 +261,18 @@
         "mean":      { "type": "number", "description": "sine/square/sawtooth/jitter: the centre value." },
         "amplitude": { "type": "number", "description": "sine/square/sawtooth/jitter: half the peak-to-peak range." },
         "min":       { "type": "number", "description": "Lower clamp, applied after the formula. Omit for no lower bound." },
-        "max":       { "type": "number", "description": "Upper clamp, applied after the formula. Omit for no upper bound." }
-      }
+        "max":       { "type": "number", "description": "Upper clamp, applied after the formula. Omit for no upper bound." },
+        "times":     { "type": "array", "minItems": 1, "items": { "type": "number" }, "description": "table: knot times, strictly increasing, in ABSOLUTE model time (so a table takes no t_on, and GSSK_Init rejects one). Only waveform 'table' may carry this key." },
+        "values":    { "type": "array", "minItems": 1, "items": { "type": "number" }, "description": "table: the value at each knot; the same length as `times`." },
+        "interpolation": { "type": "string", "enum": ["linear", "step"], "default": "linear", "description": "table: 'linear' joins the knots; 'step' holds the value of the last knot at or before t, closed on the right as the step waveform is (what a READ once per pass does)." },
+        "extrapolation": { "type": "string", "enum": ["hold", "cycle"], "default": "hold", "description": "table: 'hold' keeps the first value before times[0] and the last after times[last]; 'cycle' repeats with period times[last] - times[0], so the last knot is the start of the next pass. A one-point table cannot cycle." }
+      },
+      "allOf": [
+        { "if": { "properties": { "waveform": { "const": "table" } }, "required": ["waveform"] },
+          "then": { "required": ["times", "values"], "not": { "required": ["t_on"] } },
+          "else": { "not": { "anyOf": [ { "required": ["times"] }, { "required": ["values"] },
+                                        { "required": ["interpolation"] }, { "required": ["extrapolation"] } ] } } }
+      ]
     },
 
     "Node": {

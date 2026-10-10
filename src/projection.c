@@ -12,9 +12,14 @@
 
 #include "engine.h"
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 static void added(gia_coverage *cov, const char *fmt, ...) {
     va_list ap;
@@ -105,9 +110,90 @@ static void add_leg(cJSON *oedges, const char *from, const char *to,
     cJSON_AddItemToArray(oedges, e);
 }
 
+/* The kernel's forcing vocabulary (`waveform`, `mean`, `period`, `phase` in
+ * time, `t_on`, `v0`, `slope`, `min`/`max`) translated into this engine's
+ * (`kind`, `offset`, `amplitude`, `rate`, `phase` in radians), on this
+ * engine's clock s = t - t0, where [t0, t1] is the kernel's run. Only
+ * waveforms that generate themselves can be carried as state (sine, ramp,
+ * exponential), and only where the kernel's waveform is that one formula over
+ * the whole run: a ramp or exponential that switches on after t0 is a step,
+ * and a min/max clamp that can bind is a kink. Anything else returns false
+ * with the reason in `why`, and the caller reports it and does not count the
+ * element as carried -- a forcing silently read as a constant was the failure
+ * this replaces. *out is NULL when there is no forcing. */
+static bool project_forcing(const cJSON *f, double t0, double t1, cJSON **out,
+                            char *why, size_t cap) {
+    const char *w;
+    double      lo, hi, t_on;
+    bool        has_min, has_max;
+    double      vmin, vmax;
+    cJSON      *o;
+
+    *out = NULL;
+    if (!cJSON_IsObject(f)) return true;
+    w       = sfield(f, "waveform", "none");
+    t_on    = nfield(f, "t_on", t0);
+    has_min = cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(f, "min"));
+    has_max = cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(f, "max"));
+    vmin    = nfield(f, "min", 0.0);
+    vmax    = nfield(f, "max", 0.0);
+    if (!(o = cJSON_CreateObject())) { snprintf(why, cap, "out of memory"); return false; }
+
+    if (!strcmp(w, "sine")) {
+        const double mean = nfield(f, "mean", 0.0), amp = nfield(f, "amplitude", 0.0);
+        const double per  = nfield(f, "period", 0.0), ph = nfield(f, "phase", 0.0);
+        if (!(per > 0.0)) { snprintf(why, cap, "a sine with no period"); cJSON_Delete(o); return false; }
+        lo = mean - fabs(amp); hi = mean + fabs(amp);
+        /* mean + amp sin(2 pi (t - t_on - phase)/period), t = s + t0. */
+        cJSON_AddStringToObject(o, "kind", "sine");
+        cJSON_AddNumberToObject(o, "offset", mean);
+        cJSON_AddNumberToObject(o, "amplitude", amp);
+        cJSON_AddNumberToObject(o, "rate", 2.0 * M_PI / per);
+        cJSON_AddNumberToObject(o, "phase", 2.0 * M_PI * (t0 - t_on - ph) / per);
+    } else if (!strcmp(w, "ramp") || !strcmp(w, "exponential")) {
+        const double v0 = nfield(f, "v0", 0.0);
+        if (t_on > t0) {
+            snprintf(why, cap, "a %s that switches on at t = %g, after the run starts: a step, "
+                               "not its own generator", w, t_on);
+            cJSON_Delete(o);
+            return false;
+        }
+        if (!strcmp(w, "ramp")) {
+            const double slope = nfield(f, "slope", 0.0);
+            const double a = v0 + slope * (t0 - t_on), b = v0 + slope * (t1 - t_on);
+            lo = a < b ? a : b; hi = a < b ? b : a;
+            cJSON_AddStringToObject(o, "kind", "ramp");
+            cJSON_AddNumberToObject(o, "offset", a);
+            cJSON_AddNumberToObject(o, "rate", slope);
+        } else {
+            const double r = nfield(f, "rate", 0.0), amp = v0 * exp(r * (t0 - t_on));
+            const double b = amp * exp(r * (t1 - t0));
+            lo = amp < b ? amp : b; hi = amp < b ? b : amp;
+            cJSON_AddStringToObject(o, "kind", "exponential");
+            cJSON_AddNumberToObject(o, "offset", 0.0);
+            cJSON_AddNumberToObject(o, "amplitude", amp);
+            cJSON_AddNumberToObject(o, "rate", r);
+        }
+    } else {
+        snprintf(why, cap, "waveform '%s' is not its own generator, so it cannot be carried as "
+                           "state", w);
+        cJSON_Delete(o);
+        return false;
+    }
+    if ((has_min && lo < vmin) || (has_max && hi > vmax)) {
+        snprintf(why, cap, "its %s clamp binds during the run, and a clamped waveform is not its "
+                           "own generator", (has_min && lo < vmin) ? "min" : "max");
+        cJSON_Delete(o);
+        return false;
+    }
+    *out = o;
+    return true;
+}
+
 bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
     const cJSON *nodes, *edges, *it;
     cJSON       *out, *onodes, *oedges, *params;
+    double       t0, t1;
 
     if (!gssk || !out_mop || !cov) return false;
     memset(cov, 0, sizeof(*cov));
@@ -116,6 +202,11 @@ bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
     nodes = cJSON_GetObjectItemCaseSensitive(gssk, "nodes");
     edges = cJSON_GetObjectItemCaseSensitive(gssk, "edges");
     if (!cJSON_IsArray(nodes)) return false;
+    {   /* The kernel's run, [t0, t1]; this engine's clock is s = t - t0. */
+        const cJSON *cfg = cJSON_GetObjectItemCaseSensitive(gssk, "config");
+        t0 = nfield(cfg, "t_start", 0.0);
+        t1 = nfield(cfg, "t_end", t0 + 1.0);
+    }
 
     out = cJSON_CreateObject();
     if (!out) return false;
@@ -181,19 +272,19 @@ bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
             const char *c = sfield(it, "carrier", NULL);
             if (c) cJSON_AddStringToObject(n, "carrier", c);
         }
-        {   /* Only self-generating waveforms can be carried as state. */
-            const cJSON *f = cJSON_GetObjectItemCaseSensitive(it, "forcing");
-            if (cJSON_IsObject(f)) {
-                const char *k = sfield(f, "kind", "none");
-                if (!strcmp(k, "sine") || !strcmp(k, "ramp") ||
-                    !strcmp(k, "exponential") || !strcmp(k, "none")) {
-                    cJSON_AddItemToObject(n, "forcing", cJSON_Duplicate(f, 1));
-                } else {
-                    finding(cov, "node '%s': forcing '%s' dropped — not its own "
-                                 "generator, so it cannot be carried as state",
-                            id ? id : "?", k);
-                }
+        {   /* Only self-generating waveforms can be carried as state. A node
+             * whose forcing cannot be is still written (its edges need it),
+             * held at its value, and NOT counted as carried: its dynamics
+             * are not the GSSK model's. */
+            cJSON *pf = NULL;
+            char   why_f[160];
+            if (!project_forcing(cJSON_GetObjectItemCaseSensitive(it, "forcing"), t0, t1, &pf,
+                                 why_f, sizeof why_f)) {
+                finding(cov, "node '%s': forcing not carried — %s", id ? id : "?", why_f);
+                cJSON_AddItemToArray(onodes, n);
+                continue;
             }
+            if (pf) cJSON_AddItemToObject(n, "forcing", pf);
         }
         cJSON_AddItemToArray(onodes, n);
         cov->nodes_carried++;
@@ -264,16 +355,31 @@ bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
             }
         }
 
-        if (logic_is_pathway(logic)) {
-            e = cJSON_CreateObject();
-            if (!e) continue;
-            cJSON_AddStringToObject(e, "source", origin);
-            cJSON_AddStringToObject(e, "target", target);
-            cJSON_AddStringToObject(e, "logic",  logic);
-            cJSON_AddNumberToObject(e, "weight", k);
-            cJSON_AddItemToArray(oedges, e);
-            cov->edges_carried++;
-            continue;
+        {   /* An edge's forcing drives its rate k (ADR 0006). */
+            const cJSON *ef = cJSON_GetObjectItemCaseSensitive(it, "forcing");
+            cJSON       *pf = NULL;
+            char         why_f[160];
+            if (cJSON_IsObject(ef) && !logic_is_pathway(logic)) {
+                finding(cov, "edge '%s': forcing on a '%s' law not carried — this engine "
+                             "forces a pathway's rate, not a module's", eid ? eid : "?", logic);
+                continue;
+            }
+            if (!project_forcing(ef, t0, t1, &pf, why_f, sizeof why_f)) {
+                finding(cov, "edge '%s': forcing not carried — %s", eid ? eid : "?", why_f);
+                continue;
+            }
+            if (logic_is_pathway(logic)) {
+                e = cJSON_CreateObject();
+                if (!e) { cJSON_Delete(pf); continue; }
+                cJSON_AddStringToObject(e, "source", origin);
+                cJSON_AddStringToObject(e, "target", target);
+                cJSON_AddStringToObject(e, "logic",  logic);
+                cJSON_AddNumberToObject(e, "weight", k);
+                if (pf) cJSON_AddItemToObject(e, "forcing", pf);
+                cJSON_AddItemToArray(oedges, e);
+                cov->edges_carried++;
+                continue;
+            }
         }
 
         {   /* A module law: write the gate GSSK draws implicitly on the edge,
@@ -330,10 +436,10 @@ bool gia_project(const cJSON *gssk, cJSON **out_mop, gia_coverage *cov) {
     }
 
     {   /* Horizon, so the projected model is runnable rather than a fragment. */
-        const cJSON *cfg = cJSON_GetObjectItemCaseSensitive(gssk, "config");
         cJSON *sp = cJSON_AddObjectToObject(out, "simulation_params");
         if (sp) {
-            cJSON_AddNumberToObject(sp, "t_val", nfield(cfg, "t_end", 1.0));
+            /* This engine's clock starts at 0: the kernel's t_start is s = 0. */
+            cJSON_AddNumberToObject(sp, "t_val", t1 - t0);
             cJSON_AddNumberToObject(sp, "derivative_order", 1);
             cJSON_AddBoolToObject(sp, "generative_mode", 0);
         }

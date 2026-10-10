@@ -1450,6 +1450,121 @@ static void test_projection_full(void) {
     cJSON_Delete(g);
 }
 
+/* A one-source, one-store GSSK model whose source carries `forcing` (JSON
+ * text) and whose single edge carries `eforcing` ("" for none). */
+static int project_forced(const char *forcing, const char *eforcing, double t_start,
+                          double t_end, gia_coverage *cov, gia_model *m, cJSON **mop) {
+    char   buf[1400];
+    cJSON *g;
+    int    r;
+    snprintf(buf, sizeof buf,
+             "{\"metadata\":{\"name\":\"forced\"},"
+             " \"nodes\":[{\"id\":\"sun\",\"type\":\"source\",\"value\":1.0%s%s},"
+             "           {\"id\":\"grass\",\"type\":\"storage\",\"value\":10.0}],"
+             " \"edges\":[{\"id\":\"prod\",\"origin\":\"sun\",\"target\":\"grass\","
+             "            \"logic\":\"linear\",\"params\":{\"k\":0.1}%s%s}],"
+             " \"config\":{\"t_start\":%g,\"t_end\":%g}}",
+             forcing[0] ? ",\"forcing\":" : "", forcing,
+             eforcing[0] ? ",\"forcing\":" : "", eforcing, t_start, t_end);
+    g  = cJSON_Parse(buf);
+    *mop = NULL;
+    r  = g && gia_project(g, mop, cov);
+    cJSON_Delete(g);
+    memset(m, 0, sizeof *m);
+    if (r && *mop) r = gia_model_load(m, *mop) ? 2 : 1;
+    return r;
+}
+
+/* The kernel's own waveform formulas (src/gssk.c eval_forcing), by hand. */
+static double kernel_sine(double t, double t_on, double mean, double amp, double per, double ph) {
+    return mean + amp * sin(2.0 * M_PI * (t - t_on - ph) / per);
+}
+
+static void test_projection_forcing(void) {
+    gia_coverage cov;
+    gia_model    m;
+    cJSON       *mop;
+    int          r, i, good;
+
+    printf("\n[29b] projection: forcing is translated exactly, or refused by name\n");
+
+    /* sine, with t_start = 10 and t_on defaulted to t_start: the engine's
+     * clock is s = t - 10, and at every s the projected waveform must equal
+     * the kernel's at t = s + 10. */
+    r = project_forced("{\"waveform\":\"sine\",\"mean\":200,\"amplitude\":150,"
+                       "\"period\":365,\"phase\":91.25,\"min\":0}", "", 10.0, 740.0, &cov, &m, &mop);
+    good = r == 2 && gia_coverage_fraction(&cov) == 1.0 && cov.n_findings == 0;
+    for (i = 0; good && i <= 20; i++) {
+        const double s = 36.5 * i;
+        const double want = kernel_sine(s + 10.0, 10.0, 200, 150, 365, 91.25);
+        if (fabs(gia_forcing_value(&m.nodes[0].forcing, 1.0, s) - want) > 1e-9 * 200) good = 0;
+    }
+    ok("sine: carried, equal to the kernel's waveform on the shifted clock", good);
+    ok("the horizon is t_end - t_start = 730", r == 2 && fabs(m.t_end - 730.0) < 1e-12);
+    if (r == 2) gia_model_free(&m);
+    cJSON_Delete(mop);
+
+    /* sine with t_on after t_start: still one formula (sine has no "off"
+     * branch in the kernel), shifted. */
+    r = project_forced("{\"waveform\":\"sine\",\"mean\":5,\"amplitude\":2,\"period\":40,"
+                       "\"t_on\":25}", "", 0.0, 100.0, &cov, &m, &mop);
+    good = r == 2 && cov.n_findings == 0;
+    for (i = 0; good && i <= 10; i++)
+        if (fabs(gia_forcing_value(&m.nodes[0].forcing, 1.0, 10.0 * i) -
+                 kernel_sine(10.0 * i, 25.0, 5, 2, 40, 0)) > 1e-12 * 5) good = 0;
+    ok("sine with t_on = 25: carried, phase shifted by t_on", good);
+    if (r == 2) gia_model_free(&m);
+    cJSON_Delete(mop);
+
+    /* ramp from t_on <= t_start: offset = v0 + slope (t_start - t_on). */
+    r = project_forced("{\"waveform\":\"ramp\",\"t_on\":0,\"v0\":2,\"slope\":0.5}", "",
+                       4.0, 20.0, &cov, &m, &mop);
+    ok("ramp from before the run: carried, v(s) = 2 + 0.5 (s + 4)",
+       r == 2 && cov.n_findings == 0 &&
+       fabs(gia_forcing_value(&m.nodes[0].forcing, 1.0, 0.0) - 4.0) < 1e-12 &&
+       fabs(gia_forcing_value(&m.nodes[0].forcing, 1.0, 6.0) - 7.0) < 1e-12);
+    if (r == 2) gia_model_free(&m);
+    cJSON_Delete(mop);
+
+    /* exponential: v0 e^{rate (t - t_on)}. */
+    r = project_forced("{\"waveform\":\"exponential\",\"t_on\":0,\"v0\":3,\"rate\":0.1}", "",
+                       0.0, 10.0, &cov, &m, &mop);
+    ok("exponential: carried, v(s) = 3 e^{0.1 s}",
+       r == 2 && cov.n_findings == 0 &&
+       fabs(gia_forcing_value(&m.nodes[0].forcing, 1.0, 5.0) - 3.0 * exp(0.5)) < 1e-12);
+    if (r == 2) gia_model_free(&m);
+    cJSON_Delete(mop);
+
+    /* Refusals: each names its reason and lowers coverage below 1. */
+    {
+        static const struct { const char *what, *node, *edge, *says; } bad[] = {
+            {"square", "{\"waveform\":\"square\",\"mean\":1,\"amplitude\":1,\"period\":10}", "", "square"},
+            {"step", "{\"waveform\":\"step\",\"t_on\":5,\"v0\":1,\"v1\":2}", "", "step"},
+            {"a ramp that switches on mid-run", "{\"waveform\":\"ramp\",\"t_on\":5,\"v0\":1,\"slope\":1}", "", "switches on"},
+            {"a sine whose min clamp binds", "{\"waveform\":\"sine\",\"mean\":1,\"amplitude\":2,\"period\":10,\"min\":0}", "", "clamp"},
+            {"an edge step (its rate)", "", "{\"waveform\":\"step\",\"t_on\":5,\"v0\":0.1,\"v1\":0.2}", "edge 'prod'"},
+            /* h8c: a data series has no generator in the engine's vocabulary */
+            {"a data table", "{\"waveform\":\"table\",\"times\":[0,10],\"values\":[1,2]}", "", "table"},
+        };
+        size_t b;
+        int    all = 1;
+        for (b = 0; b < sizeof bad / sizeof bad[0]; b++) {
+            int named = 0, f;
+            r = project_forced(bad[b].node, bad[b].edge, 0.0, 20.0, &cov, &m, &mop);
+            for (f = 0; f < cov.n_findings; f++)
+                if (strstr(cov.finding[f], "forcing not carried") && strstr(cov.finding[f], bad[b].says))
+                    named = 1;
+            if (!(r >= 1 && named && gia_coverage_fraction(&cov) < 1.0)) {
+                all = 0;
+                printf("    %s: not refused by name\n", bad[b].what);
+            }
+            if (r == 2) gia_model_free(&m);
+            cJSON_Delete(mop);
+        }
+        ok("square, step, a late ramp, a binding clamp, an edge step, a table: refused by name", all);
+    }
+}
+
 static void test_projection_names_its_losses(void) {
     cJSON        *g, *mop = NULL;
     gia_coverage  cov;
@@ -3224,6 +3339,7 @@ int main(void) {
     test_edge_rate_forcing();
     test_constant_matrix_has_no_integration_error();
     test_projection_full();
+    test_projection_forcing();
     test_projection_names_its_losses();
     test_projection_processing_node_params();
     test_reunited_coproducts();
