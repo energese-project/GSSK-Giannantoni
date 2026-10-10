@@ -50,6 +50,8 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **ADR 0020: the Relational Space algebra** ([docs/adr/0020](adr/0020-relational-algebra.md)). The engine will use the product table of [23 Eq 5.1.3–5.1.5] as printed, which is commutative and non-associative. Products of three or more factors are evaluated left to right and never reassociated. The evidence is that the literal table reproduces the EQS brackets of [23 Eq 7.1–7.3] to 8.9e-16, while an associative reading does not. Exponentials are De Moivre's closed form, never a power series. A root's power multiplies its angle, and the table power is a separate function: under the table the "roots of unity" are not roots of unity (erratum X10). The EQS refuses unequal angles (X11). The circle product of [02], [06b] keeps factor pairs and reduces cardinally to multiplication. No behaviour changes.
+
 - **ADR 0019: the MOP's two Fundamental Equations, as the engine solves them** ([docs/adr/0019](adr/0019-mop-fundamental-equations.md)). It records three decisions:
   - **First Equation:** solved per couple with the solution derived from [23 Eq 5.5.6]. The printed [23 Eq 5.5.7–5.5.8] leave residuals 1.25 and −0.625 at t = 1 (erratum X1).
   - **Second Equation:** implemented as its printed solution [23 Eq 6.1–6.3], tested against the Riccati equation `u' + u² = 0` that the solution satisfies. That oracle is labelled reconstructed.
