@@ -679,7 +679,12 @@ general-purpose ODE library. The wedge is:
       separate conservation (`gia_carrier_count`, per-carrier conservation tests).
 - [x] Forcing functions (ADR 0006): node and edge forcing, carried as extra state so
       `exp(A t)` stays exact.
-- [ ] Bridge: run one model through both engines and diff the trajectories, so
+- [x] Bridge: run one model through both engines and diff the trajectories (`bin/gia_bridge`,
+      FR-BRG-001). Both trajectories turn out to be classical (the Giannantoni engine's are
+      `exp(A t)`, E3), so what it measures is the kernel integrator's error against the exact
+      exponential, and it says so; the incipient drift critique still has no network solution
+      to be measured against. Original item:
+      run one model through both engines and diff the trajectories, so
       the drift critique is measured against a real integrator rather than only
       against a closed form. The projection and the coverage report now exist, so this is no
       longer blocked: a comparison is meaningful only over what the coverage report says was

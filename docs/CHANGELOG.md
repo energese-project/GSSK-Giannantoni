@@ -101,6 +101,16 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **`bin/gia_bridge`: one GSSK-schema model through both engines** (FR-BRG-001).
+  - It steps the model with the kernel (`--method euler|rk4|expm|auto|adaptive`), solves the
+    model's projection with the Giannantoni engine on the same grid, and reports the largest
+    difference per node. `--csv` writes both trajectories and their difference.
+  - The difference is labelled `classical`: it is the kernel integrator's error against the exact
+    exponential, not incipient drift.
+  - A partly projected model is refused (exit 2).
+  - `make test-bridge` (T-BRG-01, in CI) checks the Euler, RK4 and exponential cases against
+    their closed forms.
+
 - **Three example seeds for the Giannantoni engine**, each checked by hand in `tests/mop_cli.sh` and
   `test_mop.c`:
   - `trophic_chain.json`: the network harmony verdict is computed.

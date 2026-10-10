@@ -269,6 +269,25 @@ now `implemented`. What the check found, and what was changed so that it holds:
   tests their verification line names: T-MOP-01, T-MOP-10, T-ORD-02, T-ORD-04, T-OUT-02, T-OUT-03
   and T-REE-01.
 
+### `engine-bridge`
+
+- **FR-BRG-001 and T-BRG-01 are new.** The baseline had no requirement for running one model
+  through both engines. TODO.md §10.5 asked for one, and its blocker (the projection and coverage
+  report) had already landed. The bridge is a separate binary, `bin/gia_bridge`, and the only one
+  that includes both `gssk.h` and `engine.h`. Neither engine's library units include the other's
+  header, so ADR 0011 and NFR-SEP-001 still hold.
+- **What it measures.** Both trajectories are classical: the Giannantoni engine solves a network by
+  `exp(A t)` (E3). The difference is therefore the kernel integrator's error against the exact
+  exponential, labelled `classical`. The TODO item hoped to measure "the drift critique against a
+  real integrator". That needs an incipient network solution, which neither the code nor, so far,
+  the sources provide. The item says so.
+- **Partial projections are refused**, exit 2, and the coverage report is printed. A projection
+  that drops a pathway changes the equations of the nodes it touched, so even those nodes' "carried"
+  values would differ by the missing pathway. TODO.md's own blocker note warned of exactly this.
+- **The oracle is the closed form of each recursion.** On `decay_model`, Euler is `Q0(1−h)ⁿ` and RK4
+  `Q0 Rⁿ` exactly, so the reported difference is fixed by arithmetic. The tolerance comes from
+  cancellation: the RK4 difference (3.3e-9 out of 0.37) is good to about 1e-5 relative.
+
 ---
 
 ## [Revision 3] — 2026-10-09

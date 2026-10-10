@@ -77,6 +77,15 @@ Five seeds live in `examples/giannantoni/`, each showing something the others do
 
 Each seed's verdicts are in [docs/results/harmony_verdicts.md](docs/results/harmony_verdicts.md), and `tests/mop_cli.sh` holds the CLI to them.
 
+### Both engines on one model
+
+```bash
+make bin/gia_bridge
+bin/gia_bridge examples/decay_model.json --method euler --csv bridge.csv
+```
+
+Steps a GSSK-schema model with the kernel and solves its projection with the Giannantoni engine, on the same time grid. It reports the largest difference per node, and writes both trajectories and their difference to the CSV. Both trajectories are classical (the second engine's are `exp(A t)`), so the difference is the kernel integrator's error against the exact exponential, not incipient drift. A model the projection carries only in part is refused, because its difference would measure the dropped pathways. Seven of the kernel examples project whole.
+
 ### Benchmark
 
 ```bash
