@@ -27,6 +27,8 @@
  *     drift of the solved trajectory (the invented-phi
  *     _idc/_tdc/_drift columns, E4, are removed)
  *   - the harmony matrix is built from roots of unity          assumed    (E5)
+ *     (src/harmony.c, gia_harmony_assume_*; the detector that decides
+ *     harmony is gia_harmony_verdict in mop.h)
  *   - the Ordinality record and Maximum Ordinality (ADR 0021)  implemented
  *     (gia_closure, the fraction on a cycle, is a proxy, E6)
  *   - gia_generate: one pathway at a time by maximum empower  implemented (E7)
@@ -177,7 +179,7 @@ double complex gia_net_sum(const gia_net *n);
  *   - Every row sums to alpha_ref * sum_m omega^m = 0 exactly, for N-1 >= 2.
  *     That is the global balance the Harmony Relationships assert.
  *   - Any entry is recoverable from alpha_ref and (i, j) alone. That is the
- *     O(N^2) -> O(1) reduction, and gia_harmony_reconstruct() lets a test
+ *     O(N^2) -> O(1) reduction, and gia_harmony_assume_reconstruct() lets a test
  *     confirm the stored matrix really does carry no extra information.
  *
  * Note alpha_{0,1} == alpha_ref by construction: row 0's first partner is 1,
@@ -191,27 +193,27 @@ typedef struct {
 } gia_harmony;
 
 /* The m-th of the `roots` roots of unity. */
-double complex gia_ordinal_root(int roots, int m);
+double complex gia_harmony_assume_root(int roots, int m);
 
 /* Build the N x N harmony matrix from the reference couple. Requires n >= 2.
  * Returns false on bad argument or allocation failure. */
-bool gia_harmony_init(gia_harmony *h, int n, double complex alpha_ref);
-void gia_harmony_free(gia_harmony *h);
+bool gia_harmony_assume_init(gia_harmony *h, int n, double complex alpha_ref);
+void gia_harmony_assume_free(gia_harmony *h);
 
 /* Stored entry (i, j). Out-of-range indices return 0. */
-double complex gia_harmony_at(const gia_harmony *h, int i, int j);
+double complex gia_harmony_assume_at(const gia_harmony *h, int i, int j);
 
 /* Entry (i, j) recomputed from alpha_ref and the roots of unity alone,
- * touching no stored state. Equality with gia_harmony_at() over all (i, j)
+ * touching no stored state. Equality with gia_harmony_assume_at() over all (i, j)
  * is the N x N -> 1 reduction claim. */
-double complex gia_harmony_reconstruct(int n, double complex alpha_ref,
+double complex gia_harmony_assume_reconstruct(int n, double complex alpha_ref,
                                        int i, int j);
 
 /* max_i |sum_j alpha_ij| — the balance residual. ~0 at Maximum Ordinality. */
-double gia_harmony_row_residual(const gia_harmony *h);
+double gia_harmony_assume_row_residual(const gia_harmony *h);
 
 /* max_ij |stored - reconstructed| — the reduction residual. ~0 by construction. */
-double gia_harmony_reduction_residual(const gia_harmony *h);
+double gia_harmony_assume_reduction_residual(const gia_harmony *h);
 
 /* ================================================================== *
  * 4b. The network: the matrix exponential form

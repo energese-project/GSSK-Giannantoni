@@ -192,11 +192,40 @@ ok "a refusal says refused on stderr; a load error does not" "$st"
 # IF-OUT-002 through the CLI: the header, and the run report's label.
 mop_run ok_full
 st=0
-[ "$(head -n 1 "$tmp/mop.csv")" = "time,a__b_re,a__b_im" ] || { head -n 1 "$tmp/mop.csv" >&2; st=1; }
+[ "$(head -n 1 "$tmp/mop.csv")" = "time,a__b_re,a__b_im,R_H" ] || { head -n 1 "$tmp/mop.csv" >&2; st=1; }
 [ "$(wc -l < "$tmp/mop.csv" | tr -d ' ')" -eq 5 ] || st=1
 grep -qx 'label.mop_alpha: implemented' "$tmp/mop.out" || st=1
 grep -qx 'label.second_equation: assumed' "$tmp/mop.out" || st=1
 ok "--mop-out: IF-OUT-002's header, 1 + steps rows, labelled" "$st"
+
+# ---------------------------------------------------------------------------
+# Verifies: FR-OUT-003, IF-OUT-003, FR-HAR-002 (T-OUT-02)
+#
+# One `harmony.<construction>: <verdict>` line per evaluated construction, verbatim from the
+# detector, and as docs/results/harmony_verdicts.md records for each seed. A "not evaluated" row
+# means the report has no harmony line for that construction.
+# ---------------------------------------------------------------------------
+st=0; rows=0
+grep '^| `examples/' docs/results/harmony_verdicts.md \
+    | awk -F'|' '{ gsub(/[ `]/, "", $2); gsub(/^ +| +$/, "", $3); gsub(/^ +| +$/, "", $4); print $2 "|" $3 "|" $4 }' \
+    > "$tmp/verdicts"
+while IFS='|' read -r seed key verdict; do
+    rows=$((rows + 1))
+    run hv "$seed"
+    case "$verdict" in
+        "not evaluated")
+            ! grep -q "^harmony\.$key: " "$tmp/hv.out" || { echo "    $seed: $key has a verdict, the table says not evaluated" >&2; st=1; } ;;
+        *)
+            grep -qx "harmony\.$key: $verdict" "$tmp/hv.out" || { echo "    $seed: harmony.$key is not $verdict" >&2; st=1; } ;;
+    esac
+done < "$tmp/verdicts"
+[ "$rows" -ge 8 ] || { echo "    only $rows table rows read" >&2; st=1; }
+ok "harmony verdicts match docs/results/harmony_verdicts.md ($rows rows)" "$st"
+st=0
+for v in $(sed -n 's/^harmony\.[a-z_]*: //p' "$tmp/hv.out"); do
+    case "$v" in imposed|transported|present|absent) ;; *) echo "    verdict '$v'" >&2; st=1 ;; esac
+done
+ok "every harmony verdict is one of FR-HAR-002's four words" "$st"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "ALL PASS"; else echo "FAILURES PRESENT"; fi

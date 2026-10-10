@@ -61,7 +61,7 @@ A tolerance is never widened without a PLAN §5 erratum and a PLANLOG entry.
 |---|---|---|
 | `test_drift` | Keep; tag | T-IDC-01 |
 | `test_duet` | Keep; tag | T-IDC-02, VAL-06 |
-| `test_harmony` | Keep as a test of the constructor only; rename when FR-HAR-004 lands | T-HAR-08 |
+| `test_harmony` | Kept as a test of the constructor only; renamed `test_harmony_constructor` (FR-HAR-004 landed) | T-HAR-08 |
 | `test_emergy` | Keep; tag | T-EM-01 |
 | `test_emergy_feedback`, `test_reunited_coproducts`, `test_independent_inputs_still_sum` | Keep; tag | T-EM-02 |
 | `test_generative`, `test_generative_disabled` | Keep; tag. When FR-ORD-005 lands, keep the mode assertions and revise the ADR 0015 ones ("one component emerged") | T-ORD-05 |

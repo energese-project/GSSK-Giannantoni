@@ -312,7 +312,7 @@ Reordering a model's nodes, edges or a module's legs shall not change any result
 For a Matrioska α with N ≥ 3, the kernel shall compute
 `R_H = max_{j=2..N−1} |α_{1,j+1}/α_{12} − e^{2πi(j−1)/(N−1)}|` in ℂ, refusing `α₁₂ = 0`.
 - **Source:** [23 Eq 5.6.5]; PLAN R7, X9
-- **Verification:** T-HAR-02, T-HAR-03, T-HAR-04 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-HAR-02, T-HAR-03, T-HAR-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### FR-HAR-002 — Verdict for a construction
 Given a construction (a map from boundary conditions to a Matrioska), the kernel shall evaluate it on a
@@ -320,19 +320,19 @@ harmonic input and on the fixed perturbations of vv-plan.md §6, and report `imp
 output is within tolerance, `transported` if every output's `R_H` equals its input's, and `absent`
 otherwise. For an observed Matrioska it shall report `present` or `absent`.
 - **Source:** PLAN R7
-- **Verification:** T-HAR-05, T-HAR-06, T-HAR-07 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-HAR-05, T-HAR-06, T-HAR-07 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### FR-HAR-003 — No harmony in the solver
 The First and Second Equation solvers and the EQS shall not call the harmony constructor; the
 detector shall not be linked against it.
 - **Source:** PLAN §1 G-rules, B11
-- **Verification:** T-HAR-01 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-HAR-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### FR-HAR-004 — The constructor, labelled
 The existing harmony constructor shall live in `src/harmony.c` as `gia_harmony_assume_*`, and every
 output it produces shall be labelled `assumed`.
 - **Source:** PLAN E5, W8
-- **Verification:** T-HAR-08 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-HAR-08 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### 2.7 Labelling and reporting
 
@@ -352,7 +352,7 @@ the CLI and through the `why` out-parameter for the library.
 The report shall carry one line per construction, `harmony.<construction>: <verdict>`, with the verdict
 from FR-HAR-002.
 - **Source:** PLAN R7
-- **Verification:** T-OUT-02 · **Priority:** Must · **Status:** planned · **Task:** mop-harmony-detector
+- **Verification:** T-OUT-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
 ### 2.8 GSSK kernel
 

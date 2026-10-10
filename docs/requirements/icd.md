@@ -11,7 +11,8 @@ document. Existing `engine.h` functions keep their signatures; the new units use
 | `include/gia_status.h` | — | `gia_status`, `gia_status_str` | `<stddef.h>` |
 | `include/idc.h` | `src/idc.c` | Single-variable IDC solvers (FR-IDC-002, 006–010) | `gia_status.h`, `<complex.h>` |
 | `include/relational.h` | `src/relational.c` | Relational elements (FR-REL) | `gia_status.h` |
-| `include/mop.h` | `src/mop.c` | First and Second Equation, EQS, harmony detector, network β (FR-MOP, FR-HAR-001–003) | `engine.h`, `relational.h` |
+| `include/mop.h` | `src/mop.c` | First and Second Equation, EQS, harmony detector and its constructions (FR-MOP, FR-HAR-001–003) | `gia_status.h`, `relational.h` |
+| `include/mop_seed.h` | `src/mop_seed.c` | The seed's `mop` block, the MOP CSV, network β, the reference row (IF-JSON-001, IF-OUT-002, FR-MOP-008) | `engine.h`, `mop.h` |
 | `include/engine.h` | `src/engine.c` | Model, network, emergy, ordinality, generative step (existing; FR-EM, FR-ORD additions) | unchanged |
 | `src/harmony.c` | — | `gia_harmony_assume_*` (FR-HAR-004), declared in `engine.h` | — |
 
@@ -140,8 +141,8 @@ typedef struct { double psi1[3], psi2, eps[3], A; int N; } gia_eqs_params;
 gia_status gia_eqs(const gia_eqs_params *p, rel_t ref /* Σ0, Φ0, Θ0 at t */, int l,
                    double out[3] /* ρ, φ, θ */, const char **why);          /* FR-MOP-006 */
 
-gia_status gia_mop_network_beta(const gia_model *m, double t, gia_beta *beta /* N*N */,
-                                const char **why);                           /* FR-MOP-008 */
+gia_status gia_mop_network(const gia_model *m, double t, gia_matrioska *alpha,
+                           gia_matrioska *beta, const char **why);  /* FR-MOP-008; mop_seed.h */
 
 typedef enum { GIA_H_IMPOSED, GIA_H_TRANSPORTED, GIA_H_PRESENT, GIA_H_ABSENT } gia_verdict;
 const char *gia_verdict_str(gia_verdict v);                                 /* FR-OUT-003 */
@@ -152,6 +153,9 @@ gia_status gia_harmony_verdict(gia_construction c, void *ctx, int N,
                                gia_verdict *v, const char **why);           /* FR-HAR-002 */
 gia_status gia_harmony_observed(const gia_matrioska *alpha, gia_verdict *v,
                                 const char **why);                          /* FR-HAR-002 */
+gia_status gia_construct_first(const gia_beta *in, int N, gia_matrioska *out, void *ctx);
+gia_status gia_construct_second(const gia_beta *in, int N, gia_matrioska *out, void *ctx);
+gia_status gia_construct_eqs(const gia_beta *in, int N, gia_matrioska *out, void *ctx); /* VAL-07 */
 ```
 `gia_matrioska` is allocated by the producing function and freed by `gia_matrioska_free`; `related[i*N+j]`
 is 0 for unrelated couples, whose `a` entry is unspecified.
@@ -236,14 +240,14 @@ are removed (they applied the drift identity to invented per-node φ, PLAN E4); 
 Written when the seed has a `mop` block and `--mop-out PATH` is given. Columns: `time`; per related
 couple in `(from, to)` id order `<from>__<to>_re, <from>__<to>_im`; then `R_H`.
 - **Source:** srs §2.3, FR-HAR-001
-- **Verification:** T-OUT-01 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-OUT-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### IF-OUT-003 — The run report
 Stdout, line-oriented `key: value`. It shall include `ordinality: {k, n22, n2, nhalf, nunrelated}`,
 `maximum_ordinality: yes|no`, `closure (proxy): <x>`, one `label.<column>: <label>` per output
 (FR-OUT-001), and one `harmony.<construction>: <verdict>` per evaluated construction (FR-OUT-003).
 - **Source:** srs §2.5–2.7
-- **Verification:** T-OUT-02 · **Priority:** Must · **Status:** planned · **Task:** mop-claims-remediation
+- **Verification:** T-OUT-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-claims-remediation
 
 ## 5. Command line
 

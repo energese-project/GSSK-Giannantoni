@@ -454,6 +454,67 @@ done:
     return st;
 }
 
+gia_status gia_mop_reference_row(const gia_model *m, const int *ref, const gia_matrioska *full,
+                                 gia_matrioska *row, const char **why) {
+    int  *order, k = 0, i, j, r0, r1;
+    const int n = m ? m->n_nodes : 0;
+
+    if (!m || !full || !row || full->N != n || !full->a || !full->related) {
+        if (why) *why = "gia_mop_reference_row: NULL argument or a Matrioska of the wrong size";
+        return GIA_E_ARG;
+    }
+    order = (int *)malloc((size_t)n * sizeof(int));
+    if (!order) {
+        if (why) *why = "gia_mop_reference_row: out of memory";
+        return GIA_E_NOMEM;
+    }
+    for (i = 0; i < n; i++) if (gia_node_is_component(m, i)) order[k++] = i;
+    for (i = 1; i < k; i++) {            /* components by id */
+        int x = order[i], p = i - 1;
+        while (p >= 0 && strcmp(m->nodes[order[p]].id, m->nodes[x].id) > 0) { order[p + 1] = order[p]; p--; }
+        order[p + 1] = x;
+    }
+    r0 = ref ? ref[0] : (k > 0 ? order[0] : -1);
+    r1 = ref ? ref[1] : (k > 1 ? order[1] : -1);
+    if (k < 2 || r0 == r1 || !gia_node_is_component(m, r0) || !gia_node_is_component(m, r1)) {
+        free(order);
+        if (why) *why = "gia_mop_reference_row: the reference couple needs two distinct components";
+        return GIA_E_ARG;
+    }
+    /* ref[0], ref[1], then the rest in id order. */
+    for (i = 0, j = 2; i < k; i++) {
+        const int x = order[i];
+        if (x != r0 && x != r1) order[j++] = x;
+    }
+    order[0] = r0; order[1] = r1;
+    row->N       = k;
+    row->a       = (double complex *)calloc((size_t)k * (size_t)k, sizeof(double complex));
+    row->related = (unsigned char *)calloc((size_t)k * (size_t)k, 1);
+    if (!row->a || !row->related) {
+        free(order); gia_matrioska_free(row);
+        if (why) *why = "gia_mop_reference_row: out of memory";
+        return GIA_E_NOMEM;
+    }
+    for (j = 1; j < k; j++) {
+        const int c = r0 * n + order[j];
+        if (full->related[c]) { row->a[j] = full->a[c]; row->related[j] = 1; }
+    }
+    free(order);
+    return GIA_OK;
+}
+
+/* The R_H cell of one CSV row: the residual of the reference row, or empty. */
+static void write_rh(FILE *f, const gia_model *m, const int *ref, const gia_matrioska *full) {
+    gia_matrioska row;
+    double        R;
+    int           good = 0;
+    memset(&row, 0, sizeof row);
+    if (gia_mop_reference_row(m, ref, full, &row, NULL) == GIA_OK)
+        good = gia_harmony_residual(&row, &R, NULL) == GIA_OK;
+    gia_matrioska_free(&row);
+    if (good) fprintf(f, ",%.17g", R); else fprintf(f, ",");
+}
+
 /* IF-OUT-002 for "beta": "network": alpha = ln E for each related couple. */
 static gia_status write_network(const gia_model *m, const gia_mop_seed *s, const char *path,
                                 int steps, const char **why) {
@@ -500,7 +561,7 @@ static gia_status write_network(const gia_model *m, const gia_mop_seed *s, const
         const char *a = m->nodes[pairs[j] / n].id, *b = m->nodes[pairs[j] % n].id;
         fprintf(f, ",%s__%s_re,%s__%s_im", a, b, a, b);
     }
-    fprintf(f, "\n");
+    fprintf(f, ",R_H\n");
     dt = m->t_end / (double)steps;
     for (r = 0; r <= steps; r++) {
         const double t = (double)r * dt;
@@ -511,6 +572,7 @@ static gia_status write_network(const gia_model *m, const gia_mop_seed *s, const
         fprintf(f, "%.6f", t);
         for (j = 0; j < np; j++)
             fprintf(f, ",%.17g,%.17g", creal(al.a[pairs[j]]), cimag(al.a[pairs[j]]));
+        write_rh(f, m, s->ref, &al);
         fprintf(f, "\n");
         gia_matrioska_free(&al);
     }
@@ -528,6 +590,7 @@ gia_status gia_mop_write_csv(const gia_model *m, const gia_mop_seed *s, const ch
     FILE          *f;
     double         dt;
     double complex al;
+    gia_matrioska  full;
     gia_status     st;
     int            i, r;
 
@@ -552,21 +615,34 @@ gia_status gia_mop_write_csv(const gia_model *m, const gia_mop_seed *s, const ch
         const char *a = m->nodes[s->couples[i].from].id, *b = m->nodes[s->couples[i].to].id;
         fprintf(f, ",%s__%s_re,%s__%s_im", a, b, a, b);
     }
-    fprintf(f, "\n");
+    fprintf(f, ",R_H\n");
+    full.N       = m->n_nodes;
+    full.a       = (double complex *)calloc((size_t)m->n_nodes * (size_t)m->n_nodes, sizeof(double complex));
+    full.related = (unsigned char *)calloc((size_t)m->n_nodes * (size_t)m->n_nodes, 1);
+    if (!full.a || !full.related) {
+        gia_matrioska_free(&full); fclose(f); remove(path);
+        if (why) *why = "gia_mop_write_csv: out of memory";
+        return GIA_E_NOMEM;
+    }
     dt = m->t_end / (double)steps;
     for (r = 0; r <= steps; r++) {
         const double t = (double)r * dt;
         fprintf(f, "%.6f", t);
         for (i = 0; i < s->n_couples; i++) {
+            const int c = s->couples[i].from * m->n_nodes + s->couples[i].to;
             if ((st = gia_mop_couple(&s->couples[i].beta, s->k, t, &al, why)) != GIA_OK) {
+                gia_matrioska_free(&full);
                 fclose(f);
                 remove(path);
                 return st;
             }
             fprintf(f, ",%.17g,%.17g", creal(al), cimag(al));
+            full.a[c] = al; full.related[c] = 1;
         }
+        write_rh(f, m, s->ref, &full);
         fprintf(f, "\n");
     }
+    gia_matrioska_free(&full);
     if (fclose(f) != 0) {
         remove(path);
         if (why) *why = "gia_mop_write_csv: the output file could not be written";

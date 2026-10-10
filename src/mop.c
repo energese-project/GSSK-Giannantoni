@@ -10,6 +10,7 @@
 
 #include <float.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -420,5 +421,184 @@ gia_status gia_mop_second(double complex alpha12_0, double c1, double c2, int N,
     out->A       = A;
     out->B[0][0] = A;  out->B[0][1] = -A;
     out->B[1][0] = -A; out->B[1][1] = A;
+    return GIA_OK;
+}
+
+/* ------------------------------------------------------------------ *
+ * The harmony detector (FR-HAR-001, FR-HAR-002)
+ * ------------------------------------------------------------------ */
+
+#define GIA_TWO_PI   6.283185307179586476925286766559
+#define HARMONY_TOL  1e-9                  /* vv-plan.md §6 */
+#define HARMONY_DELTA 1e-3
+
+const char *gia_verdict_str(gia_verdict v) {
+    switch (v) {
+    case GIA_H_IMPOSED:     return "imposed";
+    case GIA_H_TRANSPORTED: return "transported";
+    case GIA_H_PRESENT:     return "present";
+    case GIA_H_ABSENT:      return "absent";
+    default:                return "unknown verdict";
+    }
+}
+
+/* FR-HAR-001. */
+gia_status gia_harmony_residual(const gia_matrioska *alpha, double *R_H, const char **why) {
+    double complex a12;
+    double         worst = 0.0;
+    int            N, j;
+
+    if (!alpha || !R_H || !alpha->a || !alpha->related || alpha->N < 3)
+        return fail(GIA_E_ARG, "gia_harmony_residual: N >= 3 required ([23 Eq 5.6.5])", why);
+    N = alpha->N;
+    for (j = 1; j < N; j++)
+        if (!alpha->related[j])
+            return fail(GIA_E_DOMAIN, "gia_harmony_residual: a couple of row 1 is unrelated, so "
+                        "[23 Eq 5.6.5] has no ratio for it", why);
+    a12 = alpha->a[1];
+    if (!finite_c(a12) || !(cabs(a12) >= DBL_MIN))
+        return fail(GIA_E_DOMAIN, "gia_harmony_residual: alpha_12 = 0, so the ratios of "
+                    "[23 Eq 5.6.5] are undefined (FR-HAR-001)", why);
+    for (j = 2; j < N; j++) {
+        const double complex ratio = alpha->a[j] / a12;
+        const double complex root  = cexp(I * (GIA_TWO_PI * (double)(j - 1) / (double)(N - 1)));
+        double               d;
+        if (!finite_c(ratio))
+            return fail(GIA_E_RANGE, "gia_harmony_residual: a ratio alpha_1j/alpha_12 is not "
+                        "finite (N6)", why);
+        d = cabs(ratio - root);
+        if (d > worst) worst = d;
+    }
+    *R_H = worst;
+    return GIA_OK;
+}
+
+gia_status gia_harmony_observed(const gia_matrioska *alpha, gia_verdict *v, const char **why) {
+    double     R;
+    gia_status st;
+    if (!v) return fail(GIA_E_ARG, "gia_harmony_observed: NULL verdict", why);
+    if ((st = gia_harmony_residual(alpha, &R, why)) != GIA_OK) return st;
+    *v = R <= HARMONY_TOL ? GIA_H_PRESENT : GIA_H_ABSENT;
+    return GIA_OK;
+}
+
+/* vv-plan.md §6's 64-bit LCG, mapped to [-1, 1]. */
+static double harmony_lcg(uint64_t *x) {
+    *x = 6364136223846793005ULL * *x + 1442695040888963407ULL;
+    return 2.0 * ((double)(*x >> 11) * (1.0 / 9007199254740992.0)) - 1.0;
+}
+
+/* Input m (0: harmonic; 1..8: perturbed) and its own Matrioska at t = 1. */
+static void harmony_input(int N, int m, gia_beta *in, gia_matrioska *at1) {
+    uint64_t x = (uint64_t)m;
+    int      j;
+    memset(in, 0, (size_t)N * (size_t)N * sizeof(gia_beta));
+    for (j = 1; j < N; j++) {
+        const double complex w = cexp(I * (GIA_TWO_PI * (double)(j - 1) / (double)(N - 1)));
+        double complex       f = 1.0;
+        if (m > 0) {
+            const double xr = harmony_lcg(&x), xi = harmony_lcg(&x);
+            f = 1.0 + HARMONY_DELTA * (xr + xi * I);
+        }
+        in[j].kind = GIA_BETA_AFFINE;
+        in[j].a    = w * f;
+        in[j].b    = 0.25 * w * f;
+        in[j].p    = 1.0;
+        at1->a[j]       = in[j].a + in[j].b;      /* (a + b t)^1 at t = 1 */
+        at1->related[j] = 1;
+    }
+}
+
+/* FR-HAR-002, by vv-plan.md §6. */
+gia_status gia_harmony_verdict(gia_construction c, void *ctx, int N, gia_verdict *v,
+                               const char **why) {
+    gia_beta      *in;
+    gia_matrioska  at1;
+    int            m, imposed = 1, transported = 1, some_in = 0;
+    gia_status     st = GIA_OK;
+
+    if (!c || !v || N < 3)
+        return fail(GIA_E_ARG, "gia_harmony_verdict: a construction, and N >= 3", why);
+    in          = (gia_beta *)malloc((size_t)N * (size_t)N * sizeof(gia_beta));
+    at1.N       = N;
+    at1.a       = (double complex *)calloc((size_t)N * (size_t)N, sizeof(double complex));
+    at1.related = (unsigned char *)calloc((size_t)N * (size_t)N, 1);
+    if (!in || !at1.a || !at1.related) {
+        free(in); gia_matrioska_free(&at1);
+        return fail(GIA_E_NOMEM, "gia_harmony_verdict: out of memory", why);
+    }
+    for (m = 0; m <= 8 && st == GIA_OK; m++) {
+        gia_matrioska out;
+        double        r_in = 0.0, r_out = 0.0;
+        int           has_out;
+        harmony_input(N, m, in, &at1);
+        if ((st = gia_harmony_residual(&at1, &r_in, why)) != GIA_OK) break;
+        if (r_in > HARMONY_TOL) some_in = 1;
+        memset(&out, 0, sizeof out);
+        if ((st = c(in, N, &out, ctx)) != GIA_OK) break;
+        has_out = out.N == N && gia_harmony_residual(&out, &r_out, NULL) == GIA_OK;
+        gia_matrioska_free(&out);
+        if (!has_out) { imposed = transported = 0; continue; }
+        if (!(r_out <= HARMONY_TOL)) imposed = 0;
+        if (!(fabs(r_out - r_in) <= HARMONY_TOL * (r_in > 1.0 ? r_in : 1.0))) transported = 0;
+    }
+    free(in);
+    gia_matrioska_free(&at1);
+    if (st != GIA_OK) return st;
+    *v = imposed ? GIA_H_IMPOSED : (transported && some_in) ? GIA_H_TRANSPORTED : GIA_H_ABSENT;
+    return GIA_OK;
+}
+
+/* beta_12's value at t, from a related affine-power couple. */
+static int beta12_at(const gia_beta *in, double t, double complex *v) {
+    const gia_beta *b = &in[1];
+    if (b->kind != GIA_BETA_AFFINE) return 0;
+    *v = cpow(b->a + b->b * t, b->p);
+    return finite_c(*v);
+}
+
+gia_status gia_construct_first(const gia_beta *in, int N, gia_matrioska *out, void *ctx) {
+    static const gia_rational k1 = {1, 1};
+    if (!in || !out || N < 3) return GIA_E_ARG;
+    return gia_mop_solve(N, in, ctx ? *(const gia_rational *)ctx : k1, 1.0, out, NULL);
+}
+
+gia_status gia_construct_second(const gia_beta *in, int N, gia_matrioska *out, void *ctx) {
+    gia_second     sec;
+    double complex a0;
+    (void)ctx;
+    if (!in || !out || N < 3 || !beta12_at(in, 0.0, &a0)) return GIA_E_ARG;
+    return gia_mop_second(a0, 1.0, 0.5, N, 1.0, &sec, out, NULL);
+}
+
+gia_status gia_construct_eqs(const gia_beta *in, int N, gia_matrioska *out, void *ctx) {
+    gia_eqs_params p;
+    const rel_t    ref = {1.0, 0.0, 0.0};
+    double complex b12, *a;
+    unsigned char *rel;
+    gia_status     st;
+    int            l;
+    (void)ctx;
+    if (!in || !out || N < 3 || !beta12_at(in, 1.0, &b12)) return GIA_E_ARG;
+    p.psi1[0] = p.psi1[1] = p.psi1[2] = 1.0;
+    p.psi2    = 1.0;
+    p.eps[0]  = p.eps[1] = p.eps[2] = -GIA_TWO_PI;
+    p.A       = 1.0;
+    p.N       = N;
+    a   = (double complex *)calloc((size_t)N * (size_t)N, sizeof(double complex));
+    rel = (unsigned char *)calloc((size_t)N * (size_t)N, 1);
+    if (!a || !rel) { free(a); free(rel); return GIA_E_NOMEM; }
+    for (l = 1; l < N; l++) {
+        /* With ref = {1, 0, 0} the brackets of [23 Eq 7.1-7.3] are B and C, so
+         * rho = e^{E_l1 B} and phi = E_l2 C (psi1 = 1, A = 1). */
+        const double E = (p.eps[0] + 2.0 * GIA_TWO_PI * (double)l) / (double)(N - 1);
+        double       c[3], B, C;
+        if ((st = gia_eqs(&p, ref, l, c, NULL)) != GIA_OK) { free(a); free(rel); return st; }
+        B = log(c[0]) / E;
+        C = c[1] / E;
+        a[l]   = b12 * (B + I * sqrt(2.0) * C);
+        rel[l] = 1;
+    }
+    out->N = N; out->a = a; out->related = rel;
     return GIA_OK;
 }

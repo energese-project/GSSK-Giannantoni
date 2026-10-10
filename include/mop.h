@@ -133,4 +133,61 @@ typedef struct { double complex A; double complex B[2][2]; } gia_second;
 gia_status gia_mop_second(double complex alpha12_0, double c1, double c2, int N, double t,
                           gia_second *out, gia_matrioska *r, const char **why);
 
+/* ------------------------------------------------------------------ *
+ * The harmony detector (FR-HAR-001, FR-HAR-002; PLAN R7, X9)
+ *
+ * Harmony is decided here, never assumed: nothing in this unit calls the
+ * constructor gia_harmony_assume_* (FR-HAR-003), and bin/test_mop_emergence
+ * links without harmony.o.
+ * ------------------------------------------------------------------ */
+
+typedef enum { GIA_H_IMPOSED, GIA_H_TRANSPORTED, GIA_H_PRESENT, GIA_H_ABSENT } gia_verdict;
+
+/* FR-OUT-003: "imposed", "transported", "present", "absent"; never NULL. */
+const char *gia_verdict_str(gia_verdict v);
+
+/* FR-HAR-001 [23 Eq 5.6.5]: for N >= 3,
+ *
+ *   R_H = max_{j=2..N-1} | alpha_{1,j+1} / alpha_{12} - e^{2 pi i (j-1)/(N-1)} |
+ *
+ * over row 1 (index 0), which must be related from column 2 on (index 1..N-1).
+ * GIA_E_ARG for N < 3 or NULL; GIA_E_DOMAIN when a row-1 couple is unrelated
+ * or alpha_12 = 0 (|alpha_12| < DBL_MIN); GIA_E_RANGE for a non-finite ratio. */
+gia_status gia_harmony_residual(const gia_matrioska *alpha, double *R_H, const char **why);
+
+/* A construction: boundary conditions (N*N, row-major, row 1 related) to a
+ * Matrioska at t = 1, allocated in *out. */
+typedef gia_status (*gia_construction)(const gia_beta *in, int N, gia_matrioska *out, void *ctx);
+
+/* FR-HAR-002, by vv-plan.md §6: c is evaluated on the harmonic input
+ * beta_{1,j+1} = w^{j-1} beta_12, beta_12 = (a, b, p) = (1, 0.25, 1), and on
+ * 8 perturbations, each couple's beta scaled by (1 + delta xi), delta = 1e-3,
+ * xi in [-1, 1]^2 from the fixed 64-bit LCG seeded m = 1..8 (scaling keeps the
+ * shape of beta; PLANLOG). With tol = 1e-9: imposed if every output's R_H <=
+ * tol; transported if every output's R_H equals its input's within
+ * tol max(1, R_H(in)) and some input's R_H > tol; absent otherwise (an output
+ * without a residual is not harmonic). A construction's failure is returned. */
+gia_status gia_harmony_verdict(gia_construction c, void *ctx, int N, gia_verdict *v,
+                               const char **why);
+
+/* FR-HAR-002: an observed Matrioska is present if R_H <= 1e-9, else absent.
+ * gia_harmony_residual's refusals are returned. */
+gia_status gia_harmony_observed(const gia_matrioska *alpha, gia_verdict *v, const char **why);
+
+/* The three constructions the sources give (VAL-07), for gia_harmony_verdict:
+ *
+ *   gia_construct_first   the First Equation, gia_mop_solve at t = 1; ctx is a
+ *                         gia_rational * (NULL: k = 1)
+ *   gia_construct_second  the Second Equation's row, gia_mop_second at t = 1
+ *                         with alpha12(0) = beta_12(0), c1 = 1, c2 = 0.5
+ *   gia_construct_eqs     the EQS root of each l = 1..N-1 (gia_eqs with
+ *                         ref = {1, 0, 0}, psi1 = 1, psi2 = 1, eps = -2 pi,
+ *                         A = 1) as the complex number B_l + i sqrt2 C_l =
+ *                         e^{i sqrt2 psi_l}, times beta_12(1) (PLANLOG)
+ *
+ * ctx is unused by the last two. */
+gia_status gia_construct_first(const gia_beta *in, int N, gia_matrioska *out, void *ctx);
+gia_status gia_construct_second(const gia_beta *in, int N, gia_matrioska *out, void *ctx);
+gia_status gia_construct_eqs(const gia_beta *in, int N, gia_matrioska *out, void *ctx);
+
 #endif /* GIA_MOP_H */

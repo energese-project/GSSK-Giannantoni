@@ -185,6 +185,57 @@ static int report_mop(const gia_model *m, const gia_mop_seed *s) {
     return 0;
 }
 
+/* FR-OUT-003, FR-HAR-002: the detector's verdict for each construction the
+ * sources give, at N = the number of components, and the observed verdict of
+ * the network's own Matrioska (FR-MOP-008) on the reference row. With fewer
+ * than three components [23 Eq 5.6.5] has no residual, so nothing is
+ * evaluated, and the report says so rather than printing a verdict. */
+static void report_harmony(const gia_model *m, const gia_mop_seed *mop) {
+    static const struct { const char *name; gia_construction c; } cs[3] = {
+        {"first_equation", gia_construct_first},
+        {"second_equation", gia_construct_second},
+        {"eqs", gia_construct_eqs},
+    };
+    const int     N = component_total(m);
+    gia_verdict   v;
+    gia_matrioska al, row;
+    const char   *why = NULL;
+    int           i;
+
+    printf("\n%s\n", RULE);
+    printf(" HARMONY -- DETECTED, NOT ASSUMED (FR-HAR-002, [23 Eq 5.6.5])\n");
+    printf("%s\n", RULE);
+    if (N < 3) {
+        printf("  not evaluated: %d component%s; the residual needs N >= 3\n", N,
+               N == 1 ? "" : "s");
+        return;
+    }
+    for (i = 0; i < 3; i++) {
+        void *ctx = (i == 0 && mop->present) ? (void *)&mop->k : NULL;
+        why = NULL;
+        if (gia_harmony_verdict(cs[i].c, ctx, N, &v, &why) == GIA_OK)
+            printf("harmony.%s: %s\n", cs[i].name, gia_verdict_str(v));
+        else
+            printf("  %s: not evaluated (%s)\n", cs[i].name, why ? why : "refused");
+    }
+    /* The network's Matrioska, observed on the reference couple's row. A row
+     * couple without a pathway leaves the residual undefined, and a Matrioska
+     * that does not relate the couples harmony relates is not harmonic. */
+    memset(&al, 0, sizeof al);
+    memset(&row, 0, sizeof row);
+    if (gia_mop_network(m, m->t_end, &al, NULL, &why) != GIA_OK) {
+        printf("  network: not evaluated (%s)\n", why ? why : "refused");
+        return;
+    }
+    if (gia_mop_reference_row(m, mop->present ? mop->ref : NULL, &al, &row, &why) == GIA_OK &&
+        gia_harmony_observed(&row, &v, &why) == GIA_OK)
+        printf("harmony.network: %s\n", gia_verdict_str(v));
+    else
+        printf("harmony.network: absent\n  (no residual: %s)\n", why ? why : "?");
+    gia_matrioska_free(&row);
+    gia_matrioska_free(&al);
+}
+
 static void report_model(gia_model *m) {
     gia_ordinality_rec rec;
     const char        *why = NULL;
@@ -438,15 +489,18 @@ int main(int argc, char **argv) {
     printf("  plus conservation and emergy_excess for the run as a whole\n");
     if (show_table) gia_print_trajectories(&model, steps);
 
-    /* ---- MOP harmony relationships over the N components ---- */
+    /* ---- The harmony CONSTRUCTOR: assumed, and labelled so (FR-HAR-004) ---- */
     if (model.n_nodes >= 2) {
-        if (!gia_harmony_init(&harmony, model.n_nodes,
+        if (!gia_harmony_assume_init(&harmony, model.n_nodes,
                               reference_couple(&model))) {
             fprintf(stderr, "cannot build harmony matrix\n");
             goto done;
         }
         gia_validate_harmony(&harmony, 1e-9);
     }
+
+    /* ---- The harmony DETECTOR: one verdict per construction (FR-OUT-003) ---- */
+    report_harmony(&model, &mop);
 
     /* ---- Mode 2: generative. The graph itself may change. ---- */
     printf("\n%s\n", RULE);
@@ -487,7 +541,7 @@ int main(int argc, char **argv) {
     rc = EXIT_SUCCESS;
 
 done:
-    gia_harmony_free(&harmony);
+    gia_harmony_assume_free(&harmony);
     gia_mop_seed_free(&mop);
     gia_model_free(&model);
     if (printed)  free(printed);

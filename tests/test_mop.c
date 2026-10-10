@@ -2094,6 +2094,72 @@ static void test_mop_fuzz_corpus(void) {
     ok("each ok_* case loads, each other case is GIA_E_ARG, none crashes", right);
 }
 
+/* Verifies: IF-OUT-002, FR-HAR-001 (T-OUT-01)
+ * Source: icd.md IF-OUT-002, [23 Eq 5.6.5]. Oracle: with N = 3 the one root
+ * is e^{i pi} = -1, and alpha_ac = -alpha_ab exactly when beta_ac = -beta_ab
+ * (k = 1, alpha = int beta), so R_H = 0 at every t > 0; at t = 0 alpha_12 = 0
+ * and the cell is empty. */
+static int net_idx(const gia_model *m, const char *id);
+
+static void test_mop_csv_rh(void) {
+    const char  *path = "bin/test_mop_rh.csv";
+    gia_model    m;
+    cJSON       *root;
+    gia_mop_seed s;
+    char         det[128], *text = NULL;
+    const char  *why = NULL;
+    int          st;
+
+    printf("\n[T-OUT-01] the MOP CSV's R_H column\n");
+    remove(path);
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":["
+                      "{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0.25,\"p\":1},"
+                      "{\"from\":\"a\",\"to\":\"c\",\"a\":-1,\"b\":-0.25,\"p\":1}]}",
+                      &m, &root, &s, det, sizeof det);
+    if (st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_OK) text = slurp(path);
+    {
+        int   rows = 0, empty0 = 0, zero = 1;
+        char *line = text, *nl;
+        while (line && (nl = strchr(line, '\n')) != NULL) {
+            char *cell;
+            *nl  = '\0';
+            cell = strrchr(line, ',');
+            if (rows == 1) empty0 = cell && cell[1] == '\0';
+            if (rows >= 2 && !(cell && cell[1] != '\0' && fabs(strtod(cell + 1, NULL)) < 1e-12)) zero = 0;
+            rows++;
+            line = nl + 1;
+        }
+        ok("alpha_ac = -alpha_ab, N = 3: R_H = 0 for t > 0", text && rows == 5 && zero);
+        ok("at t = 0, alpha_12 = 0: the R_H cell is empty", empty0);
+    }
+    if (st == GIA_OK) {
+        /* gia_mop_reference_row: ref = {c, a} puts c first, a second, b last. */
+        gia_matrioska full, row;
+        const int     n = m.n_nodes, ia = net_idx(&m, "a"), ib = net_idx(&m, "b"), ic = net_idx(&m, "c");
+        int           ref[2], good;
+        ref[0] = ic; ref[1] = ia;
+        full.N = n;
+        full.a = (double complex *)calloc((size_t)n * (size_t)n, sizeof(double complex));
+        full.related = (unsigned char *)calloc((size_t)n * (size_t)n, 1);
+        full.a[ic * n + ia] = 2.0; full.related[ic * n + ia] = 1;
+        full.a[ic * n + ib] = 3.0; full.related[ic * n + ib] = 1;
+        full.a[ia * n + ib] = 9.0; full.related[ia * n + ib] = 1;
+        good = gia_mop_reference_row(&m, ref, &full, &row, &why) == GIA_OK && row.N == 3 &&
+               row.a[1] == 2.0 && row.a[2] == 3.0 && row.related[1] && row.related[2] &&
+               !row.related[3];
+        if (good) gia_matrioska_free(&row);
+        ok("reference row {c, a}: alpha_12 = c->a, then c->b; one row only", good);
+        ref[1] = ic;
+        ok("a reference of one component twice, or a Matrioska of the wrong size: GIA_E_ARG",
+           gia_mop_reference_row(&m, ref, &full, &row, &why) == GIA_E_ARG &&
+           (full.N = 2, gia_mop_reference_row(&m, NULL, &full, &row, &why) == GIA_E_ARG));
+        full.N = n;
+        gia_matrioska_free(&full);
+    }
+    free(text);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+}
+
 /* Verifies: IF-OUT-002 (T-OUT-01)
  * Source: icd.md IF-OUT-002. Oracle: the header is the interface's, by hand;
  * the row at t = t_end holds gia_mop_couple's value for each couple (the
@@ -2115,8 +2181,8 @@ static void test_mop_csv(void) {
                       &m, &root, &s, det, sizeof det);
     ok("writes", st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_OK);
     text = slurp(path);
-    ok("header: time, then a__b, b__a (re, im) in id order",
-       text && strncmp(text, "time,a__b_re,a__b_im,b__a_re,b__a_im\n", 37) == 0);
+    ok("header: time, then a__b, b__a (re, im) in id order, then R_H",
+       text && strncmp(text, "time,a__b_re,a__b_im,b__a_re,b__a_im,R_H\n", 41) == 0);
     {
         int rows = 0, last = 1;
         if (text) {
@@ -2125,7 +2191,7 @@ static void test_mop_csv(void) {
             if (lastrow) {
                 double v[5];
                 double complex ab, ba;
-                int got = sscanf(lastrow, "%lf,%lf,%lf,%lf,%lf", &v[0], &v[1], &v[2], &v[3], &v[4]);
+                int got = sscanf(lastrow, "%lf,%lf,%lf,%lf,%lf,", &v[0], &v[1], &v[2], &v[3], &v[4]);
                 last = got == 5 && near_c(v[0], 1.5, TOL_CLOSED) &&
                        gia_mop_couple(&s.couples[0].beta, s.k, 1.5, &ab, &why) == GIA_OK &&
                        gia_mop_couple(&s.couples[1].beta, s.k, 1.5, &ba, &why) == GIA_OK &&
@@ -2135,6 +2201,8 @@ static void test_mop_csv(void) {
         }
         ok("1 + steps rows, t = 0 .. t_end", rows == 5);
         ok("row t_end: alpha_ab = 1.78125, alpha_ba = 3 (by hand)", text && last);
+        ok("R_H empty where undefined (a -> c unrelated)",
+           text && strstr(text, ",\n") != NULL && text[strlen(text) - 2] == ',');
     }
     free(text);
     if (st >= 0) mop_seed_done(&m, root, &s);
@@ -2692,7 +2760,7 @@ static double net_oracle(const gia_model *m, double t, int i, int j) {
     return tot > 0.0 ? em[i] * fij / tot : 0.0;
 }
 
-#define NET_HEADER "time,a__b_re,a__b_im,a__c_re,a__c_im,b__c_re,b__c_im,c__a_re,c__a_im\n"
+#define NET_HEADER "time,a__b_re,a__b_im,a__c_re,a__c_im,b__c_re,b__c_im,c__a_re,c__a_im,R_H\n"
 
 static int net_idx(const gia_model *m, const char *id) {
     int i;
@@ -2840,6 +2908,12 @@ static void test_mop_network(void) {
                 }
             }
             ok("row t_end: alpha = ln E, imaginary part 0", good);
+            {   /* N = 3, row a: e^{alpha_ac}/e^{alpha_ab} > 0 is real, the root
+                 * is -1, so R_H = |alpha_ac/alpha_ab + 1| > 1 is written. */
+                char  *rh  = text ? strrchr(text, ',') : NULL;
+                double val = rh ? strtod(rh + 1, NULL) : 0.0;
+                ok("R_H of the network row is written, and is not harmonic", rh && val > 1.0);
+            }
         }
         free(text);
         gia_mop_seed_free(&sd);
@@ -2897,6 +2971,7 @@ int main(void) {
     test_mop_seed_errors();
     test_mop_fuzz_corpus();
     test_mop_csv();
+    test_mop_csv_rh();
     test_ord_record();
     test_ord_maximum();
     test_ord_adr_table();

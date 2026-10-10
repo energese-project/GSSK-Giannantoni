@@ -127,7 +127,7 @@ bool gia_validate_harmony(const gia_harmony *h, double tol) {
     /* Claim 1: every entry is recoverable from alpha_12 and (i,j) alone, so
      * the N x N matrix carries exactly one independent quantity. This is the
      * O(N^2) -> O(1) reduction, checked rather than asserted. */
-    reduction    = gia_harmony_reduction_residual(h);
+    reduction    = gia_harmony_assume_reduction_residual(h);
     ok_reduction = (reduction <= tol);
     printf("\n  reduction residual    %.3e   %s\n",
            reduction, ok_reduction ? "PASS" : "FAIL");
@@ -141,7 +141,7 @@ bool gia_validate_harmony(const gia_harmony *h, double tol) {
      * It needs N >= 3. At N = 2 there is exactly one root, omega_0 = 1, and a
      * row sums to alpha_12 rather than to zero -- correctly so: a two-body
      * couple has no interior against which to balance. */
-    balance = gia_harmony_row_residual(h);
+    balance = gia_harmony_assume_row_residual(h);
     if (h->n >= 3) {
         ok_balance = (balance <= tol);
         printf("\n  row balance residual  %.3e   %s\n",

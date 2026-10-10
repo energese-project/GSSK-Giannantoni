@@ -123,7 +123,7 @@ MODEL ?= examples/giannantoni/input.json
 # them, because a prerequisite list is expanded when its rule is read.
 GIA_UNIT_SRCS = $(SRC_DIR)/engine.c $(SRC_DIR)/validation.c \
                 $(SRC_DIR)/projection.c $(SRC_DIR)/idc.c $(SRC_DIR)/mop.c \
-                $(SRC_DIR)/relational.c $(SRC_DIR)/mop_seed.c
+                $(SRC_DIR)/relational.c $(SRC_DIR)/mop_seed.c $(SRC_DIR)/harmony.c
 GIA_OBJS = $(patsubst $(SRC_DIR)/%.c,$(LIB_DIR)/%.o,$(GIA_UNIT_SRCS))
 
 # Simulation objects. sim_main.o carries the entry point, kept out of
@@ -228,6 +228,18 @@ test-mop: directories $(TARGET_TEST_MOP)
 test-mop-cli: directories $(TARGET_SIM)
 	@sh $(TEST_DIR)/mop_cli.sh
 
+# The harmony detector (T-HAR-01..07, VAL-07), linked from mop.o and relational.o
+# alone: no harmony.o, so a detector or solver that called the constructor
+# would not link (FR-HAR-003).
+TARGET_TEST_EMERGENCE = $(BIN_DIR)/test_mop_emergence
+
+$(TARGET_TEST_EMERGENCE): $(TEST_DIR)/test_mop_emergence.c $(LIB_DIR)/mop.o $(LIB_DIR)/relational.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+.PHONY: test-mop-emergence
+test-mop-emergence: directories $(TARGET_TEST_EMERGENCE)
+	@./$(TARGET_TEST_EMERGENCE)
+
 # FR-KER-001 (T-KER-01, ADR 0022): "expm" and its deprecated alias "incipient".
 .PHONY: test-kernel-method
 test-kernel-method: directories $(TARGET_CLI) $(BIN_DIR)/dump_serialized
@@ -278,6 +290,11 @@ test-mop-asan: directories
 	@ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ./$(BIN_DIR)/test_mop_asan > /dev/null 2>&1 \
 	    || { echo "test-mop-asan: test_mop FAILED under ASan/LSan/UBSan"; \
 	         ASAN_OPTIONS=detect_leaks=1 ./$(BIN_DIR)/test_mop_asan 2>&1 | grep -E 'ERROR|SUMMARY|runtime error|FAIL' | head -20; exit 1; }
+	$(CC) $(SAN_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all \
+	    $(TEST_DIR)/test_mop_emergence.c $(SRC_DIR)/mop.c $(SRC_DIR)/relational.c \
+	    -o $(BIN_DIR)/test_mop_emergence_asan $(LDFLAGS)
+	@ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ./$(BIN_DIR)/test_mop_emergence_asan > /dev/null 2>&1 \
+	    || { echo "test-mop-asan: test_mop_emergence FAILED under ASan/LSan/UBSan"; exit 1; }
 	@echo "test-mop-asan: no ASan, LSan or UBSan finding"
 
 .PHONY: check-symbols
@@ -819,7 +836,7 @@ coverage-gia: directories
 
 # Every Giannantoni test binary built from tests/<name>.c. A W2-W8 suite joins
 # coverage by being listed here.
-GIA_COV_TESTS = test_giannantoni test_mop_threads test_mop
+GIA_COV_TESTS = test_giannantoni test_mop_threads test_mop test_mop_emergence
 
 # The gate's own self-test: garbage, an empty report and 89% must all fail.
 .PHONY: test-coverage-gate
@@ -1085,7 +1102,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop test-mop-cli test-kernel-method test-mop-threads check-symbols \
+           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-mop-threads check-symbols \
            test-guard-no-skip test-coverage-gate check-api-called \
            test-api-called check-trace check-version test-schema
 

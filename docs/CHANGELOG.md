@@ -28,6 +28,13 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **The harmony constructor moves to `src/harmony.c`, renamed `gia_harmony_assume_*`** (FR-HAR-004).
+  - Seven functions are renamed: `gia_ordinal_root`, `gia_harmony_init`, `_free`, `_at`,
+    `_reconstruct`, `_row_residual` and `_reduction_residual` each become
+    `gia_harmony_assume_<name>`.
+  - Its output stays labelled `assumed`.
+  - No solver or detector calls it (`check-symbols`, T-HAR-01).
+
 - **The kernel's matrix-exponential method is `"expm"`** (FR-KER-001, ADR 0022).
   - `"incipient"` still loads. It runs the same code path, with byte-identical output, and now prints
     one notice per load on stderr saying it is the matrix exponential and naming `expm`.
@@ -84,6 +91,17 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **The Guix toolchain pack is no longer attached to releases.** At ~450 MB it is produced on demand instead (`guix.yml`, run by hand with `pack-toolchain`). Releases still ship the Guix-built `gssk.wasm`, its hashes and the recipe.
 
 ### Added
+
+- **The harmony detector** (FR-HAR-001…003, FR-OUT-003, VAL-07).
+  - `gia_harmony_residual` computes R_H of [23 Eq 5.6.5]. `gia_harmony_verdict` runs vv-plan.md
+    §6's procedure, and `gia_harmony_observed` gives the verdict for an observed Matrioska.
+  - Three constructions give the verdicts R7 derives: First Equation `transported`, Second Equation
+    `imposed`, EQS `imposed`.
+  - The run report prints one `harmony.<construction>: <verdict>` line per construction.
+  - The MOP CSV gains its `R_H` column.
+  - `docs/results/harmony_verdicts.md` records each example seed's verdicts, and `mop_cli.sh` holds
+    the report to it.
+  - `bin/test_mop_emergence` is linked without `harmony.o` (`make test-mop-emergence`, in CI).
 
 - **Boundary conditions from the network** (FR-MOP-008, PLAN R8).
   - `gia_mop_network` sets `e^{α_ij}` to the emergy that the direct pathways `i → j` carry

@@ -164,62 +164,68 @@ static void test_duet(void) {
 }
 
 /* ------------------------------------------------------------------ *
- * 3. MOP Harmony Relationships
+ * 3. The harmony CONSTRUCTOR (FR-HAR-004)
+ *
+ * This tests gia_harmony_assume_*, which builds harmony from the roots of
+ * unity and so ASSUMES it ([23 §8 ii]); it is labelled `assumed` in every run
+ * report (tests/mop_cli.sh). Whether a construction produces harmony is the
+ * detector's question, tested in test_mop_emergence.c.
  * ------------------------------------------------------------------ */
 
-static void test_harmony(void) {
+/* Verifies: FR-HAR-004 (T-HAR-08) */
+static void test_harmony_constructor(void) {
     gia_harmony h;
     double complex aref = 1.2 + 0.4 * I;
     double complex w;
 
-    printf("\n[3] MOP harmony matrix from the (N-1) ordinal roots of unity\n");
+    printf("\n[3] the harmony constructor (assumed): roots of unity, reconstructed\n");
 
-    w = gia_ordinal_root(4, 0);
+    w = gia_harmony_assume_root(4, 0);
     close_to("4th root of unity, m=0, is 1", creal(w), 1.0, 1e-12);
     close_to("4th root of unity, m=0, has no imaginary part",
              cimag(w), 0.0, 1e-12);
-    w = gia_ordinal_root(4, 1);
+    w = gia_harmony_assume_root(4, 1);
     close_to("4th root of unity, m=1, is i", cimag(w), 1.0, 1e-12);
     close_to("4th root of unity, m=1, has no real part",
              creal(w), 0.0, 1e-12);
 
-    ok("harmony matrix rejects N < 2", !gia_harmony_init(&h, 1, aref));
+    ok("harmony matrix rejects N < 2", !gia_harmony_assume_init(&h, 1, aref));
 
-    ok("harmony matrix builds for N = 5", gia_harmony_init(&h, 5, aref));
+    ok("harmony matrix builds for N = 5", gia_harmony_assume_init(&h, 5, aref));
 
     /* The reference couple is a genuine entry, not an external parameter. */
     close_to("alpha_12 is the stored entry (0,1), real part",
-             creal(gia_harmony_at(&h, 0, 1)), creal(aref), 1e-12);
+             creal(gia_harmony_assume_at(&h, 0, 1)), creal(aref), 1e-12);
     close_to("alpha_12 is the stored entry (0,1), imaginary part",
-             cimag(gia_harmony_at(&h, 0, 1)), cimag(aref), 1e-12);
+             cimag(gia_harmony_assume_at(&h, 0, 1)), cimag(aref), 1e-12);
 
     close_to("diagonal carries no self-relation",
-             cabs(gia_harmony_at(&h, 2, 2)), 0.0, 1e-12);
+             cabs(gia_harmony_assume_at(&h, 2, 2)), 0.0, 1e-12);
 
     /* Every entry has the modulus of the reference couple: the roots of unity
      * rotate the relationship without rescaling it. */
     close_to("off-diagonal modulus equals |alpha_12|",
-             cabs(gia_harmony_at(&h, 3, 1)), cabs(aref), 1e-12);
+             cabs(gia_harmony_assume_at(&h, 3, 1)), cabs(aref), 1e-12);
 
     /* The N x N -> 1 reduction. */
     close_to("every entry reconstructs from alpha_12 alone",
-             gia_harmony_reduction_residual(&h), 0.0, 1e-12);
+             gia_harmony_assume_reduction_residual(&h), 0.0, 1e-12);
 
     /* Global stability: the N-1 roots cancel, so each row balances. */
     close_to("each row sums to zero (global balance)",
-             gia_harmony_row_residual(&h), 0.0, 1e-12);
+             gia_harmony_assume_row_residual(&h), 0.0, 1e-12);
 
     ok("both harmony invariants validate", gia_validate_harmony(&h, 1e-9));
-    gia_harmony_free(&h);
+    gia_harmony_assume_free(&h);
 
     /* N = 2 is the documented exception: one root, omega_0 = 1, so a row sums
      * to alpha_12. A two-body couple has no interior to balance against. */
-    ok("harmony matrix builds for N = 2", gia_harmony_init(&h, 2, aref));
+    ok("harmony matrix builds for N = 2", gia_harmony_assume_init(&h, 2, aref));
     close_to("at N=2 a row sums to |alpha_12|, not zero",
-             gia_harmony_row_residual(&h), cabs(aref), 1e-12);
+             gia_harmony_assume_row_residual(&h), cabs(aref), 1e-12);
     close_to("the N=2 reduction still holds",
-             gia_harmony_reduction_residual(&h), 0.0, 1e-12);
-    gia_harmony_free(&h);
+             gia_harmony_assume_reduction_residual(&h), 0.0, 1e-12);
+    gia_harmony_assume_free(&h);
 }
 
 /* ------------------------------------------------------------------ *
@@ -3192,7 +3198,7 @@ int main(void) {
     printf("=== Giannantoni generative framework ===\n");
     test_drift();
     test_duet();
-    test_harmony();
+    test_harmony_constructor();
     test_generative();
     test_generative_disabled();
     test_trajectories();

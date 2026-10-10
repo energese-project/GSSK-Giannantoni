@@ -41,8 +41,9 @@ cat > "$tmp/want" <<'NAMES'
 gia_idc_of gia_lde2_solve gia_lde2_eval gia_lde2_terms gia_lde2_free gia_binary_solve gia_binary_eval
 gia_riccati_solve gia_riccati_eval gia_nl1410_roots gia_idc_taylor gia_idc_refuse
 rel_mul rel_mul3 rel_exp rel_root rel_root_pow rel_mul_pow
-gia_mop_couple gia_mop_solve gia_matrioska_free gia_mop_couple_rel gia_quad_gk15 gia_mop_second gia_eqs gia_mop_network_beta
+gia_mop_couple gia_mop_solve gia_matrioska_free gia_mop_couple_rel gia_quad_gk15 gia_mop_second gia_eqs gia_mop_network
 gia_verdict_str gia_harmony_residual gia_harmony_verdict gia_harmony_observed
+gia_construct_first gia_construct_second gia_construct_eqs
 NAMES
 tr ' ' '\n' < "$tmp/want" | grep . | sort > "$tmp/want.sorted"
 
@@ -50,8 +51,8 @@ tr ' ' '\n' < "$tmp/want" | grep . | sort > "$tmp/want.sorted"
 { echo "/* calls */"; tr '\n' ' ' < "$tmp/want.sorted"; echo; } > "$tmp/all_called.c"
 st=0; check "$tmp/IF-API-002.h $tmp/IF-API-003.h $tmp/IF-API-004.h" "" "$tmp/all_called.c" || st=1
 ok "icd.md headers, every function called: passes" "$st"
-grep -q "30 declared" "$tmp/out" || { echo "    parser found: $(cat "$tmp/out")" >&2; st=1; }
-ok "parser finds exactly the 30 functions icd.md declares" "$st"
+grep -q "33 declared" "$tmp/out" || { echo "    parser found: $(cat "$tmp/out")" >&2; st=1; }
+ok "parser finds exactly the 33 functions icd.md declares" "$st"
 
 # Drop each name in turn: the check must name it.
 st=0
@@ -63,7 +64,7 @@ for f in $(cat "$tmp/want.sorted"); do
         echo "    $f uncalled, check did not name it" >&2; st=1
     fi
 done
-ok "each of the 30, left uncalled, fails the check by name" "$st"
+ok "each of the 33, left uncalled, fails the check by name" "$st"
 
 # Typedefs, including function-pointer typedefs, are not functions.
 grep -q "gia_cfn\|gia_construction" "$tmp/err" && st=1 || st=0

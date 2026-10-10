@@ -205,6 +205,39 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
 - **The per-seed verdict table** (PLAN §7, T-HARM-2b) needs the harmony detector. It lands with
   `mop-harmony-detector`.
 
+### `mop-harmony-detector`
+
+- **The §6 perturbation scales each couple; it does not add to it.** Read as an added constant,
+  `β_h + δξ` changes the *shape* of an affine-power β. The First Equation's α is β's integral, and
+  under that reading the ratios of α would no longer equal the ratios of β. The First Equation
+  would then read `absent`, which contradicts R7's derived verdict (`transported`). So
+  `β_δ = β_h·(1 + δξ)` scales `a` and `b` together. ξ is the §6 LCG's pair in `[−1, 1]²`, and the
+  input's own residual is taken from `β(1)`.
+- **The EQS construction reads the root as a complex number.** [23 Eq 7.1–7.5] give relational
+  coordinates, while [23 Eq 5.6.5] compares complex ratios. With `ref = {1, 0, 0}`, `ψ₁ = 1` and
+  `A = 1`, `gia_eqs` returns `ρ = e^{E B}` and `φ = E C`. From these the construction recovers the
+  root `B + C j + C k` and writes it as `B + i√2 C = e^{i√2ψ_l}`. The map preserves the modulus.
+  With `ψ₂ = 1` and `ε = −2π`, `√2ψ_l = 2π(l−1)/(N−1)`. No source gives this mapping. It is the
+  construction under which [23 §8 ii]'s "assumed harmony" can be put to the detector at all, and it
+  reads `imposed` as R7 says.
+- **T-HAR-01's symbol rule is "no undefined reference".** The detector is itself named
+  `gia_harmony_*`, so "nm mop.o lists no `gia_harmony_*`" cannot be meant literally. The rule
+  `check_symbols.sh` enforces is that mop, mop_seed, relational, idc and engine have no undefined
+  reference to `gia_harmony_assume_*`. `validation.c`'s `gia_validate_harmony` checks the
+  constructor's invariants and does call it, so it is not on that list. `bin/test_mop_emergence`
+  is linked from `mop.o` and `relational.o` alone.
+- **What the run report evaluates.** It evaluates the three constructions at N = the seed's
+  component count, and only for N ≥ 3. It also observes the network's Matrioska on the reference
+  row, where a row couple with no pathway makes it `absent`.
+  `docs/results/harmony_verdicts.md` records each example's lines. `tests/mop_cli.sh` reads the
+  table and checks the report against it. Both examples' networks are "not evaluated", because
+  their source has no `quality_input`.
+- **IF-API-004 now lists what was built.** `gia_mop_network_beta(…, gia_beta *)` became
+  `gia_mop_network(…, gia_matrioska *alpha, gia_matrioska *beta)`, in `mop_seed.h`
+  (`mop-network-beta`). The three constructions are added. `api_called_selftest.sh` counts 33.
+- **The MOP CSV's `R_H` column** is the residual of the reference row at each time. The cell is
+  empty where the residual is undefined: N < 3, a row couple unrelated, or `α₁₂ = 0` at `t = 0`.
+
 ---
 
 ## [Revision 3] — 2026-10-09

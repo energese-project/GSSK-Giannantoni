@@ -8,6 +8,11 @@
 # Verifies: NFR-REE-001 (T-REE-02)
 # Verifies: NFR-ERR-001 (T-ERR-01)
 # Verifies: NFR-SEP-001 (INS-SEP-01)
+# Verifies: FR-HAR-003 (T-HAR-01)
+#
+#   T-HAR-01   no solver or detector unit calls the harmony constructor: no undefined reference
+#              to gia_harmony_assume_* in mop, mop_seed, relational, idc or engine (FR-HAR-003).
+#              bin/test_mop_emergence, linked without harmony.o, is the link-time half.
 #
 # The objects are read from lib/, so build first (`make check-symbols` does). The unit list is
 # fixed here rather than globbed so a new unit is added on purpose; a listed unit whose source does
@@ -66,6 +71,15 @@ for u in $UNITS; do
                 err "$obj calls $s -- a library unit returns a status, it never ends the process (NFR-ERR-001)" ;;
         esac
     done
+
+    # T-HAR-01: the constructor is called by no solver and no detector.
+    case " mop mop_seed relational idc engine " in *" $u "*)
+        for s in $(nm -u "$obj" | awk '{ print $NF }'); do
+            case "${s#_}" in gia_harmony_assume_*)
+                err "$obj calls $s -- harmony is detected, never constructed, in a solver (FR-HAR-003)" ;;
+            esac
+        done ;;
+    esac
 
     # INS-SEP-01: the kernel's header.
     if grep -nE '^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"]gssk\.h[>"]' "src/$u.c" >/dev/null; then

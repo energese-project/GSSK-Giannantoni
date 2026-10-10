@@ -68,13 +68,26 @@ void gia_mop_seed_free(gia_mop_seed *s);
 gia_status gia_mop_network(const gia_model *m, double t, gia_matrioska *alpha,
                            gia_matrioska *beta, const char **why);
 
+/* FR-HAR-001 over a model: the reference couple's row, as [23 Eq 5.6.5]
+ * reads it. From `full` (N = n_nodes, by node index) this builds a Matrioska
+ * over the K components: index 0 is ref[0], index 1 ref[1], then the other
+ * components in id order; only row 0 is filled, from ref[0]'s couples, and a
+ * couple `full` leaves unrelated stays unrelated. ref NULL means the first two
+ * components by id. Allocates *row (free with gia_matrioska_free). GIA_E_ARG
+ * for fewer than two components or a ref that is not two distinct ones. */
+gia_status gia_mop_reference_row(const gia_model *m, const int *ref, const gia_matrioska *full,
+                                 gia_matrioska *row, const char **why);
+
 /* IF-OUT-002. Writes `time`, then `<from>__<to>_re, <from>__<to>_im` per
  * couple in (from, to) id order, on the trajectory CSV's grid
  * t = s t_end / steps, s = 0..steps. Every couple is solved at t_end before
  * the file is opened, so a refusal (the First Equation's GIA_E_DOMAIN, or
  * GIA_E_UNSUPPORTED for the network form with k != 1, PLAN R8) writes nothing;
  * a later failure removes the file. The network form writes alpha = ln E per
- * related couple (gia_mop_network). The R_H column follows with FR-HAR-001. */
+ * related couple (gia_mop_network). The last column, R_H, is the harmony residual
+ * (FR-HAR-001) of the reference row at that time (gia_mop_reference_row), and
+ * is left empty where the residual is undefined: N < 3, a row couple
+ * unrelated, or alpha_12 = 0. */
 gia_status gia_mop_write_csv(const gia_model *m, const gia_mop_seed *s, const char *path,
                              int steps, const char **why);
 
