@@ -589,11 +589,13 @@ general-purpose ODE library. The wedge is:
       roots of unity.
 - [x] Reduction invariant: every entry reconstructs from `alpha_12` alone.
 - [x] Balance invariant: every row sums to zero (N >= 3).
-- [ ] The non-commutative ordinal algebra (spinor products, quaternion
-      arithmetic). The matrix is currently over the complex numbers, which
-      carries both invariants but is not Giannantoni's full construction.
-- [ ] Derive `alpha_12` from topology rather than reading it off the first
-      relationship's weight and its target's generativity factor.
+- [x] The non-commutative ordinal algebra: `relational.h` implements [23 Eq 5.1.3–5.1.5]'s table
+      product as printed, De Moivre exponentials and angle powers (ADR 0020, W5). Not quaternions:
+      the probe shows the quaternion reading fails Eq 7.3. The constructor's matrix stays over ℂ
+      and is labelled `assumed`.
+- [x] ~~Derive `alpha_12` from topology.~~ Superseded: couples now come from the network itself
+      (FR-MOP-008, `gia_mop_network`), and harmony is decided by the detector, not built. Only the
+      `assumed` constructor still reads `alpha_12` off the first relationship.
 
 ### 10.4 Dual modes and structural validation
 
@@ -631,17 +633,16 @@ general-purpose ODE library. The wedge is:
 > research question, not integration work. See
 > `docs/odum_1972_conformance.md` 3.
 
-- [ ] **Network coupling in the MOP engine.** Today `src/engine.c` computes each
-      component's trajectory from its own `phi` alone — delete every edge from a
-      model and the CSV is byte-identical. Requirements R1-R6 in
-      `docs/mop_network_coupling_requirements.md`; the Option A / Option B fork
-      there must be decided before code. Not blocked on any research.
-- [ ] Projection `GSSK model -> MOP relational space`, one-way and
+- [x] **Network coupling in the MOP engine.** The engine solves the network, `Q(t) = exp(A t) Q(0)`
+      over the flow matrix (`gia_network_state`), and the per-node `phi` columns are gone (W2
+      `idc-drift-coupled`). `docs/mop_network_coupling_requirements.md` is kept as the record of
+      why.
+- [x] Projection `GSSK model -> MOP relational space`, one-way and
       declared-lossy: every module it cannot represent emits a named finding
-      rather than a silent substitution.
-- [ ] MOP coverage report per model — the fraction of nodes and edges with a
+      rather than a silent substitution. `gia_project`, `giannantoni_sim --project`.
+- [x] MOP coverage report per model — the fraction of nodes and edges with a
       MOP representation, and the modules that block the rest. This is the
-      measurement that turns the Level 1 claim into a number.
+      measurement that turns the Level 1 claim into a number. `gia_report_coverage`.
 - [x] Retired `GIA_NODE_REGULATOR`; the generative step emits `gain` (Odum 1972
       SecIX capture amplifier), a primitive, so the output reloads. Composite
       names (`producer`, `consumer`, `misc_box`, `system_frame`) are refused
@@ -670,20 +671,19 @@ general-purpose ODE library. The wedge is:
       whole inflow for a two-way co-production — the irreducible excess as a
       number. `_Em` and `_Tr` columns per component in the CSV, and an emergy
       block in the terminal summary.
-- [ ] The **max** co-product rule. Odum's algebra also says a process fed by
-      several inputs takes the MAX transformity rather than the sum in some
-      formulations; this implements the co-production side (whole to each
-      output) but not that input-side variant. See
-      `docs/giannantoni_assessment.md` 3.
-- [ ] Carriers as a first-class concept, so goods and money are checked for
-      separate conservation. `exchange` works today with named legs, a constant
-      price and no money-stock gating (cf. ADR 0001).
-- [ ] Forcing functions (ADR 0006).
+- [x] The **max** co-product rule, as Odum's fourth rule: inflows that share a co-production
+      ancestor take the maximum, and independent inflows sum (`combine_inflows`; VAL-03 checks all
+      four rules through the network engine). "MAX of every input" was a misreading: it would
+      undercount independent sources.
+- [x] Carriers as a first-class concept, so goods and money are checked for
+      separate conservation (`gia_carrier_count`, per-carrier conservation tests).
+- [x] Forcing functions (ADR 0006): node and edge forcing, carried as extra state so
+      `exp(A t)` stays exact.
 - [ ] Bridge: run one model through both engines and diff the trajectories, so
       the drift critique is measured against a real integrator rather than only
-      against a closed form. Blocked on the projection — without the coverage
-      report this compares a full Odum model against a partial one and calls
-      the difference drift.
+      against a closed form. The projection and the coverage report now exist, so this is no
+      longer blocked: a comparison is meaningful only over what the coverage report says was
+      carried.
 - [ ] Revisit ADR 0011 only when MOP can express a discontinuity (switch), a
       control-versus-power split (gain), more than one carrier (exchange), and
       the n-et for n >= 3 is solved or carries a stated error bound.
@@ -752,11 +752,10 @@ general-purpose ODE library. The wedge is:
       re-spelling. A transactor is passed through stream by stream — goods as
       goods, counter-flow as counter-flow — which the ADR implied but did not
       spell out. Each guard verified to fail its test when removed.
-- [ ] Decide whether a module has a row in the MOP harmony matrix. ADR 0014
-      settles that a module is not a component, but the harmony matrix is
-      still sized from every node, and the report labels that size
-      "components N". No seed has a module yet, so no output contradicts
-      itself today; the migration below will make it visible.
+- [x] Decide whether a module has a row in the MOP harmony matrix: no. ADRs 0014 and 0021 say a
+      module and habitat are not components. The detector works over components, and the
+      constructor is now sized by them too, so "components N" is 2 for `input.json`, not 5
+      (`tests/mop_cli.sh`).
 - [x] **The MOP ordinal step can move a system away from maximum ordinality,
       forever.** Pre-existing. `gia_generate` wires the emergent component
       hub -> E -> open, which closes `open` only if `open` already reaches the

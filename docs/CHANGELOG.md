@@ -28,6 +28,11 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **TODO.md tidied.** Nine items finished by earlier work are now ticked, each naming what did it:
+  the relational algebra, network coupling, the projection and coverage report, Odum's fourth rule,
+  carriers, forcing, and the module/harmony-row decision. `mop_network_coupling_requirements.md`
+  and the assessment's emergy note now say they are met.
+
 - **All 88 requirements are `implemented`.** The BR-* acceptance lines were checked against `main`,
   and NFR-DET-002, NFR-POR-001, IF-API-002 and IF-API-004 were flipped. The README's status note now
   describes what the second engine implements, where it previously said it implemented none of it.
@@ -250,6 +255,10 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
 
 ### Fixed
+
+- **The harmony constructor's matrix is sized by components, not nodes** (ADRs 0014, 0021). It had one
+  row per node, including modules and habitat, under a "components N" label: `input.json` reported
+  N = 5 for its two components.
 
 - **CI now runs three suites it had been skipping**: `test-mop-emergence`, `test-kernel-method` and
   `test-coverage-gate` were in `CI_TESTS` but had no step in `deploy.yml`.

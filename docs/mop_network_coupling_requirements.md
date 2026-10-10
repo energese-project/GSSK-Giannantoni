@@ -1,5 +1,11 @@
 # Requirements: network coupling in the MOP engine
 
+> **Status: met.** The engine now solves the network: `Q(t) = exp(A t) Q(0)` over the flow matrix
+> (`gia_network_state`), with conservation and per-carrier checks. The per-node `φ` columns that
+> made the CSV edge-blind were removed in W2 (`idc-drift-coupled`). The rest of this document is
+> kept as the record of why the coupling was needed. Its "today" describes the code before that
+> change.
+
 ## Why this exists
 
 `src/engine.c` does not simulate a network. It computes each component's

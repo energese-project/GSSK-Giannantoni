@@ -199,6 +199,21 @@ grep -qx 'label.second_equation: assumed' "$tmp/mop.out" || st=1
 ok "--mop-out: IF-OUT-002's header, 1 + steps rows, labelled" "$st"
 
 # ---------------------------------------------------------------------------
+# Verifies: FR-HAR-004 (T-HAR-08)
+#
+# The constructor's matrix has one row per component (ADRs 0014, 0021): input.json has five
+# nodes but two components (store_1, consumer_1), closed_loop.json three. It was once sized from
+# every node, modules and habitat included, under a "components N" label.
+# ---------------------------------------------------------------------------
+for spec in "input:2" "closed_loop:3"; do
+    name=${spec%%:*}; want=${spec#*:}
+    run "$name" "examples/giannantoni/$name.json"
+    st=0
+    grep -qE "^  components N +$want\$" "$tmp/$name.out" || { grep 'components N' "$tmp/$name.out" >&2 || true; st=1; }
+    ok "$name: the harmony constructor has N = $want rows, one per component" "$st"
+done
+
+# ---------------------------------------------------------------------------
 # Verifies: FR-OUT-003, IF-OUT-003, FR-HAR-002 (T-OUT-02)
 #
 # One `harmony.<construction>: <verdict>` line per evaluated construction, verbatim from the
