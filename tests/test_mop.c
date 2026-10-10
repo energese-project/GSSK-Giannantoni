@@ -2157,6 +2157,197 @@ static void test_mop_csv(void) {
     if (st >= 0) mop_seed_done(&m, root, &s);
 }
 
+/* ------------------------------------------------------------------ *
+ * Ordinality (ADR 0021; FR-ORD-001..004)
+ * ------------------------------------------------------------------ */
+
+#define ORD_S(id)  "{\"id\":\"" id "\",\"type\":\"storage\",\"current_level\":1.0}"
+#define ORD_I(id)  "{\"id\":\"" id "\",\"type\":\"interaction\",\"module\":{\"k\":0.1}}"
+#define ORD_SRC    "{\"id\":\"src\",\"type\":\"source\",\"initial_value\":1.0}"
+#define ORD_SINK   "{\"id\":\"out\",\"type\":\"sink\"}"
+#define ORD_HEAT   "{\"id\":\"heat\",\"type\":\"sink\"}"
+#define ORD_E(a, b)        "{\"source\":\"" a "\",\"target\":\"" b "\",\"weight\":0.1}"
+#define ORD_ER(a, b, role) "{\"source\":\"" a "\",\"target\":\"" b "\",\"weight\":0.1,\"role\":\"" role "\"}"
+#define ORD_EC(a, b, ur)   "{\"source\":\"" a "\",\"target\":\"" b "\",\"weight\":0.1,\"role\":\"control\",\"use_ratio\":" ur "}"
+#define ORD_EP(a, b)       "{\"source\":\"" a "\",\"target\":\"" b "\",\"weight\":0.1,\"output_mode\":\"replicate\"}"
+
+static int ord_load(const char *nodes, const char *edges, gia_model *m, cJSON **root) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+             "{\"system_name\":\"ord\",\"nodes\":[%s],\"edges\":[%s],"
+             "\"simulation_params\":{\"t_val\":1.0,\"derivative_order\":2,\"generative_mode\":false}}",
+             nodes, edges);
+    return load_seed(buf, m, root);
+}
+
+static int rec_is(const gia_ordinality_rec *r, int k, int n22, int n2, int nhalf, int nun) {
+    return r->k == k && r->n22 == n22 && r->n2 == n2 && r->nhalf == nhalf && r->nunrelated == nun;
+}
+
+/* Checks one hand graph's record and verdict. */
+static void ord_case(const char *what, const char *nodes, const char *edges,
+                     int k, int n22, int n2, int nhalf, int nun, int maximum) {
+    gia_model          m;
+    cJSON             *root;
+    gia_ordinality_rec r = {-1, -1, -1, -1, -1};
+    const char        *why = NULL;
+    char               line[160];
+    int                good = 0;
+
+    if (ord_load(nodes, edges, &m, &root)) {
+        good = gia_ordinality_record(&m, &r, &why) == GIA_OK &&
+               rec_is(&r, k, n22, n2, nhalf, nun) &&
+               gia_at_maximum_ordinality(&m) == (maximum != 0);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+    snprintf(line, sizeof line, "%s: {%d, %d, %d, %d, %d}, %s", what, k, n22, n2, nhalf, nun,
+             maximum ? "at maximum" : "below");
+    ok(line, good);
+    if (!good)
+        printf("    got {%d, %d, %d, %d, %d}\n", r.k, r.n22, r.n2, r.nhalf, r.nunrelated);
+}
+
+/* Verifies: FR-ORD-001, FR-ORD-002 (T-ORD-01)
+ * Source: [22 Eq 6-8, 11.1], [10 §MOP], [23 Eq 3.2]; ADR 0021 decision 1.
+ * Oracle: each record is counted by hand from the graph drawn in its comment,
+ * by the first rule that applies: 2/2 mutual reachability (ADR 0014 walk),
+ * 2 both feeding one interaction module, 1/2 both products of one replicating
+ * process. Sources and sinks are habitat and never counted (the catalogue
+ * mutation "count sinks" changes k in every case). */
+static void test_ord_record(void) {
+    printf("\n[T-ORD-01] the Ordinality record, by hand\n");
+    /* src -> s; s -> a, s -> b (a split: partition); a -> out. No couple related. */
+    ord_case("pure split",
+             ORD_SRC "," ORD_S("s") "," ORD_S("a") "," ORD_S("b") "," ORD_SINK,
+             ORD_E("src", "s") "," ORD_E("s", "a") "," ORD_E("s", "b") "," ORD_E("a", "out"),
+             3, 0, 0, 0, 3, 0);
+    /* p -> a, p -> b, both replicate: (a, b) is 1/2. */
+    ord_case("one co-production",
+             ORD_S("p") "," ORD_S("a") "," ORD_S("b"),
+             ORD_EP("p", "a") "," ORD_EP("p", "b"),
+             3, 0, 0, 1, 2, 0);
+    /* a (energy) and b (control drawn at 0.5) feed I; d's control is read
+     * (use_ratio 0), so d feeds nothing; I -> c, I -> out (used). (a, b) is 2. */
+    ord_case("one interaction, and a read control",
+             ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d") "," ORD_I("I") "," ORD_SINK,
+             ORD_ER("a", "I", "energy") "," ORD_EC("b", "I", "0.5") "," ORD_EC("d", "I", "0") ","
+             ORD_E("I", "c") "," ORD_ER("I", "out", "used"),
+             4, 0, 1, 0, 5, 0);
+    /* a, b feed I; I -> c and I -> d replicate: (a, b) is 2, (c, d) is 1/2. */
+    ord_case("an interaction that co-produces",
+             ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d") "," ORD_I("I") "," ORD_SINK,
+             ORD_ER("a", "I", "energy") "," ORD_EC("b", "I", "0.5") "," ORD_EP("I", "c") ","
+             ORD_EP("I", "d") "," ORD_ER("I", "out", "used"),
+             4, 0, 1, 1, 4, 0);
+    /* a -> b -> c -> a. */
+    ord_case("strongly connected",
+             ORD_S("a") "," ORD_S("b") "," ORD_S("c"),
+             ORD_E("a", "b") "," ORD_E("b", "c") "," ORD_E("c", "a"),
+             3, 3, 0, 0, 0, 1);
+    /* src -> I (energy), a -> I (control 0.5), I -> out, I -> heat (used):
+     * the module accumulates nothing, and src, out, heat are habitat. One
+     * component. */
+    ord_case("module-only accumulator: one component, no couple",
+             ORD_SRC "," ORD_S("a") "," ORD_I("I") "," ORD_SINK "," ORD_HEAT,
+             ORD_ER("src", "I", "energy") "," ORD_EC("a", "I", "0.5") "," ORD_E("I", "out") ","
+             ORD_ER("I", "heat", "used"),
+             1, 0, 0, 0, 0, 0);
+    /* a <-> b, and both feed I: 2/2 is the first rule that applies, not 2. */
+    ord_case("2/2 takes precedence over 2",
+             ORD_S("a") "," ORD_S("b") "," ORD_I("I") "," ORD_SINK "," ORD_HEAT,
+             ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_ER("a", "I", "energy") ","
+             ORD_EC("b", "I", "0.5") "," ORD_E("I", "out") "," ORD_ER("I", "heat", "used"),
+             2, 1, 0, 0, 0, 1);
+    /* a -> I (energy) -> b -> a: the walk passes a module energy to product. */
+    ord_case("a pathway through a module is quantity-carrying",
+             ORD_S("a") "," ORD_S("b") "," ORD_I("I"),
+             ORD_ER("a", "I", "energy") "," ORD_E("I", "b") "," ORD_E("b", "a"),
+             2, 1, 0, 0, 0, 1);
+    /* a -> I by a drawn control: the module passes it only to its used leg, so
+     * a does not reach b, and the 2-cycle is not closed. */
+    ord_case("a drawn control reaches only the used leg",
+             ORD_SRC "," ORD_S("a") "," ORD_S("b") "," ORD_I("I") "," ORD_SINK,
+             ORD_ER("src", "I", "energy") "," ORD_EC("a", "I", "0.5") "," ORD_E("I", "b") ","
+             ORD_E("b", "a") "," ORD_ER("I", "out", "used"),
+             2, 0, 0, 0, 1, 0);
+    {
+        gia_model          m;
+        cJSON             *root = NULL;
+        gia_ordinality_rec r = {7, 7, 7, 7, 7};
+        const char        *why = NULL;
+        ok("NULL model or record: GIA_E_ARG, the record untouched",
+           gia_ordinality_record(NULL, &r, &why) == GIA_E_ARG && why && r.k == 7 &&
+           ord_load(ORD_S("a"), "", &m, &root) &&
+           gia_ordinality_record(&m, NULL, &why) == GIA_E_ARG);
+        if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    }
+}
+
+/* Verifies: FR-ORD-003, FR-ORD-004 (T-ORD-02)
+ * Source: [22 §12.1, Eq 11.1]; ADR 0021 decision 1. Oracle: two disjoint
+ * 2-cycles put every component on a closed pathway (closure 1, by hand) yet
+ * relate no couple across them, so they are not at maximum -- the catalogue
+ * mutation "cycle-coverage definition" says they are. */
+static void test_ord_maximum(void) {
+    gia_model m;
+    cJSON    *root = NULL;
+
+    printf("\n[T-ORD-02] Maximum Ordinality is strong connectivity, not closure\n");
+    ord_case("two disjoint 2-cycles",
+             ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d"),
+             ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_E("c", "d") "," ORD_E("d", "c"),
+             4, 2, 0, 0, 4, 0);
+    ok("two disjoint 2-cycles: closure 1",
+       ord_load(ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d"),
+                ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_E("c", "d") "," ORD_E("d", "c"),
+                &m, &root) && gia_closure(&m) == 1.0 && !gia_at_maximum_ordinality(&m));
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    /* a <-> b, with src and out attached: habitat is not counted by closure. */
+    ok("closure counts components only: a <-> b plus src and out is 1",
+       ord_load(ORD_SRC "," ORD_S("a") "," ORD_S("b") "," ORD_SINK,
+                ORD_E("src", "a") "," ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_E("b", "out"),
+                &m, &root) && gia_closure(&m) == 1.0 && gia_at_maximum_ordinality(&m));
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    ok("deprecated gia_ordinality returns gia_closure",
+       ord_load(ORD_S("a") "," ORD_S("b") "," ORD_S("c"), ORD_E("a", "b") "," ORD_E("b", "a"),
+                &m, &root) && gia_closure(&m) == 2.0 / 3.0 && gia_ordinality(&m) == gia_closure(&m));
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    ok("NULL: closure 0, not at maximum", gia_closure(NULL) == 0.0 && !gia_at_maximum_ordinality(NULL));
+}
+
+/* Loads a seed file. */
+static int ord_load_file(const char *path, gia_model *m, cJSON **root) {
+    char *text = slurp(path);
+    int   r;
+    if (!text) { *root = NULL; return 0; }
+    r = load_seed(text, m, root);
+    free(text);
+    return r;
+}
+
+/* Verifies: FR-ORD-002, FR-ORD-003, FR-ORD-004 (T-ORD-01, T-ORD-02)
+ * Source: ADR 0021 §3, the verdict table, hand-derived there from the walk.
+ * Oracle: the table's "After" column, row by row. */
+static void test_ord_adr_table(void) {
+    gia_model          m;
+    cJSON             *root = NULL;
+    gia_ordinality_rec r;
+    const char        *why = NULL;
+
+    printf("\n[ADR 0021 §3] every example's verdict\n");
+    ok("input.json: {2, 0, 0, 0, 1}, below maximum, closure 0.000",
+       ord_load_file("examples/giannantoni/input.json", &m, &root) &&
+       gia_ordinality_record(&m, &r, &why) == GIA_OK && rec_is(&r, 2, 0, 0, 0, 1) &&
+       !gia_at_maximum_ordinality(&m) && gia_closure(&m) == 0.0);
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    ok("closed_loop.json: {3, 3, 0, 0, 0}, at maximum, closure 1.000",
+       ord_load_file("examples/giannantoni/closed_loop.json", &m, &root) &&
+       gia_ordinality_record(&m, &r, &why) == GIA_OK && rec_is(&r, 3, 3, 0, 0, 0) &&
+       gia_at_maximum_ordinality(&m) && gia_closure(&m) == 1.0);
+    if (root) { gia_model_free(&m); cJSON_Delete(root); }
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -2202,6 +2393,9 @@ int main(void) {
     test_mop_seed_errors();
     test_mop_fuzz_corpus();
     test_mop_csv();
+    test_ord_record();
+    test_ord_maximum();
+    test_ord_adr_table();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

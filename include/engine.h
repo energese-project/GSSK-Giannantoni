@@ -27,9 +27,10 @@
  *     drift of the solved trajectory (the invented-phi
  *     _idc/_tdc/_drift columns, E4, are removed)
  *   - the harmony matrix is built from roots of unity          assumed    (E5)
- *   - gia_ordinality is the fraction of components on a cycle  proxy      (E6)
+ *   - the Ordinality record and Maximum Ordinality (ADR 0021)  implemented
+ *     (gia_closure, the fraction on a cycle, is a proxy, E6)
  *   - gia_generate is the ADR 0015 heuristic                   illustrative (E7)
- *   - the First and Second Fundamental Equations               absent     (E8)
+ *   - the First and Second Fundamental Equations are in mop.h  (E8)
  * The derivative identities (Sections 1-2) and the emergy algebra are
  * Giannantoni's and Odum's own, and are implemented. The CLI prints one
  * `label.` line per output saying which of these it is (FR-OUT-001).
@@ -759,11 +760,36 @@ int gia_component_count(const gia_model *m);
  * a sink or a constant). False for an index out of range. */
 bool gia_node_is_component(const gia_model *m, int i);
 
-/* Fraction of components on a closed pathway, in [0, 1]. Calls
- * gia_mark_cycles(). */
+/* FR-ORD-004 (ADR 0021): the fraction of components (gia_node_is_component:
+ * habitat and modules excluded) that lie on a closed pathway, in [0, 1]; 0
+ * with no component. A proxy: it is reported, labelled so, and
+ * decides nothing. Calls gia_mark_cycles(). */
+double gia_closure(gia_model *m);
+
+/* Deprecated (ADR 0021): returns gia_closure. Kept for one release. */
 double gia_ordinality(gia_model *m);
 
-/* True when every component is on a cycle. */
+/* FR-ORD-001, FR-ORD-002 (ADR 0021 decision 1). Each unordered couple of
+ * components (gia_node_is_component) is classified by the first rule that
+ * applies:
+ *
+ *   n22    2/2, feedback: each reaches the other along quantity-carrying legs
+ *          (the ADR 0014 walk: a read control carries nothing; a module passes
+ *          energy to its products and a drawn control to its used leg)
+ *   n2     2, interaction: both feed one interaction module along a
+ *          quantity-carrying leg
+ *   nhalf  1/2, co-production: both are products (output_mode replicate) of
+ *          one process
+ *   nunrelated  none of these
+ *
+ * k is the number of components [23 Eq 3.2]. GIA_E_NOMEM on allocation
+ * failure; *r is written only on GIA_OK. */
+typedef struct { int k, n22, n2, nhalf, nunrelated; } gia_ordinality_rec;
+gia_status gia_ordinality_record(const gia_model *m, gia_ordinality_rec *r, const char **why);
+
+/* FR-ORD-003: Maximum Ordinality, {2 2} up {N N} [22 Eq 11.1]: every couple
+ * is 2/2, which is exactly strong connectivity of the component graph. Fewer
+ * than two components have no couple and are not at maximum. */
 bool gia_at_maximum_ordinality(gia_model *m);
 
 /* ================================================================== *

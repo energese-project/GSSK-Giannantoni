@@ -192,7 +192,7 @@ gia_status gia_emergy_balance_solve(const gia_balance_term *in, int n_in,
 ```
 `gia_ordinality` keeps its name for one release, returns `gia_closure`, and is marked deprecated.
 - **Source:** srs §2.5, FR-IDC-014
-- **Verification:** T-API-02 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-API-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ## 3. Seed format
 

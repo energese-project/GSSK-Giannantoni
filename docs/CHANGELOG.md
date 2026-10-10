@@ -28,6 +28,14 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **`gia_ordinality` is deprecated, and returns `gia_closure`**: the fraction of components (habitat
+  excluded) on a closed pathway. Two consequences:
+  - `closed_loop.json` reads closure 1.000 (it was 0.800 with the heat sink counted), and is at
+    Maximum Ordinality.
+  - Two disjoint 2-cycles have closure 1 but are not at maximum.
+
+  `label.ordinality` is now `implemented`, and `label.closure` is `proxy`.
+
 - **Drift on network trajectories, from the sources: solution drift and output-projection drift** (PLAN.md W2 `idc-drift-coupled`, FR-IDC-011, FR-IDC-014, IF-OUT-001). Breaking for consumers of `giannantoni_sim`'s CSV.
   - **Removed:** the `_idc`, `_tdc`, `_drift` and `psi_network` columns. They applied the drift identity to a per-node φ the engine invented, which was decoupled from `_Q` (PLAN E4).
   - **Added:** a `_drift_proj` column per node, the [09 Eq 13] output-projection drift `(Q'' − Q'²/Q)·Δ²/2` along the solved trajectory. `Q''` is exact (`A²x`) for a constant flow matrix, and Richardson-extrapolated otherwise (numerics N7).
@@ -55,6 +63,14 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **The Guix toolchain pack is no longer attached to releases.** At ~450 MB it is produced on demand instead (`guix.yml`, run by hand with `pack-toolchain`). Releases still ship the Guix-built `gssk.wasm`, its hashes and the recipe.
 
 ### Added
+
+- **Ordinality as ADR 0021 defines it** (FR-ORD-001…003).
+  - `gia_ordinality_record` classifies each couple of components as 2/2 (mutual reachability along
+    quantity-carrying legs), 2 (both feed one interaction module) or ½ (co-products of one
+    replicating process), and counts them as `{k, n₂₂, n₂, n½, n_unrelated}`.
+  - `gia_at_maximum_ordinality` now means every couple is 2/2: strong connectivity of the component
+    graph.
+  - The run report prints `ordinality:`, `maximum_ordinality:` and `closure (proxy):`.
 
 - **The seed's `mop` block, `--mop-out`, and exit codes** (IF-JSON-001, IF-CLI-001, FR-OUT-002,
   NFR-ROB-001).

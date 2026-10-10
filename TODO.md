@@ -827,7 +827,8 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
 - [x] W4 `mop-first-equation`, `mop-seed-cli` — the First Equation, the seed's `mop` block, `--mop-out`, exit codes (the MOP CSV's `R_H` column follows with W8 `mop-harmony-detector`)
 - [x] W5 `mop-relational-algebra`, `mop-eqs`
 - [x] W6 `mop-second-equation`
-- [ ] W7 `mop-ordinality`, `mop-generative-empower`
+- [x] W7 `mop-ordinality` — the Ordinality record, Maximum Ordinality as strong connectivity, closure as a proxy (FR-ORD-001..003)
+- [ ] W7 `mop-generative-empower`
 - [ ] W8 `mop-harmony-detector`, `mop-network-beta`, `kernel-method-label`
 
 ## Continuous Concerns

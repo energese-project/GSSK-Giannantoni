@@ -186,8 +186,9 @@ static int report_mop(const gia_model *m, const gia_mop_seed *s) {
 }
 
 static void report_model(gia_model *m) {
-    double ordinality;
-    int    i;
+    gia_ordinality_rec rec;
+    const char        *why = NULL;
+    int                i;
 
     printf("%s\n", RULE);
     printf(" GIANNANTONI GENERATIVE FRAMEWORK\n");
@@ -203,9 +204,17 @@ static void report_model(gia_model *m) {
     printf("  derivative order  %d\n", m->order);
     printf("  generative mode   %s\n", m->generative ? "on" : "off");
 
-    ordinality = gia_ordinality(m);
-    printf("\n  ordinality        %.3f  (%s)\n", ordinality,
-           ordinality >= 1.0 ? "at maximum" : "below maximum");
+    /* IF-OUT-003, ADR 0021: the record {k, n22, n2, nhalf, nunrelated}, the
+     * verdict (strong connectivity), and the old fraction as a labelled
+     * proxy that decides nothing. */
+    printf("\n");
+    if (gia_ordinality_record(m, &rec, &why) == GIA_OK)
+        printf("ordinality: {%d, %d, %d, %d, %d}\n", rec.k, rec.n22, rec.n2, rec.nhalf,
+               rec.nunrelated);
+    else
+        printf("ordinality: not computed (%s)\n", why ? why : "?");
+    printf("maximum_ordinality: %s\n", gia_at_maximum_ordinality(m) ? "yes" : "no");
+    printf("closure (proxy): %.3f\n", gia_closure(m));
 
     /* ADR 0017 decision 4: a control at use_ratio 0 is drawn as a pathway and
      * carries nothing, so its energy and its emergy are left out. That is
@@ -269,8 +278,11 @@ static void report_labels(const gia_model *m, const gia_mop_seed *mop) {
     printf("label.conservation: classical\n");
     printf("label.emergy_excess: implemented\n");
 
+    /* ADR 0021: the record of [23 Eq 3.2] and the verdict of [22 Eq 11.1]. */
+    printf("label.ordinality: implemented\n");
+    printf("label.maximum_ordinality: implemented\n");
     /* E6: the fraction of components on a cycle, not [22 Eq 11.1]. */
-    printf("label.ordinality: proxy\n");
+    printf("label.closure: proxy\n");
     /* E5: constructed from roots of unity and checked against the
      * construction; [23 §8 ii] says the EQS assumes it. */
     printf("label.harmony: assumed\n");

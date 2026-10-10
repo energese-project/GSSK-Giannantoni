@@ -71,7 +71,7 @@ for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.js
 
     # The reported quantities that are not CSV columns are labelled too.
     st=0
-    for q in ordinality harmony generative_step solution_drift; do
+    for q in ordinality maximum_ordinality closure harmony generative_step solution_drift; do
         grep -q "^label\.$q: " "$tmp/$name.out" || { echo "    no label for $q" >&2; st=1; }
     done
     ok "$name: reported quantities labelled" "$st"
@@ -80,7 +80,7 @@ for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.js
     # labelled as an implementation of Giannantoni's calculus.
     st=0
     awk -F': ' '/^label\..*_Q: / && $2 != "classical" { bad = 1 }
-                /^label\.ordinality: / && $2 != "proxy" { bad = 1 }
+                /^label\.closure: / && $2 != "proxy" { bad = 1 }
                 /^label\.harmony: / && $2 != "assumed" { bad = 1 }
                 END { exit bad }' "$tmp/$name.out" || st=1
     ok "$name: classical, proxy and assumed outputs say so" "$st"
@@ -131,6 +131,26 @@ for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.js
         cmp -s "$tmp/det1.$x" "$tmp/det2.$x" || { echo "    .$x differs between runs" >&2; st=1; }
     done
     ok "$name: two runs are byte-identical (report, CSV, graph)" "$st"
+done
+
+# ---------------------------------------------------------------------------
+# Verifies: FR-ORD-002, FR-ORD-003, FR-ORD-004, IF-OUT-003 (T-ORD-03)
+#
+# The report carries ADR 0021's record and verdict, and closure only as a proxy.
+# The values are ADR 0021 §3's table, hand-derived there: input.json is
+# {2, 0, 0, 0, 1}, below, closure 0.000; closed_loop.json is {3, 3, 0, 0, 0}, at
+# maximum, closure 1.000. The catalogue mutation "gate on closure" is
+# closed_loop's old 0.800 with the sink counted.
+# ---------------------------------------------------------------------------
+for spec in "input:{2, 0, 0, 0, 1}:no:0.000" "closed_loop:{3, 3, 0, 0, 0}:yes:1.000"; do
+    name=${spec%%:*}; rest=${spec#*:}; rec=${rest%%:*}; rest=${rest#*:}
+    max=${rest%%:*}; clo=${rest#*:}
+    run "$name" "examples/giannantoni/$name.json"
+    st=0
+    grep -qxF "ordinality: $rec" "$tmp/$name.out" || { grep '^ordinality' "$tmp/$name.out" >&2 || true; st=1; }
+    grep -qxF "maximum_ordinality: $max" "$tmp/$name.out" || st=1
+    grep -qxF "closure (proxy): $clo" "$tmp/$name.out" || { grep '^closure' "$tmp/$name.out" >&2 || true; st=1; }
+    ok "$name: ordinality $rec, maximum $max, closure (proxy) $clo" "$st"
 done
 
 # ---------------------------------------------------------------------------

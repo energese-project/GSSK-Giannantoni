@@ -126,6 +126,26 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   `Verifies:` tags only under `tests/` and `scripts/`. It measures CPU time, so that another job on
   a loaded runner cannot fail the bound. It is not in CI: NFR-PERF-001 is a Could.
 
+### `mop-ordinality`
+
+- **"Feed one interaction module" means a direct, quantity-carrying leg into it.** ADR 0021 says
+  "along quantity-carrying legs" but does not say how far. A direct leg is the reading that keeps
+  ADR 0021 §3's hand-derived `input.json` row (`store_1`'s read control does not feed, `consumer_1`'s
+  drawn one does) and does not double-count a component upstream of another. A "replicating
+  process" is any node with `output_mode: replicate` legs to both components.
+- **Closure counts components only.** ADR 0021 §3 gives `closed_loop.json` closure 1.000, so the
+  heat sink is not counted. The old fraction counted every non-module node. Three assertions in
+  `test_giannantoni.c` pinned the old numbers. ADR 0021's Consequences require revising them in
+  this PR, and they now assert closure 1, with the reason in a comment:
+  `test_ordinality_invariant_under_respelling` (2/3 → 1, below → at maximum) and
+  `test_sink_is_never_closed` (2/3 → 1, 4/5 → 1). The latter is retired with ADR 0015's step in
+  `mop-generative-empower`.
+- **FR-ORD-004 stays `planned`.** The report labels closure a proxy. But `gia_generate`, the ADR 0015
+  heuristic, still chooses what to close from the cycle scan, so closure is not yet "deciding
+  nothing". That changes when `mop-generative-empower` replaces the step.
+- **IF-OUT-003 stays `planned`.** Its `ordinality`, `maximum_ordinality` and `closure (proxy)`
+  lines are written now. Its `harmony.<construction>: <verdict>` lines need FR-OUT-003 (W8).
+
 ---
 
 ## [Revision 3] — 2026-10-09

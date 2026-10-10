@@ -266,19 +266,19 @@ For each unordered couple of components the kernel shall assign: 2/2 if each rea
 quantity-carrying legs (the ADR 0014 walk); otherwise 2 if both feed one interaction module; otherwise
 ½ if both are products of one replicating process; otherwise unrelated.
 - **Source:** [22 Eq 6–8, 11.1], [10 §MOP]; PLAN R5, X6
-- **Verification:** T-ORD-01 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ### FR-ORD-002 — The Ordinality record
 The kernel shall report `{k, n₂₂, n₂, n½, n_unrelated}`, with k the number of components (boundary
 nodes and modules excluded) and the counts from FR-ORD-001.
 - **Source:** [23 Eq 3.2], [22 Eq 11.1]; PLAN R5
-- **Verification:** T-ORD-01 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ### FR-ORD-003 — Maximum Ordinality
 A network shall be at Maximum Ordinality exactly when every couple is 2/2, i.e. when its component
 graph is strongly connected.
 - **Source:** [22 §12.1, Eq 11.1]; PLAN R5
-- **Verification:** T-ORD-02 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ### FR-ORD-004 — Closure, labelled as a proxy
 The fraction of components on a closed pathway shall be reported only as `closure`, labelled a proxy,

@@ -2276,10 +2276,13 @@ static void test_ordinality_invariant_under_respelling(void) {
     printf("\n[48] a work gate has one spelling, and it keeps its ordinality\n");
     ok("the pathway spelling no longer loads", !loads(as_pathway));
     if (!load_json(&mm, &rm, as_module)) { ok("module spelling loads", false); return; }
-    close_to("module spelling: 2/3", gia_ordinality(&mm), 2.0 / 3.0, 1e-12);
+    /* ADR 0021: src is habitat, not a component, so a and b are all there
+     * is, and a <-> b closes them (closure 1, at maximum). Under ADRs
+     * 0014/0015 the source was counted and this read 2/3, below maximum. */
+    close_to("module spelling: closure 1 (src is habitat)", gia_closure(&mm), 1.0, 1e-12);
     ok("a read control leaves the system open only through its source",
        !gia_system_is_closed(&mm));
-    ok("below maximum", !gia_at_maximum_ordinality(&mm));
+    ok("at maximum: a <-> b is strongly connected", gia_at_maximum_ordinality(&mm));
     gia_model_free(&mm); cJSON_Delete(rm);
 }
 
@@ -2464,7 +2467,8 @@ static void test_sink_is_never_closed(void) {
         "  {\"source\":\"b\",\"target\":\"a\",\"logic\":\"linear\",\"weight\":0.2},"
         "  {\"source\":\"a\",\"target\":\"heat\",\"logic\":\"linear\",\"weight\":0.1}]," GEN_SIM,
         &before, &after, &fixed);
-    close_to("heat sink alone: ordinality stays 2/3", after, 2.0 / 3.0, 1e-12);
+    /* ADR 0021: the sink is habitat; closure counts a and b only. */
+    close_to("heat sink alone: closure 1, the sink is habitat", after, 1.0, 1e-12);
     ok("heat sink alone: the step changes nothing", fixed && before == after);
     ok("the evolved graph IS the seed: nothing was added",
        out && cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(out, "nodes")) == 3);
@@ -2480,8 +2484,8 @@ static void test_sink_is_never_closed(void) {
         "  {\"source\":\"a\",\"target\":\"c\",\"logic\":\"linear\",\"weight\":0.1},"
         "  {\"source\":\"a\",\"target\":\"heat\",\"logic\":\"linear\",\"weight\":0.1}]," GEN_SIM,
         &before, &after, &fixed);
-    close_to("with a dead end too: every component but the sink closes (4/5)",
-             after, 0.8, 1e-12);
+    close_to("with a dead end too: every component closes (closure 1)",
+             after, 1.0, 1e-12);
     ok("and that is a fixed point", fixed);
     edges_out = out ? cJSON_GetObjectItemCaseSensitive(out, "edges") : NULL;
     cJSON_ArrayForEach(e, edges_out) {

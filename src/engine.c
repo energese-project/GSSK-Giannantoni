@@ -2854,19 +2854,105 @@ int gia_component_count(const gia_model *m) {
     return m ? component_count(m) : 0;
 }
 
-double gia_ordinality(gia_model *m) {
-    int count, n;
+static bool is_component(const gia_node *nd);
+
+/* FR-ORD-004: the proxy. Habitat sits outside the system [10], so only
+ * components are counted (ADR 0021). */
+double gia_closure(gia_model *m) {
+    int i, on = 0, n = 0;
     if (!m || m->n_nodes <= 0) return 0.0;
-    count = gia_mark_cycles(m);
-    n     = component_count(m);
-    return n > 0 ? (double)count / (double)n : 0.0;
+    (void)gia_mark_cycles(m);
+    for (i = 0; i < m->n_nodes; i++) {
+        if (!is_component(&m->nodes[i])) continue;
+        n++;
+        if (m->nodes[i].on_cycle) on++;
+    }
+    return n > 0 ? (double)on / (double)n : 0.0;
 }
 
+double gia_ordinality(gia_model *m) {
+    return gia_closure(m);
+}
+
+/* Does component `from` reach `to` along quantity-carrying legs? The ADR 0014
+ * walk of reaches(), from a fresh visited set. */
+static bool reaches_from(const gia_model *m, int from, int to, bool *seen) {
+    int k;
+    for (k = 0; k < m->n_nodes * GIA_STREAMS; k++) seen[k] = false;
+    seen[visit_slot(m, from, GIA_ROLE_NONE)] = true;
+    return reaches(m, from, GIA_ROLE_NONE, to, seen);
+}
+
+/* A leg that carries quantity: everything but a read control. */
+static bool carries(const gia_edge *e) {
+    return !(e->role == GIA_ROLE_CONTROL && e->use_ratio <= 0.0);
+}
+
+/* 2: both feed one interaction module along a quantity-carrying leg. */
+static bool feed_one_interaction(const gia_model *m, int a, int b) {
+    int i, j;
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *ea = &m->edges[i];
+        if (ea->from != a || ea->to < 0 || !carries(ea)) continue;
+        if (!m->nodes[ea->to].is_module || m->nodes[ea->to].kind != GIA_NODE_INTERACTION) continue;
+        for (j = 0; j < m->n_edges; j++) {
+            const gia_edge *eb = &m->edges[j];
+            if (eb->from == b && eb->to == ea->to && carries(eb)) return true;
+        }
+    }
+    return false;
+}
+
+/* 1/2: both are products, replicated, of one process. */
+static bool coproducts(const gia_model *m, int a, int b) {
+    int i, j;
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *ea = &m->edges[i];
+        if (ea->to != a || ea->from < 0 || ea->out_mode != GIA_OUT_REPLICATE) continue;
+        for (j = 0; j < m->n_edges; j++) {
+            const gia_edge *eb = &m->edges[j];
+            if (eb->to == b && eb->from == ea->from && eb->out_mode == GIA_OUT_REPLICATE)
+                return true;
+        }
+    }
+    return false;
+}
+
+gia_status gia_ordinality_record(const gia_model *m, gia_ordinality_rec *r, const char **why) {
+    gia_ordinality_rec out = {0, 0, 0, 0, 0};
+    bool              *seen;
+    int                i, j;
+
+    if (!m || !r || m->n_nodes < 0) {
+        if (why) *why = "gia_ordinality_record: NULL argument";
+        return GIA_E_ARG;
+    }
+    seen = (bool *)malloc((size_t)(m->n_nodes > 0 ? m->n_nodes : 1) * GIA_STREAMS * sizeof(bool));
+    if (!seen) {
+        if (why) *why = "gia_ordinality_record: out of memory";
+        return GIA_E_NOMEM;
+    }
+    for (i = 0; i < m->n_nodes; i++) {
+        if (!is_component(&m->nodes[i])) continue;
+        out.k++;
+        for (j = i + 1; j < m->n_nodes; j++) {
+            if (!is_component(&m->nodes[j])) continue;
+            if (reaches_from(m, i, j, seen) && reaches_from(m, j, i, seen)) out.n22++;
+            else if (feed_one_interaction(m, i, j))                       out.n2++;
+            else if (coproducts(m, i, j))                                  out.nhalf++;
+            else                                                           out.nunrelated++;
+        }
+    }
+    free(seen);
+    *r = out;
+    return GIA_OK;
+}
+
+/* FR-ORD-003: every couple 2/2. */
 bool gia_at_maximum_ordinality(gia_model *m) {
-    int n;
-    if (!m || m->n_nodes <= 0) return false;
-    n = component_count(m);
-    return n > 0 && gia_mark_cycles(m) == n;
+    gia_ordinality_rec r;
+    if (!m || gia_ordinality_record(m, &r, NULL) != GIA_OK || r.k < 2) return false;
+    return r.n22 == r.k * (r.k - 1) / 2;
 }
 
 /* ================================================================== *
