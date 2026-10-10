@@ -77,6 +77,13 @@ typedef struct {
   bool   has_min, has_max;
   double latched;    /* jitter: value drawn for the current step */
   bool   has_latch;
+  /* table (h8c): the only heap-owning waveform. Owned by the node or edge the
+   * block is attached to and released by forcing_release, which every reject
+   * path after a successful parse_forcing must call. */
+  double *tab_t, *tab_v;
+  size_t  tab_n;
+  bool    tab_step;   /* interpolation: true = step, false = linear */
+  bool    tab_cycle;  /* extrapolation: true = cycle, false = hold */
 } GSSK_ForcingInternal;
 
 typedef struct {
@@ -733,7 +740,7 @@ static bool model_keys_ok(const cJSON *root, char *err, size_t errcap) {
 
 static const char *const FORCING_KIND_NAMES[] = {
   "none", "step", "impulse", "ramp", "sawtooth", "square",
-  "sine", "exponential", "jitter"
+  "sine", "exponential", "jitter", "table"
 };
 
 static int parse_forcing_kind(const char *s) {
@@ -753,8 +760,132 @@ static const char *forcing_kind_str(GSSK_ForcingKind k) {
  * because a set that drifts from the parser rejects valid models. */
 static const char *const FORCING_KEYS[] = {
   "waveform", "t_on", "v0", "v1", "area", "slope", "rate",
-  "period", "phase", "duty", "mean", "amplitude", "min", "max"
+  "period", "phase", "duty", "mean", "amplitude", "min", "max",
+  "times", "values", "interpolation", "extrapolation"
 };
+
+/* Frees what a forcing block owns. Safe on an unforced or already-released
+ * block, so callers need not ask which waveform it was. */
+static void forcing_release(GSSK_ForcingInternal *f) {
+  if (!f) return;
+  free(f->tab_t);
+  free(f->tab_v);
+  f->tab_t = f->tab_v = NULL;
+  f->tab_n = 0;
+}
+
+/* Reads a JSON array of numbers into a fresh buffer. Returns false on a
+ * missing, empty or non-numeric array, leaving *out NULL. */
+static bool json_number_array(const cJSON *a, double **out, size_t *n) {
+  *out = NULL; *n = 0;
+  if (!cJSON_IsArray(a)) return false;
+  int len = cJSON_GetArraySize(a);
+  if (len <= 0) return false;
+  double *buf = malloc((size_t)len * sizeof(double));
+  if (!buf) return false;
+  int i = 0;
+  const cJSON *it;
+  cJSON_ArrayForEach(it, a) {
+    if (!cJSON_IsNumber(it) || !isfinite(it->valuedouble)) { free(buf); return false; }
+    buf[i++] = it->valuedouble;
+  }
+  *out = buf; *n = (size_t)len;
+  return true;
+}
+
+/* The table half of parse_forcing: Schema v5 §7. Runs LAST, after every
+ * scalar check, so that it is the only step that can fail while holding
+ * memory, and releases that memory itself when it does. */
+static bool parse_forcing_table(const cJSON *fo, const char *where,
+                                GSSK_ForcingInternal *out, char *err, size_t errcap) {
+  static const char *const TABLE_ONLY[] = {
+    "times", "values", "interpolation", "extrapolation"
+  };
+  if (out->kind != GSSK_FORCING_TABLE) {
+    /* A series on another waveform would be ignored, and an ignored data
+     * series is a quietly wrong model. */
+    for (size_t i = 0; i < GSSK_NELEMS(TABLE_ONLY); i++)
+      if (cJSON_GetObjectItem(fo, TABLE_ONLY[i])) {
+        snprintf(err, errcap,
+                 "Schema Error: %s forcing waveform '%s' does not read '%s'; "
+                 "only waveform 'table' does.",
+                 where, forcing_kind_str(out->kind), TABLE_ONLY[i]);
+        return false;
+      }
+    return true;
+  }
+
+  /* times are absolute model time, so an onset would be a second clock. */
+  if (out->has_t_on) {
+    snprintf(err, errcap,
+             "Schema Error: %s table forcing does not take 't_on': its 'times' "
+             "are absolute model time.", where);
+    return false;
+  }
+
+  const cJSON *ip = cJSON_GetObjectItem(fo, "interpolation");
+  if (ip) {
+    if (cJSON_IsString(ip) && strcmp(ip->valuestring, "step") == 0) out->tab_step = true;
+    else if (!(cJSON_IsString(ip) && strcmp(ip->valuestring, "linear") == 0)) {
+      snprintf(err, errcap,
+               "Schema Error: %s table forcing has unknown interpolation '%s'. "
+               "Expected step or linear.", where,
+               cJSON_IsString(ip) ? ip->valuestring : "(not a string)");
+      return false;
+    }
+  }
+  const cJSON *ex = cJSON_GetObjectItem(fo, "extrapolation");
+  if (ex) {
+    if (cJSON_IsString(ex) && strcmp(ex->valuestring, "cycle") == 0) out->tab_cycle = true;
+    else if (!(cJSON_IsString(ex) && strcmp(ex->valuestring, "hold") == 0)) {
+      snprintf(err, errcap,
+               "Schema Error: %s table forcing has unknown extrapolation '%s'. "
+               "Expected hold or cycle.", where,
+               cJSON_IsString(ex) ? ex->valuestring : "(not a string)");
+      return false;
+    }
+  }
+
+  size_t nt = 0, nv = 0;
+  if (!json_number_array(cJSON_GetObjectItem(fo, "times"), &out->tab_t, &nt)) {
+    snprintf(err, errcap,
+             "Schema Error: %s table forcing needs 'times', a non-empty array of "
+             "finite numbers.", where);
+    return false;
+  }
+  if (!json_number_array(cJSON_GetObjectItem(fo, "values"), &out->tab_v, &nv)) {
+    snprintf(err, errcap,
+             "Schema Error: %s table forcing needs 'values', a non-empty array of "
+             "finite numbers.", where);
+    forcing_release(out);
+    return false;
+  }
+  out->tab_n = nt;
+  if (nt != nv) {
+    snprintf(err, errcap,
+             "Schema Error: %s table forcing has %zu times and %zu values; they "
+             "must be the same length.", where, nt, nv);
+    forcing_release(out);
+    return false;
+  }
+  for (size_t i = 1; i < nt; i++)
+    if (!(out->tab_t[i] > out->tab_t[i - 1])) {
+      snprintf(err, errcap,
+               "Schema Error: %s table forcing 'times' must be strictly "
+               "increasing; times[%zu] = %g follows %g.",
+               where, i, out->tab_t[i], out->tab_t[i - 1]);
+      forcing_release(out);
+      return false;
+    }
+  if (out->tab_cycle && nt < 2) {
+    snprintf(err, errcap,
+             "Schema Error: %s table forcing cannot cycle a one-point table: its "
+             "period, times[last] - times[0], is zero.", where);
+    forcing_release(out);
+    return false;
+  }
+  return true;
+}
 
 static double json_num(const cJSON *o, const char *key, double dflt) {
   const cJSON *it = cJSON_GetObjectItem(o, key);
@@ -808,7 +939,7 @@ static bool parse_forcing(const cJSON *fo, const char *where,
   if (kind <= 0) {  /* "none" is not an authorable waveform either */
     snprintf(err, errcap,
              "Schema Error: %s forcing has unknown waveform '%s'. Expected one of: "
-             "step, impulse, ramp, sawtooth, square, sine, exponential, jitter.",
+             "step, impulse, ramp, sawtooth, square, sine, exponential, jitter, table.",
              where, w->valuestring);
     return false;
   }
@@ -860,7 +991,9 @@ static bool parse_forcing(const cJSON *fo, const char *where,
              where, out->duty);
     return false;
   }
-  return true;
+  /* Last: the only check that can leave memory behind, and it frees its own
+   * on failure. */
+  return parse_forcing_table(fo, where, out, err, errcap);
 }
 
 /* Fills in the t_on default for every forcing block that did not author one.
@@ -890,6 +1023,31 @@ static void apply_forcing_t_on_defaults(GSSK_Instance *inst) {
 /* frac(x) = x - floor(x), so it is well-defined for negative tau rather than
  * inheriting fmod's sign.  This is half of the phase convention. */
 static double forcing_frac(double x) { return x - floor(x); }
+
+/* A table's value at absolute time t (h8c). Bisection for the last knot at or
+ * before t, so a long observed series costs log n per stage, not n. */
+static double eval_table(const GSSK_ForcingInternal *f, double t) {
+  const double *x = f->tab_t, *y = f->tab_v;
+  size_t n = f->tab_n;
+  if (n == 1) return y[0];
+  if (f->tab_cycle) {
+    /* Fold t into [x0, x[n-1]): the last knot is the next pass's first. */
+    double P = x[n - 1] - x[0];
+    t = x[0] + P * forcing_frac((t - x[0]) / P);
+    if (t >= x[n - 1]) t = x[0];   /* frac rounding up to 1 */
+  } else {
+    if (t <= x[0])     return y[0];
+    if (t >= x[n - 1]) return y[n - 1];
+  }
+  if (t < x[0]) return y[0];       /* cycle: frac never yields this; guard */
+  size_t lo = 0, hi = n - 1;       /* invariant: x[lo] <= t < x[hi] */
+  while (hi - lo > 1) {
+    size_t mid = lo + (hi - lo) / 2;
+    if (x[mid] <= t) lo = mid; else hi = mid;
+  }
+  if (f->tab_step) return y[lo];
+  return y[lo] + (y[hi] - y[lo]) * (t - x[lo]) / (x[hi] - x[lo]);
+}
 
 /* Evaluate `f` at absolute time t.  `dt_nominal` is config.dt, used only as
  * the impulse width — taken from the model rather than from the solver's
@@ -949,6 +1107,10 @@ static double eval_forcing(const GSSK_ForcingInternal *f, double t,
      * latch_forcing_jitter; evaluating must be free of side effects, or
      * asking the model what it is doing would change what it does. */
     v = f->has_latch ? f->latched : f->mean;
+    break;
+
+  case GSSK_FORCING_TABLE:
+    v = eval_table(f, t);
     break;
 
   case GSSK_FORCING_NONE:
@@ -5328,6 +5490,7 @@ GSSK_Status GSSK_AddNode(GSSK_Instance *inst, const char *json_node_fragment) {
                  "Schema Error: Node '%s' is a storage node and cannot be forced. "
                  "A storage node's value is the integral of its flows; force the "
                  "source or the edge that drives it instead.", id->valuestring);
+        forcing_release(&add_forcing);
         cJSON_Delete(node);
         return GSSK_ERR_SCHEMA_VIOLATION;
       }
@@ -5418,7 +5581,7 @@ GSSK_Status GSSK_AddEdge(GSSK_Instance *inst, const char *json_edge_fragment) {
   int orig_idx = find_node_idx(inst, origin->valuestring);
   int tgt_idx  = find_node_idx(inst, target->valuestring);
   if (orig_idx == -1 || tgt_idx == -1) {
-    cJSON_Delete(edge);
+    forcing_release(&add_eforcing); cJSON_Delete(edge);
     snprintf(inst->error_msg, sizeof(inst->error_msg),
              "GSSK_AddEdge: unknown origin/target node");
     return GSSK_ERR_SCHEMA_VIOLATION;
@@ -5426,7 +5589,7 @@ GSSK_Status GSSK_AddEdge(GSSK_Instance *inst, const char *json_edge_fragment) {
 
   int lt = parse_logic_type(logic_str->valuestring);
   if (lt == -1) {
-    cJSON_Delete(edge);
+    forcing_release(&add_eforcing); cJSON_Delete(edge);
     snprintf(inst->error_msg, sizeof(inst->error_msg),
              "GSSK_AddEdge: unknown logic '%s'", logic_str->valuestring);
     return GSSK_ERR_SCHEMA_VIOLATION;
@@ -5434,7 +5597,7 @@ GSSK_Status GSSK_AddEdge(GSSK_Instance *inst, const char *json_edge_fragment) {
 
   cJSON *k = cJSON_GetObjectItem(params, "k");
   if (!cJSON_IsNumber(k)) {
-    cJSON_Delete(edge);
+    forcing_release(&add_eforcing); cJSON_Delete(edge);
     snprintf(inst->error_msg, sizeof(inst->error_msg), "GSSK_AddEdge: missing k");
     return GSSK_ERR_SCHEMA_VIOLATION;
   }
@@ -5445,14 +5608,14 @@ GSSK_Status GSSK_AddEdge(GSSK_Instance *inst, const char *json_edge_fragment) {
   cJSON *numer = cJSON_GetObjectItem(params, "numerator_node");
   if (cJSON_IsString(numer)) {
     if (lt != GSSK_LOGIC_RATIO) {
-      cJSON_Delete(edge);
+      forcing_release(&add_eforcing); cJSON_Delete(edge);
       snprintf(inst->error_msg, sizeof(inst->error_msg),
                "GSSK_AddEdge: numerator_node is only valid on ratio logic");
       return GSSK_ERR_SCHEMA_VIOLATION;
     }
     numer_idx = find_node_idx(inst, numer->valuestring);
     if (numer_idx == -1) {
-      cJSON_Delete(edge);
+      forcing_release(&add_eforcing); cJSON_Delete(edge);
       snprintf(inst->error_msg, sizeof(inst->error_msg),
                "GSSK_AddEdge: unknown numerator_node '%s'", numer->valuestring);
       return GSSK_ERR_SCHEMA_VIOLATION;
@@ -5473,7 +5636,7 @@ GSSK_Status GSSK_AddEdge(GSSK_Instance *inst, const char *json_edge_fragment) {
                                add_touches_proc, "GSSK_AddEdge",
                                &add_ctrl, add_extra, &add_extra_count,
                                inst->error_msg, sizeof(inst->error_msg))) {
-      cJSON_Delete(edge);
+      forcing_release(&add_eforcing); cJSON_Delete(edge);
       return GSSK_ERR_SCHEMA_VIOLATION;
     }
   }
@@ -5482,26 +5645,26 @@ GSSK_Status GSSK_AddEdge(GSSK_Instance *inst, const char *json_edge_fragment) {
   size_t new_ec = inst->edge_count + 1;
   GSSK_EdgeInternal *new_edges = realloc(inst->edges,
       new_ec * sizeof(GSSK_EdgeInternal));
-  if (!new_edges) { cJSON_Delete(edge); return GSSK_ERR_MALLOC_FAILED; }
+  if (!new_edges) { forcing_release(&add_eforcing); cJSON_Delete(edge); return GSSK_ERR_MALLOC_FAILED; }
   inst->edges = new_edges;
 
   if (inst->quality_enabled) {
     double *new_eqf = realloc(inst->edge_qflow, new_ec * sizeof(double));
-    if (!new_eqf) { cJSON_Delete(edge); return GSSK_ERR_MALLOC_FAILED; }
+    if (!new_eqf) { forcing_release(&add_eforcing); cJSON_Delete(edge); return GSSK_ERR_MALLOC_FAILED; }
     inst->edge_qflow = new_eqf;
     inst->edge_qflow[new_ec - 1] = 0.0;
   }
 
   /* Grow per-edge error array */
   double *new_err = realloc(inst->edge_error, new_ec * sizeof(double));
-  if (!new_err) { cJSON_Delete(edge); return GSSK_ERR_MALLOC_FAILED; }
+  if (!new_err) { forcing_release(&add_eforcing); cJSON_Delete(edge); return GSSK_ERR_MALLOC_FAILED; }
   inst->edge_error = new_err;
   inst->edge_error[new_ec - 1] = 0.0;
 
   /* Grow per-edge flow cache. The new edge reads 0.0 until the next step,
    * which is honest: no flow has been computed along it yet. */
   double *new_flow = realloc(inst->edge_flow, new_ec * sizeof(double));
-  if (!new_flow) { cJSON_Delete(edge); return GSSK_ERR_MALLOC_FAILED; }
+  if (!new_flow) { forcing_release(&add_eforcing); cJSON_Delete(edge); return GSSK_ERR_MALLOC_FAILED; }
   inst->edge_flow = new_flow;
   inst->edge_flow[new_ec - 1] = 0.0;
 
@@ -6289,6 +6452,14 @@ static void emit_forcing(cJSON *parent, const GSSK_ForcingInternal *f) {
     cJSON_AddNumberToObject(o, "mean", f->mean);
     cJSON_AddNumberToObject(o, "amplitude", f->amplitude);
     break;
+  case GSSK_FORCING_TABLE:
+    cJSON_AddItemToObject(o, "times",
+                          cJSON_CreateDoubleArray(f->tab_t, (int)f->tab_n));
+    cJSON_AddItemToObject(o, "values",
+                          cJSON_CreateDoubleArray(f->tab_v, (int)f->tab_n));
+    cJSON_AddStringToObject(o, "interpolation", f->tab_step ? "step" : "linear");
+    cJSON_AddStringToObject(o, "extrapolation", f->tab_cycle ? "cycle" : "hold");
+    break;
   case GSSK_FORCING_NONE:
   default:
     break;
@@ -6716,6 +6887,10 @@ GSSK_Status GSSK_SerializeSnapshot(GSSK_Instance *inst, char **out_json) {
 
 void GSSK_Free(GSSK_Instance *inst) {
   if (!inst) return;
+  if (inst->nodes)
+    for (size_t i = 0; i < inst->node_count; i++) forcing_release(&inst->nodes[i].forcing);
+  if (inst->edges)
+    for (size_t i = 0; i < inst->edge_count; i++) forcing_release(&inst->edges[i].forcing);
   free(inst->forced_state);
   free(inst->state);
   free(inst->dQ);

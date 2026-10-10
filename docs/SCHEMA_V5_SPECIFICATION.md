@@ -372,6 +372,10 @@ constant within a run, this `compare` never crosses, and the solver knows it.
 ADR 0006's vocabulary is unchanged, with two additions: `random` (§8), and `table`,
 for `READ`/`DATA` series and observed driving data.
 
+> **Implemented ahead of v5:** `table` runs in the v4 kernel, in exactly this shape,
+> with `interpolation` defaulting to `linear` and `extrapolation` to `hold`
+> (`h8c-data-driven-forcing`, FR-KER-002). The rest of this document is still a draft.
+
 ```json
 "forcing": { "waveform": "table",
              "times":  [0, 1, 2, 3],

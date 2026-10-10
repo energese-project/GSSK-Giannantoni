@@ -101,6 +101,15 @@ Clamping (`min` / `max`) is applied **after** the formula rather than folded int
 
 `impulse` delivers `area / w` over a window of width `w = config.dt`, so its **integral** is `area` at any step size. A bare amplitude would have made the delivered quantity depend on `dt` — a discretisation artefact masquerading as physics. The window is taken from `config.dt` rather than the solver's current step, so an adaptive sub-step cannot change it.
 
-### What this does not do
+### What this did not do, and the addendum that does
 
-Driving a source from **observed data** — a tabulated series rather than an analytic waveform — is a different thing and is not attempted here. It is tracked as `h8c-data-driven-forcing`.
+Driving a source from **observed data** — a tabulated series rather than an analytic waveform — was a different thing and was not attempted here. It was tracked as `h8c-data-driven-forcing`.
+
+**Addendum (2026-10-10, `h8c-data-driven-forcing`).** It landed as a ninth waveform, `table`, in the shape Schema v5 §7 had already fixed: `times`, `values`, `interpolation` (`linear` by default, or `step`) and `extrapolation` (`hold` by default, or `cycle`). This needed no new decision, since a table is one more waveform attached in the same two places. Four points are worth recording:
+
+- **`times` are absolute model time, so a table refuses `t_on`.** An onset would be a second clock beside the data's own. Every other waveform measures from `t_on`.
+- **`cycle` takes its period from the data:** `times[last] − times[0]`. The last knot is the start of the next pass, so a year of monthly data is thirteen times, 0 to 12.
+- **A step knot is closed on the right**, like `step` at `t_on`. Under RK4 a step table therefore has the same first-order kink at each knot that a `step` waveform has at `t_on`. A linear table does not, and with knots on step boundaries RK4 integrates it exactly.
+- **It is the first waveform that owns heap memory**, so every reject path after a successful parse releases it. That covers `GSSK_Init`, `GSSK_AddNode` and `GSSK_AddEdge`, and `GSSK_Free`. An ASan build of `test_forcing` checks it.
+
+Keys that only a table reads (`times`, `values`, `interpolation`, `extrapolation`) are rejected on any other waveform, because an ignored data series is a quietly wrong model. The projection to the Giannantoni engine refuses a table by name: a data series has no generator in that engine's vocabulary.

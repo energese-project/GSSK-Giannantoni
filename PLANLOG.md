@@ -313,6 +313,64 @@ now `implemented`. What the check found, and what was changed so that it holds:
   `docs/results/level1_survey.md` says so beside the numbers.
 - `invalid_model.json` is a negative fixture, so the survey excludes it.
 
+### `h8c-data-driven-forcing`
+
+- **FR-KER-002 and T-KER-02 are new.** TODO.md §7.1 listed the item, and ADR 0006 deferred it.
+  Schema v5 §7 had already fixed the shape, so the kernel implements that shape and adds nothing
+  to it. Two defaults the spec left open are now set: `interpolation` defaults to `linear` and
+  `extrapolation` to `hold`. ADR 0006 gains an addendum rather than a new ADR, because a table is
+  one more waveform in the same two places.
+- **Decisions the spec did not make:**
+  - `times` are absolute, and `t_on` on a table is rejected.
+  - Under `cycle`, the last knot is the start of the next pass.
+  - A step knot is closed on the right, as `step` is at `t_on`.
+  - Table keys on any other waveform are rejected.
+  - A one-point table cannot cycle.
+- **Red run.** The tests ran with only the enum added to the header. The kernel refused the first
+  table model with "unknown key 'times'", and the suite stopped at its FATAL load.
+- **Mutations**, each run under an ASan + UBSan build with leak detection on. All nine were caught.
+
+  | Mutation | Caught by |
+  |---|---|
+  | Knot open on the right | 2 FAILs |
+  | No cycle fold | 7 FAILs |
+  | No strict-order check | 5 FAILs |
+  | `GSSK_AddNode` storage reject leaks the table | LSan leak |
+  | `GSSK_Free` misses node tables | LSan leak |
+  | `GSSK_AddEdge` reject leaks the table | LSan leak |
+  | Serialiser drops `interpolation` | 12 FAILs |
+  | Table keys accepted on a sine | 1 FAIL |
+  | Linear evaluated as step | 14 FAILs |
+
+- **Baseline amendment.** There is one new pinned trajectory,
+  `tests/expected/tabulated_source_model.csv`, for the new example. `make test-update`
+  regenerated every baseline, and every existing one came out byte-identical, so the change moved
+  no prior trajectory. The values the CSV pins are checked independently in `test_forcing.c`
+  against hand-computed integrals: the trapezoid sum under RK4, and the rectangle sum under Euler.
+- `docs/results/level1_survey.md` was regenerated for the new example. A table is a forcing the
+  projection refuses, so the model is not carried whole.
+- **crux.** This container has no `crux` binary and no crux MCP server, so the task could not be
+  marked done here. The maintainer should close `h8c-data-driven-forcing` once this merges.
+
+### `sim-report`
+
+- **FR-OUT-004 and T-OUT-04 are new**, at the maintainer's request (2026-10-10): CI should show
+  the simulation tests' results in a readable form, not only PASSED. `scripts/sim_report.py` runs
+  every example, decides each verdict with `bin/csv_compare`, so the report and the gate cannot
+  disagree, and writes markdown for the job summary.
+- **What it can and cannot claim.** A golden file pins a trajectory; it does not say that the
+  trajectory is right. The report says so, and points to the two checks that do: the hand-computed
+  suites, and the Level 1 survey against `exp(A t)`. The quality gate now puts the survey on the
+  summary page too.
+- **Self-test oracle:** a copy of `tests/expected/` with one value moved by a known amount (1e-3
+  must fail and print 1.0e-03; 5e-7 must pass and print 5.0e-07), plus a deleted golden. There are
+  two mutations: a comparator that always passes (4 FAILs) and a sparkline that is always flat
+  (1 FAIL). Both were caught.
+- **Not done here.** Several example models state invariants in their descriptions, such as
+  `archetype_price_per_instance`'s price ratios and conservation of money. The report quotes them,
+  but checking them mechanically would need a per-model assertion format, and that is a separate
+  task.
+
 ---
 
 ## [Revision 3] — 2026-10-09

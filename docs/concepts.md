@@ -297,6 +297,7 @@ With `tau = t - t_on` and `frac(x) = x - floor(x)`:
 | `sine` | `mean + amplitude*sin(2*pi*(tau-phase)/period)` | `period`, `phase`, `mean`, `amplitude` |
 | `exponential` | `v0` if `t < t_on`, else `v0*exp(rate*tau)` | `t_on`, `v0`, `rate` |
 | `jitter` | `mean + amplitude*(2u-1)`, `u` from the instance RNG | `mean`, `amplitude` |
+| `table` | a data series: the knots joined (`linear`) or held (`step`), continued by `hold` or `cycle` | `times`, `values`, `interpolation`, `extrapolation` |
 
 `t_on` defaults to `config.t_start`. `min` and `max` clamp the result **after**
 the formula, so the waveform and its bound stay separately legible; omit either
@@ -320,6 +321,14 @@ physics.
 so forcing it asserts two different things about one quantity. `GSSK_Init`
 returns `GSSK_ERR_SCHEMA_VIOLATION` naming the node rather than ignoring the
 block. Force the source that feeds it, or the edge that drains it.
+
+**A `table` is observed data, on the model's own clock.** `times` are absolute,
+strictly increasing, and the same length as `values`. `t_on` is refused, since it
+would be a second clock. `interpolation: step` holds the last knot at or before `t`,
+which is what Odum's `READ` once per pass does. `linear` is the default.
+`extrapolation: cycle` repeats with period `times[last] - times[0]`, so a year of
+monthly data is thirteen times, 0..12. `hold` is the default. See
+`examples/tabulated_source_model.json`.
 
 **A periodic waveform needs a positive `period`.** `sine`, `square` and
 `sawtooth` are rejected without one, rather than quietly behaving as constants.

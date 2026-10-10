@@ -262,6 +262,17 @@ level1-survey: directories $(TARGET_BRIDGE)
 check-level1: directories $(TARGET_BRIDGE)
 	@python3 -I scripts/level1_survey.py --check docs/results/level1_survey.md
 
+# FR-OUT-004 (T-OUT-04): the simulation regressions as GitHub-flavoured
+# markdown, for the CI job summary: every model's verdict, its deviation from
+# the golden file, and a sparkline per node. Exits 1 if any model failed.
+.PHONY: sim-report
+sim-report: all $(TARGET_COMPARE)
+	@python3 -I scripts/sim_report.py
+
+.PHONY: test-sim-report
+test-sim-report: all $(TARGET_COMPARE)
+	@sh $(TEST_DIR)/sim_report.sh
+
 # VAL-08 (BR-010): every erratum in PLAN.md §5 has a test assertion naming it.
 .PHONY: check-errata
 check-errata:
@@ -1135,7 +1146,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-bridge test-mop-threads check-symbols check-errata check-ci-matrix \
+           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-bridge test-sim-report test-mop-threads check-symbols check-errata check-ci-matrix \
            test-guard-no-skip test-coverage-gate check-api-called \
            test-api-called check-trace check-version test-schema
 
