@@ -1,8 +1,14 @@
 # PLAN — Giannantoni's IDC and MOP, implemented and tested from the sources
 
-**Status:** proposed · **Revision:** 2 (2026-10-09) · **Scope:** `bin/giannantoni_sim`, the
+**Status:** proposed · **Revision:** 3 (2026-10-09) · **Scope:** `bin/giannantoni_sim`, the
 translation units it gains, the claims made about it, and the repository guardrails that decide
 whether a "green" build means anything.
+
+> **Revision 3:** the requirements baseline in [docs/requirements/](docs/requirements/README.md) is now
+> the specification. It decides *what counts as built*; this plan decides *how and in what order*.
+> Where they disagree, the baseline wins. §8's test list moved into the V&V catalogue there
+> ([vv-plan.md](docs/requirements/vv-plan.md)), with new IDs. `make check-trace` enforces the
+> traceability between them.
 
 Revision 2 re-reads the full source set: the 2002 book that began the programme, and the 2006, 2009,
 2010, 2022 and 2023 papers. **Every question revision 1 left open is now decided** (§4), each either
@@ -272,8 +278,10 @@ Riccati's Equation of Ordinal Nature".
 **R13 — Incipient LDE of order 2 `[06 Eq 3.3–3.7]`, `[09 Eq 3, 7]`, `[10 Eq 8.1, 10.1]`.**
 
 - Characteristic `α̃² + a₁(t) α̃ + a₀(t) = 0`, solved pointwise.
-- `f = Σ c_i e^{∫₀ᵗ α̃_i}`, with `c_i` from `f(0)` and `f̃'(0) = Σ c_i α̃_i(0)`.
-- At a double root, `[06 Eq 3.7]` gives the second solution.
+- `f = Σ c_i e^{∫₀ᵗ α̃_i}`, with `c_i` from `f(0)` and `f̃'(0) = Σ c_i α̃_i(0)`. The derivative is
+  termwise (R16).
+- *Revised in r3:* at an identically double root, the solution set is the one family `c·e^{∫α̃}`. ICs
+  with `f̃'(0) ≠ α̃(0)·f(0)` are refused. `[06 Eq 3.7]` is not used (X12).
 - The worked example `[10 App. Eq 28–34]` (a zero root) is a fixture.
 
 **R14 — Emergy algebra fixtures.**
@@ -295,6 +303,24 @@ Riccati's Equation of Ordinal Nature".
 - The kernel offers no incipient method: per ADR 0011 the kernel is the classical (TDC) engine.
 - This is not a schema break.
 
+**R16 — The incipient derivative of a superposition (added in r3).**
+
+- *Evidence:* the pointwise definition `(f'/f)ⁿ f` `[02 Eq 14.9.5]`, `[06 Eq 3.2]` is not additive.
+  Applied to the superposition the sources print as the solution of `[06 Eq 3.3]` (`[06 Eq 3.6]`),
+  it leaves residual −1.67, where the termwise reading `(d̃/dt)ⁿ Σ cᵢe^{φᵢ} = Σ cᵢ(φᵢ')ⁿe^{φᵢ}` leaves 0
+  (probe `incipient_superposition.py`).
+- The sources use the termwise reading for every superposition they print (`[06 Eq 3.6, 3.11–3.13]`,
+  `[02 Eq 14.7.3–14.7.5]`) and the pointwise one only as the definition on a single function.
+- *Decision:* pointwise on a single function, termwise on a sum of exponential terms. This is the
+  ground for E4b: a constant-coefficient network's solution is a superposition, so its solution drift
+  is zero.
+- **Two drift quantities follow, kept apart.**
+  - *Solution drift* of a known model `[06 §4]`: zero for constant coefficients, and undefined by the
+    sources for coupled nonlinear systems.
+  - *Output-projection drift* `[09 Eq 13]`: defined on any trajectory.
+
+  revision 2's T-IDC-11 conflated them.
+
 ---
 
 ## 5. Errata register
@@ -313,6 +339,8 @@ Every row has a probe in `docs/sources/probes/` and a test asserting the printed
 | X8 | `[02 Eq 14.10.2]` "triplet" of solutions | The incipient characteristic of Eq 14.10.1 is `4u² + Au + B = 0`, which has two roots | Substitution `F = e^{ut}` | Two roots; T-IDC-8 |
 | X9 | `[23 Eq 5.6.5]` at j = 1 reads `α₁₂ = ω₁ α₁₂` | Literal index collides with the reference couple | `[23 App. A1]` "updates … the same reference couple" | Detector uses ratios (§8) |
 | X10 | `[23 A2.5]` "roots of unity" vs `[23 Eq 5.1.3–5.1.5]` | Not roots of unity under the table product | `ordinal_root_power.py` | R3 |
+| X11 | `[23 Eq A2.6, 7.4]` period 4π for the spinor i | i is the real unit [23 Eq 5.1.3]; a real exponential has no period. EQS uses `E_{l,1}` only as a scale factor of `S_l` [23 Eq 7.1.1], and Eq 7.4's `√2ψ` is valid only for ε₂ = ε₃ | Page image p. 3190 | EQS as printed; ε₂ ≠ ε₃ refused (srs FR-MOP-006) |
+| X12 | `[06 Eq 3.7]` second solution at a double root | `∫₀ᵗ exp(∫_ξ^t α̃)dξ` solves the equation under no reading: residual −0.7 classical, −0.7 termwise, 0.93 pointwise, for constant α̃ = 0.7 | `incipient_superposition.py` | One-family solution; inconsistent ICs refused (R13) |
 
 ---
 
@@ -334,7 +362,11 @@ the docs say so.
 
 ## 7. Workstreams and tasks
 
-Order inside every task: **red** (write the §8 tests, run, quote the failure) → **green** →
+Test IDs in this section are revision 2's. The authoritative IDs, and the requirements each task must
+take to `implemented`, are in [vv-plan.md](docs/requirements/vv-plan.md) §7. The tests were
+renumbered by area, not one-to-one (e.g. r2's T-MOP-5 is now T-REL-01), so match them by content.
+
+Order inside every task: **red** (write the catalogue's tests, run, quote the failure) → **green** →
 **mutations** (§8 column, each must fail) → `make test && make test-advanced && make test-schema &&
 make test-mop && make ci-local`. Slugs are proposed crux task names.
 
@@ -353,6 +385,8 @@ make test-mop && make ci-local`. Slugs are proposed crux task names.
 | `guard-api-called` | `scripts/check_api_called.sh`: every `mop.h`/`relational.h` symbol is referenced in `tests/test_mop.c`; no `UNIMPLEMENTED` returns | Adding an untested declaration fails CI |
 | `guard-agents-wording` | `AGENTS.md`: Overview, rule 3 scoped (G3), Fail-Safe scoped (G6), a "Giannantoni work" section pointing at §1 G1–G7; TODO Non-Goals/Vision fixed (B5) | Review |
 | `adr-giannantoni-test-protocol` (ADR 0018) | Records G1–G7 and the errata protocol | Merged before any W2+ code PR |
+| `guard-trace` | *(r3, delivered with the requirements baseline)* `scripts/check_trace.sh`, `make check-trace`, CI step; existing tests tagged | NFR-TRC-001 `implemented`; nine planted faults each fail it |
+| `guard-reentrancy` | *(r3)* Remove `static const gia_model *sort_model` (`src/engine.c:2830`); `scripts/check_symbols.sh` (no writable data symbols, no `exit`/`abort`, no `gssk.h`); ASan/LSan target; two-thread test | NFR-REE-001, NFR-ERR-001, NFR-MEM-001, NFR-SEP-001 `implemented` |
 
 ### W2 — IDC (single-variable)
 
@@ -364,7 +398,7 @@ make test-mop && make ci-local`. Slugs are proposed crux task names.
 | `idc-riccati` | `gia_idc_solve_riccati(Q, R, P, f0)` per R11 | T-IDC-7 |
 | `idc-taylor` | `gia_idc_taylor(f0, f1, dt, n)` per R10 | T-IDC-9 |
 | `idc-nonlinear-14-10` | Characteristic of `[02 Eq 14.10.1]` | T-IDC-8 |
-| `idc-drift-coupled` | Modal drift on network trajectories; `_idc/_tdc/_drift` columns re-specified; `phi_for_node` heuristics removed from reported results | T-IDC-11 |
+| `idc-drift-coupled` | *(revised r3, R16)* Solution drift: exactly 0 for a constant flow matrix, refused otherwise (FR-IDC-011). Output-projection drift `[09 Eq 13]` per component as `_drift_proj` (FR-IDC-014). `_idc/_tdc/_drift` and `psi_network` removed (IF-OUT-001); `phi_for_node` heuristics no longer reported | T-IDC-11, T-IDC-12, T-OUT-01 |
 
 ### W3 — Emergy algebra in IDC form
 
@@ -414,84 +448,16 @@ make test-mop && make ci-local`. Slugs are proposed crux task names.
 
 ## 8. Test suite
 
-Binary `bin/test_mop` (`tests/test_mop.c`) runs via `make test-mop`, with its `.PHONY` declared beside
-the rule and added to `CI_TESTS` and `deploy.yml` in the PR that creates it. A second binary,
-`bin/test_mop_emergence`, links `mop.o` and `relational.o` **without** `harmony.o`.
+*Moved in r3.* The test suite is the catalogue in
+[docs/requirements/vv-plan.md](docs/requirements/vv-plan.md) §7: every test with the requirements it
+verifies, its oracle and the mutation that must fail it, plus the oracle, tolerance and determinism
+policy (§2–4), the disposition of the existing tests (§5), and the harmony verdict procedure (§6).
+Keeping a second copy here would let the two drift apart, which is what `make check-trace` exists to
+prevent.
 
-Every test function opens with `/* Source: [key Eq n] */`.
-
-**Tolerances** (no widening without a §5 row):
-
-| Kind | Tolerance |
-|---|---|
-| Closed forms | 1e-12 relative |
-| Quadrature | 1e-9 |
-| Central-difference residuals (`h = 1e-5·max(1, t)`) | 1e-6 relative |
-| Published numbers | the printed precision |
-
-Every "must fail" assertion requires at least 100× tolerance.
-
-### 8.1 IDC
-
-| ID | Source | Oracle | Pass | Mutation that must fail |
-|---|---|---|---|---|
-| T-IDC-1 | `[02 Eq 14.8.2]`, `[23 Eq 3.2.5]` | `(φ')ⁿ e^φ` by hand for polynomial φ, n = 0…8 | 1e-12 | Use the Bell polynomial instead |
-| T-IDC-2 | `[02 Eq 14.9.5]` | `f = 1+t²`: `(2t/(1+t²))ⁿ (1+t²)` | 1e-12 | Drop the `/f` |
-| T-IDC-3 | `[02 p.175]`, `[09 Eq 11–13]`, `[10 Eq 16]` | Drift `B_n − (φ')ⁿ`: `ψ₂ = a`, `ψ₃ = 3a²t` for `φ = a t²/2`; zero iff φ affine | Exact | Reverse the sign |
-| T-IDC-4 | R13, `[06 Eq 3.3–3.6]` | (i) `a₁=0, a₀=−t²` ⇒ `α̃=±t`; incipient residual 0; ICs met; traditional residual = `c₁e^{t²/2} − c₂e^{−t²/2}`. (ii) Double root `a₁=−2t, a₀=t²` ⇒ `[06 Eq 3.7]` | 1e-12 / 1e-6 | Use the traditional characteristic `[10 Eq 10]` |
-| T-IDC-5 | `[10 App. Eq 28–34]` | `u² + ψ_f u = 0`, `ψ_f = 1+t`: `g = C₁ + C₂e^{−∫ψ_f}`; `F = f·g̃'` is **not** constant although the incipient condition holds (the paper's "24.1 ⇏ 24") | F(1) ≠ F(0) by > 100× tol | Force F constant |
-| T-IDC-6 | R9, `[02 Eq 14.7.1–14.7.7]` | Residual `f' + A f^{(½)} + B f` per branch; four ICs reproduced | 1e-12 | Swap `u₁ ↔ u₂` in one half-derivative |
-| T-IDC-7 | R11, X2 | Constant Q, R, P: Riccati residual of `f = y'/(Ry)`; printed Eq 3.17 gives Eq 3.18 residual > 100× tol | 1e-6 | Printed substitution |
-| T-IDC-8 | `[02 Eq 14.10.1]`, X8 | `4u²+Au+B=0`: each root's `F = e^{ut}` has zero incipient (and, φ being affine, zero traditional) residual; exactly two roots | 1e-12 | Coefficient 1 instead of 4 |
-| T-IDC-9 | R10, X4, X5 | 16.4; 3.0125; 178.0; 172.0667; 15.6; 17.2067; Eq 19 τ₀=2 → **156.0** | printed precision | n = 3 |
-| T-IDC-10 | `[06b]` "linearly dependent on initial conditions" | `solve(ic₁ + ic₂) = solve(ic₁) + solve(ic₂)` for T-IDC-4, 6 | 1e-12 | Clamp a coefficient |
-| T-IDC-11 | `[06 §4 (i)]`, E4b | Constant flow matrix: modal drift ≡ 0, n = 1…4, every seed. Interaction module: drift nonzero and stable as dt → 0 | 0 exactly / 1e-6 | `φ = ln Q_i` (must give nonzero on a two-mode network) |
-
-### 8.2 Emergy algebra
-
-| ID | Source | Oracle | Pass | Mutation |
-|---|---|---|---|---|
-| T-EM-1 | `[02 Eq 3.8]` | Co-production excess `= (n−1)·Em(u)`, n = 2, 3, 4 | 1e-12 | Partition instead of replicate |
-| T-EM-2 | `[02 Eq 3.16–3.17]` | Split shares x, 1−x; excess 0 | 1e-12 | Replicate |
-| T-EM-3 | `[02 Eq 3.9, 3.12, 3.15]` | Drawn interaction: `Em(y) = Em(u₁) + Em(u₂)`; Φ = 0 | 1e-12 | Product `k·Em₁·Em₂` |
-| T-EM-4 | `[02 p.23 rule 4]` | Reunited co-products take the max; feedback not re-injected | 1e-12 | Sum |
-| T-EM-5 | `[22 Eq 6–8]`, `[06b Eq 6, 10]` | Binary: 2 branches each `Em(u)`; duet pair; duet-binary `[[a₁,a₂],[a₂,a₁]]` | Exact | Transpose |
-| T-EM-6 | R12 | `[06b Eq 2]` reduced form; `l∘l` reduces to l² but is stored as `[l, l]` | Exact | Store l² |
-| T-EM-7 | `[02 Eq 3.23–3.26]` | `gia_emergy_global_balance` on the Fig. 3.4 totals (S = 10,000, F = 20,000, Z = 30,000, Y = 7,500). Case A, `1·S + 1·F = ½·Z + ½·4·Y`, balances. Case B, `S + F + Φ_D + Φ_E = Z + 6·Y` with `Φ_E = ½Φ_D`, solves `Φ_D = 30,000` and `Φ_E = 15,000` | Exact | Factor 4 in case B |
-
-### 8.3 MOP
-
-| ID | Source | Oracle | Pass | Mutation |
-|---|---|---|---|---|
-| T-MOP-1 | R1, `[23 Eq 5.4.2, 5.5.2]` | Residual on a grid `k ∈ {1, 2, 3}` × `p ∈ {0, ½, 1, 2}` × `b ∈ {0, 0.25, 1}` with real and complex a, b; plus `k = ½` with real `a, b > 0` (principal branch, R1); closed form vs quadrature | 1e-6 / 1e-9 | Printed 5.5.8 |
-| T-MOP-2 | X1 | Printed 5.5.7 / 5.5.8 fail at (1, 0.25, 1, 2): 1.25, −0.625 at t = 1 | > 100× tol | — |
-| T-MOP-3 | R1 | `α(0) = 0`; b = 0 branch | 1e-12 | `α(0) = a^{…}` |
-| T-MOP-4 | `[23 Eq 5.6.1]` | Zero diagonal; N(N−1) independent couples | Exact | — |
-| T-MOP-5 | R2, `[23 Eq 5.1.3–5.1.5]` | All nine products; `(j∘j)∘k = −k`, `j∘(j∘k) = k` | Exact | Anticommuting j, k |
-| T-MOP-6 | R3, `[23 Eq A2.5–A2.6]` | With `√2·ψ_l = 2πl/(N−1)`: `rel_root_pow(r, N−1) = 1` for N = 3…7; `rel_mul(rel_mul(r, r), r)` at N = 4, l = 1 = (0.540721, 0, −0.665721), as `ordinal_root_power.py` prints | 1e-12 / 1e-6 | Power by `rel_mul` |
-| T-MOP-7 | `[23 Eq 7.1–7.5]` | Hand-evaluated N = 4 with given Σ₀, Φ₀, Θ₀, ε, ψ; equals `rel_mul(rel_root, X)` brackets | 1e-12 | Anticommuting product (fails Eq 7.3) |
-| T-MOP-8 | R4, `[23 Eq 6.1–6.3]` | `Ȧ` satisfies `u' + u² = 0`; `B = [[A,−A],[−A,A]]`; `{c₂,t} → c₂t` | 1e-6 / exact | `ln(c₁ + c₂ + t)` |
-| T-MOP-9 | R5 | Six hand graphs: classification counts exact; **two disjoint 2-cycles: closure = 1, not maximum**; boundary nodes excluded; reorder-invariant | Exact | Cycle-coverage definition |
-| T-MOP-10 | R6, `[02 Eq 5.3]` | Below max ⇒ reaches max in ≤ #src + #sink steps; each choice equals brute-force argmax of total empower on graphs ≤ 5 components; fixed point at max; reorder-invariant | Exact | First candidate instead of argmax |
-
-### 8.4 Harmony verdicts (`bin/test_mop_emergence`; no `harmony.o`)
-
-The detector measures, in ℂ, `R_H = max_{j=2..N−1} |α_{1,j+1}/α_{12} − e^{2πi(j−1)/(N−1)}|`
-(ratios, X9). The verdict is:
-
-- `imposed` if `R_H` is 0 for every admissible perturbation of the inputs;
-- `transported` if `R_H(α)` equals `R_H(β)`;
-- `absent` otherwise.
-
-| ID | Construction | Expected | Mutation |
-|---|---|---|---|
-| T-HARM-0 | Link without `harmony.o`; `nm mop.o` has no `gia_harmony_*` or `gia_ordinal_root` | Links | Call the constructor from `mop.c` (link fails) |
-| T-HARM-1 | β harmonic, N = 4, 5, 7 | `R_H < 1e-9` | — |
-| T-HARM-2 | Random complex β (fixed seed) | `R_H > 1e-2`, `absent` | Widen tolerance to 1 |
-| T-HARM-2b | Any real Matrioska, N ≥ 4 | `R_H ≥ |sin(2π/(N−1))|`, `absent` | — |
-| T-HARM-3 | First Equation, harmonic β + δ = 1e-3 | `transported` (`R_H(α) = R_H(β)`) | Return the constructed Matrioska (T-HARM-0, 2 fail) |
-| T-HARM-4 | Second Equation (R4), random α₁₂(0), c₁, c₂ | `imposed` | — |
-| T-HARM-5 | EQS (R2) | `imposed` | — |
+Revision 2's §8 is in this file's history (`git show a5d0dc1:PLAN.md`). Its tests all survive in
+the catalogue except two, which r3 revises: T-IDC-4 (ii), which relied on the erratum X12, and
+T-IDC-11's "interaction module: drift nonzero", which conflated the two drifts (R16).
 
 ---
 
@@ -500,14 +466,15 @@ The detector measures, in ℂ, `R_H = max_{j=2..N−1} |α_{1,j+1}/α_{12} − e
 PRs that add a CHANGELOG entry land **one at a time** (`AGENTS.md` §Concurrent branches). ADR PRs
 precede their code PRs.
 
-1. **This PR** (`docs/mop-plan`): `PLAN.md`, `docs/sources/` (cc-by text and pages, probes, README),
-   `.gitignore` rule for `docs/sources/local/`.
-2. W0 `mop-claims-remediation`.
-3. W1 ADR 0018, then `guard-no-skip`, `guard-coverage-giannantoni`, `guard-api-called`,
-   `guard-agents-wording`.
-4. ADR 0019 (MOP equations), ADR 0020 (relational algebra), ADR 0021 (ordinality), ADR 0022 (method
+1. *Merged:* #34 (`PLAN.md`, `docs/sources/`), #35 (`make docs-build-container`).
+2. **Requirements baseline** (`docs/requirements-baseline`, r3): `docs/requirements/`, `make check-trace`
+   and its CI step, existing tests tagged, this revision.
+3. W0 `mop-claims-remediation`.
+4. W1 ADR 0018, then `guard-no-skip`, `guard-reentrancy`, `guard-coverage-giannantoni`,
+   `guard-api-called`, `guard-agents-wording`.
+5. ADR 0019 (MOP equations), ADR 0020 (relational algebra), ADR 0021 (ordinality), ADR 0022 (method
    label): written together (separate files), merged one at a time.
-5. Code, in dependency order: W2 → W3 → W4 → W5 → W6 → W7 → W8. `mop-first-equation` owns the
+6. Code, in dependency order: W2 → W3 → W4 → W5 → W6 → W7 → W8. `mop-first-equation` owns the
    `test-mop` target and its `CI_TESTS` / `deploy.yml` lines.
 
 ```
@@ -523,7 +490,9 @@ W1 (ADR 0018 → guards) ─┬─► W2 idc-* ─► W3 emergy-* ─┐
 
 - §2 rows E1–E8 all read `implemented`, `classical (labelled)` or `out of scope (§6)`, and the README
   matches.
-- Every test in §8 passes in `make test-mop` under `make ci-local`, every mutation in §8 fails and its
-  failure is quoted in the PR, and the G2 coverage gate passes.
+- *(r3)* The release exit criteria of [vv-plan.md](docs/requirements/vv-plan.md) §8 hold: every `Must`
+  requirement is `implemented`, every VAL test passes on every CI toolchain, every catalogue mutation
+  fails and its failure is quoted in the PR, and `make check-trace`, `make coverage-check` and
+  `make ci-local` pass.
 - `docs/` states the three harmony verdicts of R7 and the §6 exclusions.
 - Everything is merged to `main`. Crux tasks are closed only after confirming the code is on `main`.
