@@ -2577,6 +2577,56 @@ static gia_status em_fail(gia_status st, const char *reason, const char **why) {
     return st;
 }
 
+/* A pathway that moves quantity: not a used leg, not a read control. */
+static bool carries_quantity(const gia_edge *e) {
+    return e->role != GIA_ROLE_USED && !(e->role == GIA_ROLE_CONTROL && e->use_ratio <= 0.0);
+}
+
+gia_status gia_emergy_carried(const gia_model *m, double t, double *carried, const char **why) {
+    double    *em = NULL, *q = NULL, *flow = NULL, *out_tot = NULL;
+    gia_status st;
+    int        i, n;
+
+    if (!m || !carried || m->n_nodes <= 0)
+        return em_fail(GIA_E_ARG, "gia_emergy_carried: NULL argument or empty model", why);
+    if ((st = gia_emergy_check_limits(m, why)) != GIA_OK) return st;
+    n       = m->n_nodes;
+    em      = (double *)calloc((size_t)n, sizeof(double));
+    q       = (double *)calloc((size_t)n, sizeof(double));
+    out_tot = (double *)calloc((size_t)n, sizeof(double));
+    flow    = (double *)calloc((size_t)(m->n_edges > 0 ? m->n_edges : 1), sizeof(double));
+    if (!em || !q || !out_tot || !flow) {
+        st = em_fail(GIA_E_NOMEM, "gia_emergy_carried: out of memory", why);
+        goto done;
+    }
+    if (!gia_emergy_at(m, t, em, NULL) || !gia_network_state(m, t, q, NULL)) {
+        st = em_fail(GIA_E_RANGE, "gia_emergy_carried: the network or emergy pass did not "
+                     "evaluate at t", why);
+        goto done;
+    }
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        flow[i] = fabs(gia_edge_flow(m, e, q, t));
+        if (e->from >= 0 && carries_quantity(e)) out_tot[e->from] += flow[i];
+    }
+    for (i = 0; i < m->n_edges; i++) {
+        const gia_edge *e = &m->edges[i];
+        const int       a = e->from;
+        carried[i] = 0.0;
+        if (a < 0 || e->to < 0 || !carries_quantity(e) || flow[i] <= 0.0) continue;
+        if (!m->nodes[a].integrates && m->nodes[a].quality_input > 0.0)
+            carried[i] = flow[i] * m->nodes[a].quality_input;
+        else if (e->out_mode == GIA_OUT_REPLICATE)
+            carried[i] = em[a];
+        else
+            carried[i] = out_tot[a] > 0.0 ? em[a] * (flow[i] / out_tot[a]) : 0.0;
+    }
+    st = GIA_OK;
+done:
+    free(em); free(q); free(out_tot); free(flow);
+    return st;
+}
+
 /* NFR-LIM-001. */
 gia_status gia_emergy_check_limits(const gia_model *m, const char **why) {
     int b, i, replicates = 0;

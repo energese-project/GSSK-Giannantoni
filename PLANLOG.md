@@ -183,6 +183,28 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   task's scope. Note that before this change `"expm"` fell into exactly that path: the red run's
   serialisation check caught it.
 
+### `mop-network-beta`
+
+- **"Carried from component i to component j" means a direct pathway.** R8 does not say how far
+  emergy is followed. A pathway through a module, or through intermediate components, would need a
+  rule for splitting the module's output emergy among its products. The sources give no such rule,
+  and the engine already has one for direct pathways (the pass's partition and replicate rules). So
+  a couple is related exactly when a direct pathway `i → j` moves quantity: not a used leg, and not
+  a read control. Several such pathways sum.
+- **A loop-closing pathway carries what rides on it.** The emergy pass zeroes back edges in its own
+  accounting, so that a loop does not create emergy. Applying the same rule here would make one
+  pathway of every 2-cycle "unrelated", which contradicts R8's "couples with no pathway". So
+  `gia_emergy_carried` (added to IF-API-005) shares each origin's empower across all of its
+  quantity-carrying pathways.
+- **β by finite difference.** `β = α' = E'/E`. The derivative is a central difference with
+  `h = 1e-5·max(1, t)`, or a second-order forward difference at `t < h`. T-MOP-10 checks it by its
+  defining equation, `∫β = Δα`, to 1e-6. A pathway carrying no emergy has no logarithm, so it is
+  `GIA_E_RANGE`.
+- **The network form refuses k ≠ 1** (`GIA_E_UNSUPPORTED`, exit 2). FR-MOP-008 defines β with
+  k = 1.
+- **The per-seed verdict table** (PLAN §7, T-HARM-2b) needs the harmony detector. It lands with
+  `mop-harmony-detector`.
+
 ---
 
 ## [Revision 3] — 2026-10-09

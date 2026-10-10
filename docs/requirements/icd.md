@@ -171,6 +171,8 @@ gia_status gia_drift_projection(const gia_model *m, double t, double dt,
 gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
                                   double *phi, const char **why);               /* FR-EM-002, 004 */
 gia_status gia_emergy_check_limits(const gia_model *m, const char **why);       /* NFR-LIM-001 */
+gia_status gia_emergy_carried(const gia_model *m, double t, double *carried /* per edge */,
+                              const char **why);                                /* FR-MOP-008 */
 typedef enum { GIA_OF_SCALAR, GIA_OF_BINARY, GIA_OF_DUET, GIA_OF_DUET_BINARY } gia_oform_kind;
 typedef struct { gia_oform_kind kind; int rows, cols; double v[2][2]; } gia_oform;
 gia_oform  gia_oform_scalar(double a);

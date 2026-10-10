@@ -665,6 +665,16 @@ double gia_emergy_excess(const gia_model *m, double t);
 gia_status gia_emergy_source_term(const gia_model *m, double t, int node,
                                   double *phi, const char **why);
 
+/* FR-MOP-008 (PLAN R8) — the emergy each pathway carries at t, by the emergy
+ * pass's rules: a source's pathways carry flow x quality_input; a replicating
+ * pathway carries its origin's whole empower; a partition carries the origin's
+ * empower in proportion to its flow among the origin's outgoing pathways. A
+ * used leg, and a read control, carry none. Unlike the pass's own accounting,
+ * a pathway that closes a loop is not zeroed: it carries what rides on it.
+ * carried has n_edges entries. GIA_E_LIMIT past the pass's limits;
+ * GIA_E_NOMEM. */
+gia_status gia_emergy_carried(const gia_model *m, double t, double *carried, const char **why);
+
 /* The emergy pass's limits, checked on their own: GIA_E_LIMIT when the model
  * exceeds them (NFR-LIM-001). gia_emergy_at returns false in that case, and
  * the trajectory CSV leaves its emergy cells empty, rather than truncating. */

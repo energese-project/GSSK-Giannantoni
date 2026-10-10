@@ -56,12 +56,25 @@ gia_status gia_mop_seed_load(const gia_model *m, gia_mop_seed *out, char *detail
 
 void gia_mop_seed_free(gia_mop_seed *s);
 
+/* FR-MOP-008 (PLAN R8) — boundary conditions from the network, at t. For each
+ * couple of components (i, j) joined by a direct pathway i -> j that carries
+ * quantity, e^{alpha_ij(t)} is the emergy those pathways carry
+ * (gia_emergy_carried, summed), so alpha_ij = ln E_ij; and beta_ij follows from
+ * [23 Eq 5.5.2] with k = 1, (d~/dt) alpha = alpha', so beta_ij = E_ij'/E_ij,
+ * by a central difference (forward at t < h). Every other couple is
+ * unrelated. Both Matrioskas are N = n_nodes, row-major by node index, real;
+ * either may be NULL. A related couple whose E is 0 near t has no logarithm:
+ * GIA_E_RANGE. */
+gia_status gia_mop_network(const gia_model *m, double t, gia_matrioska *alpha,
+                           gia_matrioska *beta, const char **why);
+
 /* IF-OUT-002. Writes `time`, then `<from>__<to>_re, <from>__<to>_im` per
  * couple in (from, to) id order, on the trajectory CSV's grid
  * t = s t_end / steps, s = 0..steps. Every couple is solved at t_end before
  * the file is opened, so a refusal (the First Equation's GIA_E_DOMAIN, or
- * GIA_E_UNSUPPORTED for the network form until FR-MOP-008) writes nothing; a
- * later failure removes the file. The R_H column follows with FR-HAR-001. */
+ * GIA_E_UNSUPPORTED for the network form with k != 1, PLAN R8) writes nothing;
+ * a later failure removes the file. The network form writes alpha = ln E per
+ * related couple (gia_mop_network). The R_H column follows with FR-HAR-001. */
 gia_status gia_mop_write_csv(const gia_model *m, const gia_mop_seed *s, const char *path,
                              int steps, const char **why);
 

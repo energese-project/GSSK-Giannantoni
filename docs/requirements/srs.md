@@ -229,7 +229,7 @@ On request, the kernel shall set `e^{α_ij(t)}` to the empower carried from comp
 by the emergy pass, derive `β_ij` by [23 Eq 5.5.2] with k = 1, and mark couples with no pathway
 unrelated.
 - **Source:** PLAN R8
-- **Verification:** T-MOP-10 · **Priority:** Should · **Status:** planned · **Task:** mop-network-beta
+- **Verification:** T-MOP-10 · **Priority:** Should · **Status:** implemented · **Task:** mop-network-beta
 
 ### 2.4 Relational Space algebra
 

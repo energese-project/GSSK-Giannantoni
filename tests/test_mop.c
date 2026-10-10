@@ -2148,9 +2148,9 @@ static void test_mop_csv(void) {
        (text = slurp(path)) == NULL);
     if (st >= 0) mop_seed_done(&m, root, &s);
 
-    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":\"network\"}", &m, &root, &s, det, sizeof det);
+    st = mop_seed_try(",\"mop\":{\"k\":2,\"beta\":\"network\"}", &m, &root, &s, det, sizeof det);
     why = NULL;
-    ok("network beta: GIA_E_UNSUPPORTED naming FR-MOP-008, no file",
+    ok("network beta with k = 2: GIA_E_UNSUPPORTED naming FR-MOP-008, no file",
        st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_E_UNSUPPORTED && why &&
        strstr(why, "FR-MOP-008") && (text = slurp(path)) == NULL);
     ok("a seed without a mop block, or NULL: GIA_E_ARG",
@@ -2652,6 +2652,206 @@ static void test_ord_closure_decides_nothing(void) {
     } else ok("loads", 0);
 }
 
+/* ------------------------------------------------------------------ *
+ * Boundary conditions from the network (FR-MOP-008, PLAN R8)
+ * ------------------------------------------------------------------ */
+
+/* src (quality 3) -> a; a -> b (reversible, so its share of a's outflow
+ * moves with Q_a - Q_b and E_ab varies in time) and a -> c, partitions;
+ * b -> c; c -> a closes a loop. b -> a and c -> b have no pathway. */
+static const char *NET_SEED =
+    "{\"system_name\":\"net\",\"nodes\":["
+    " {\"id\":\"src\",\"type\":\"source\",\"initial_value\":2.0,\"quality_input\":3.0},"
+    " {\"id\":\"a\",\"type\":\"storage\",\"current_level\":5.0},"
+    " {\"id\":\"b\",\"type\":\"storage\",\"current_level\":0.5},"
+    " {\"id\":\"c\",\"type\":\"storage\",\"current_level\":0.5}],"
+    "\"edges\":["
+    " {\"source\":\"src\",\"target\":\"a\",\"weight\":0.5},"
+    " {\"source\":\"a\",\"target\":\"b\",\"logic\":\"reversible\",\"weight\":0.3},"
+    " {\"source\":\"a\",\"target\":\"c\",\"weight\":0.2},"
+    " {\"source\":\"b\",\"target\":\"c\",\"weight\":0.1},"
+    " {\"source\":\"c\",\"target\":\"a\",\"weight\":0.05}],"
+    "\"simulation_params\":{\"t_val\":2.0,\"derivative_order\":2,\"generative_mode\":false}}";
+
+/* The oracle's E_ij(t): the pass's empower at the origin, shared among its
+ * outgoing pathways in proportion to their flow (all partitions here), from
+ * gia_emergy_at, gia_network_state and gia_edge_flow -- not from
+ * gia_emergy_carried. */
+static double net_oracle(const gia_model *m, double t, int i, int j) {
+    double em[8], q[8], tot = 0.0, fij = 0.0;
+    int    e;
+    if (!gia_emergy_at(m, t, em, NULL) || !gia_network_state(m, t, q, NULL)) return -1.0;
+    for (e = 0; e < m->n_edges; e++) {
+        const gia_edge *ed = &m->edges[e];
+        double f;
+        if (ed->from != i) continue;
+        f = fabs(gia_edge_flow(m, ed, q, t));
+        tot += f;
+        if (ed->to == j) fij += f;
+    }
+    return tot > 0.0 ? em[i] * fij / tot : 0.0;
+}
+
+#define NET_HEADER "time,a__b_re,a__b_im,a__c_re,a__c_im,b__c_re,b__c_im,c__a_re,c__a_im\n"
+
+static int net_idx(const gia_model *m, const char *id) {
+    int i;
+    for (i = 0; i < m->n_nodes; i++) if (!strcmp(m->nodes[i].id, id)) return i;
+    return -1;
+}
+
+/* Verifies: FR-MOP-008 (T-MOP-10)
+ * Source: PLAN R8; [23 Eq 5.5.2] with k = 1. Oracle: e^{alpha_ij} equals the
+ * emergy the pass's empower puts on the pathway i -> j (net_oracle above, to
+ * 1e-12); couples with no pathway are unrelated; beta = alpha' is checked by
+ * its defining equation -- Simpson's rule on beta over [0.5, 1.5] equals
+ * alpha(1.5) - alpha(0.5) to 1e-6. The catalogue mutation "use quantity flow"
+ * (E = F) fails the first check, since the source's quality is 3. */
+static void test_mop_network(void) {
+    gia_model     m;
+    cJSON        *root = NULL;
+    gia_matrioska al, be, a0, a1;
+    const char   *why = NULL;
+    int           st, i, j, n;
+    int           match = 1, unrel = 1;
+
+    printf("\n[T-MOP-10] boundary conditions from the network\n");
+    if (!load_seed(NET_SEED, &m, &root)) { ok("loads", 0); return; }
+    n  = m.n_nodes;
+    st = gia_mop_network(&m, 1.0, &al, &be, &why);
+    ok("solves at t = 1", st == GIA_OK);
+    if (st == GIA_OK) {
+        static const char *rel[][2] = {{"a", "b"}, {"a", "c"}, {"b", "c"}, {"c", "a"}};
+        int want[8 * 8] = {0}, k;
+        for (k = 0; k < 4; k++) {
+            int a = net_idx(&m, rel[k][0]), b = net_idx(&m, rel[k][1]);
+            double E = net_oracle(&m, 1.0, a, b);
+            want[a * n + b] = 1;
+            if (!al.related[a * n + b] || !(E > 0.0) ||
+                !near_c(cexp(al.a[a * n + b]), E, TOL_CLOSED) || cimag(al.a[a * n + b]) != 0.0) {
+                match = 0;
+                printf("    %s -> %s: e^alpha = %.15g, oracle %.15g\n", rel[k][0], rel[k][1],
+                       creal(cexp(al.a[a * n + b])), E);
+            }
+        }
+        for (i = 0; i < n; i++)
+            for (j = 0; j < n; j++)
+                if (!want[i * n + j] && (al.related[i * n + j] || be.related[i * n + j])) unrel = 0;
+        ok("e^alpha_ij = the empower carried i -> j, for every pathway (1e-12)", match);
+        ok("no pathway (b -> a, c -> b, src -> a is habitat): unrelated", unrel);
+        {
+            /* Simpson on beta_ab over [0.5, 1.5], 100 intervals. */
+            int    a = net_idx(&m, "a"), b = net_idx(&m, "b"), s, ok_int = 1;
+            double sum = 0.0, h = 1.0 / 100.0, lhs, rhs = 0.0;
+            for (s = 0; s <= 100 && ok_int; s++) {
+                gia_matrioska bs;
+                double        w = (s == 0 || s == 100) ? 1.0 : (s % 2 ? 4.0 : 2.0);
+                if (gia_mop_network(&m, 0.5 + s * h, NULL, &bs, &why) != GIA_OK) { ok_int = 0; break; }
+                sum += w * creal(bs.a[a * n + b]);
+                gia_matrioska_free(&bs);
+            }
+            lhs = sum * h / 3.0;
+            if (ok_int && gia_mop_network(&m, 0.5, &a0, NULL, &why) == GIA_OK) {
+                if (gia_mop_network(&m, 1.5, &a1, NULL, &why) == GIA_OK) {
+                    rhs = creal(a1.a[a * n + b] - a0.a[a * n + b]);
+                    gia_matrioska_free(&a1);
+                } else ok_int = 0;
+                gia_matrioska_free(&a0);
+            } else ok_int = 0;
+            ok("beta = alpha' ([23 Eq 5.5.2], k = 1): int beta = delta alpha (1e-6)",
+               ok_int && fabs(lhs - rhs) <= 1e-6 * (fabs(rhs) > 1.0 ? fabs(rhs) : 1.0) && rhs != 0.0);
+        }
+        gia_matrioska_free(&al);
+        gia_matrioska_free(&be);
+    }
+    {
+        gia_matrioska b0 = {0, NULL, NULL};
+        int           a = net_idx(&m, "a"), b = net_idx(&m, "b");
+        ok("at t = 0 beta uses a one-sided difference: finite, related",
+           gia_mop_network(&m, 0.0, NULL, &b0, &why) == GIA_OK && b0.related[a * n + b] &&
+           isfinite(creal(b0.a[a * n + b])));
+        if (b0.a) gia_matrioska_free(&b0);
+    }
+    gia_model_free(&m);
+    cJSON_Delete(root);
+
+    /* A replicating origin gives each product its whole empower. */
+    if (load_seed("{\"system_name\":\"r\",\"nodes\":["
+                  "{\"id\":\"src\",\"type\":\"source\",\"initial_value\":2.0,\"quality_input\":3.0},"
+                  ORD_S("a") "," ORD_S("b") "," ORD_S("c") "],\"edges\":["
+                  "{\"source\":\"src\",\"target\":\"a\",\"weight\":0.5},"
+                  ORD_EP("a", "b") "," ORD_EP("a", "c") "],"
+                  "\"simulation_params\":{\"t_val\":1.0}}", &m, &root)) {
+        double em[8];
+        int    a = net_idx(&m, "a"), b = net_idx(&m, "b"), c = net_idx(&m, "c");
+        n = m.n_nodes;
+        al.a = NULL;
+        ok("replicate: e^alpha_ab = e^alpha_ac = Em(a), the whole",
+           gia_mop_network(&m, 1.0, &al, NULL, &why) == GIA_OK && gia_emergy_at(&m, 1.0, em, NULL) &&
+           near_c(cexp(al.a[a * n + b]), em[a], TOL_CLOSED) &&
+           near_c(cexp(al.a[a * n + c]), em[a], TOL_CLOSED));
+        if (al.a) gia_matrioska_free(&al);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+    /* A pathway that carries nothing has no logarithm. */
+    if (load_seed("{\"system_name\":\"z\",\"nodes\":[" ORD_S("a") "," ORD_S("b") "],\"edges\":["
+                  "{\"source\":\"a\",\"target\":\"b\",\"weight\":0.0}],"
+                  "\"simulation_params\":{\"t_val\":1.0}}", &m, &root)) {
+        why = NULL;
+        ok("a pathway carrying no emergy: GIA_E_RANGE, with a reason",
+           gia_mop_network(&m, 1.0, &al, NULL, &why) == GIA_E_RANGE && why);
+        ok("NULL model, t < 0: GIA_E_ARG",
+           gia_mop_network(NULL, 1.0, &al, NULL, &why) == GIA_E_ARG &&
+           gia_mop_network(&m, -1.0, &al, NULL, &why) == GIA_E_ARG);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    }
+    {   /* IF-OUT-002 with "beta": "network": alpha = ln E per related couple. */
+        char         seed[2048], det[128], *text = NULL;
+        gia_mop_seed sd;
+        const char  *path = "bin/test_mop_net.csv";
+        size_t       len = strlen(NET_SEED);
+        memset(&sd, 0, sizeof sd);
+        memcpy(seed, NET_SEED, len - 1);
+        strcpy(seed + len - 1, ",\"mop\":{\"k\":1,\"beta\":\"network\"}}");
+        remove(path);
+        if (load_seed(seed, &m, &root) &&
+            gia_mop_seed_load(&m, &sd, det, sizeof det, &why) == GIA_OK &&
+            gia_mop_write_csv(&m, &sd, path, 4, &why) == GIA_OK)
+            text = slurp(path);
+        ok("--mop-out, network: a column pair per pathway, in id order",
+           text && strncmp(text, NET_HEADER, strlen(NET_HEADER)) == 0);
+        {
+            int good = 0;
+            if (text) {
+                char  *last = strrchr(text, '\n'), *p;
+                double v[9];
+                *last = '\0';
+                p = strrchr(text, '\n') + 1;
+                if (sscanf(p, "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf", &v[0], &v[1], &v[2], &v[3],
+                           &v[4], &v[5], &v[6], &v[7], &v[8]) == 9 &&
+                    gia_mop_network(&m, 2.0, &al, NULL, &why) == GIA_OK) {
+                    n    = m.n_nodes;
+                    good = near_c(v[0], 2.0, TOL_CLOSED) && v[2] == 0.0 &&
+                           near_c(v[1], creal(al.a[net_idx(&m, "a") * n + net_idx(&m, "b")]), 1e-12) &&
+                           near_c(v[7], creal(al.a[net_idx(&m, "c") * n + net_idx(&m, "a")]), 1e-12);
+                    gia_matrioska_free(&al);
+                }
+            }
+            ok("row t_end: alpha = ln E, imaginary part 0", good);
+        }
+        free(text);
+        gia_mop_seed_free(&sd);
+        if (root) { gia_model_free(&m); cJSON_Delete(root); }
+    }
+    {
+        double carried[4];
+        ok("gia_emergy_carried: NULL is GIA_E_ARG",
+           gia_emergy_carried(NULL, 0.0, carried, &why) == GIA_E_ARG);
+    }
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -2703,6 +2903,7 @@ int main(void) {
     test_ord_generative();
     test_ord_closure_decides_nothing();
     test_ord_adr_table_generative();
+    test_mop_network();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

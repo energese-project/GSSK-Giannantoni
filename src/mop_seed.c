@@ -361,6 +361,168 @@ void gia_mop_seed_free(gia_mop_seed *s) {
     memset(s, 0, sizeof(*s));
 }
 
+/* E_ij(t), the emergy the direct pathways i -> j carry, into E (n*n) and rel. */
+static gia_status network_E(const gia_model *m, double t, double *E, unsigned char *rel,
+                            const char **why) {
+    const int  n = m->n_nodes;
+    double    *carried = (double *)malloc((size_t)(m->n_edges > 0 ? m->n_edges : 1) * sizeof(double));
+    gia_status st;
+    int        e;
+    if (!carried) {
+        if (why) *why = "gia_mop_network: out of memory";
+        return GIA_E_NOMEM;
+    }
+    memset(E, 0, (size_t)n * (size_t)n * sizeof(double));
+    memset(rel, 0, (size_t)n * (size_t)n);
+    if ((st = gia_emergy_carried(m, t, carried, why)) == GIA_OK)
+        for (e = 0; e < m->n_edges; e++) {
+            const gia_edge *ed = &m->edges[e];
+            if (ed->from < 0 || ed->to < 0 || ed->from == ed->to) continue;
+            if (!gia_node_is_component(m, ed->from) || !gia_node_is_component(m, ed->to)) continue;
+            if (ed->role == GIA_ROLE_USED || (ed->role == GIA_ROLE_CONTROL && ed->use_ratio <= 0.0))
+                continue;
+            rel[ed->from * n + ed->to] = 1;
+            E[ed->from * n + ed->to] += carried[e];
+        }
+    free(carried);
+    return st;
+}
+
+static gia_status no_log(const char **why) {
+    if (why) *why = "gia_mop_network: a pathway carries no emergy near t, so e^alpha = 0 has no "
+                    "logarithm (FR-MOP-008, PLAN R8)";
+    return GIA_E_RANGE;
+}
+
+gia_status gia_mop_network(const gia_model *m, double t, gia_matrioska *alpha,
+                           gia_matrioska *beta, const char **why) {
+    double        *E[3] = {NULL, NULL, NULL}, h, ts[3];
+    unsigned char *rel = NULL;
+    double complex *aa = NULL, *bb = NULL;
+    unsigned char *ra = NULL, *rb = NULL;
+    gia_status     st = GIA_OK;
+    int            n, i, s, ns, central;
+
+    if (!m || m->n_nodes <= 0 || !(t >= 0.0) || !isfinite(t)) {
+        if (why) *why = "gia_mop_network: no model, or t < 0";
+        return GIA_E_ARG;
+    }
+    n = m->n_nodes;
+    /* beta = d ln E / dt: central where t allows, else second-order forward. */
+    h       = 1e-5 * (t > 1.0 ? t : 1.0);
+    central = t >= h;
+    ns      = beta ? 3 : 1;
+    ts[0]   = t;
+    ts[1]   = central ? t - h : t + h;
+    ts[2]   = central ? t + h : t + 2.0 * h;
+    rel = (unsigned char *)malloc((size_t)n * (size_t)n);
+    for (s = 0; s < ns; s++) E[s] = (double *)malloc((size_t)n * (size_t)n * sizeof(double));
+    if (alpha) {
+        aa = (double complex *)calloc((size_t)n * (size_t)n, sizeof(double complex));
+        ra = (unsigned char *)calloc((size_t)n * (size_t)n, 1);
+    }
+    if (beta) {
+        bb = (double complex *)calloc((size_t)n * (size_t)n, sizeof(double complex));
+        rb = (unsigned char *)calloc((size_t)n * (size_t)n, 1);
+    }
+    if (!rel || !E[0] || (beta && (!E[1] || !E[2] || !bb || !rb)) || (alpha && (!aa || !ra))) {
+        if (why) *why = "gia_mop_network: out of memory";
+        st = GIA_E_NOMEM;
+        goto done;
+    }
+    for (s = 0; s < ns && st == GIA_OK; s++) st = network_E(m, ts[s], E[s], rel, why);
+    if (st != GIA_OK) goto done;
+    for (i = 0; i < n * n; i++) {
+        double l0, l1, l2;
+        if (!rel[i]) continue;
+        if (!(E[0][i] > 0.0)) { st = no_log(why); goto done; }
+        l0 = log(E[0][i]);
+        if (alpha) { aa[i] = l0; ra[i] = 1; }
+        if (beta) {
+            if (!(E[1][i] > 0.0) || !(E[2][i] > 0.0)) { st = no_log(why); goto done; }
+            l1 = log(E[1][i]);
+            l2 = log(E[2][i]);
+            bb[i] = central ? (l2 - l1) / (2.0 * h) : (-3.0 * l0 + 4.0 * l1 - l2) / (2.0 * h);
+            rb[i] = 1;
+        }
+    }
+    if (alpha) { alpha->N = n; alpha->a = aa; alpha->related = ra; aa = NULL; ra = NULL; }
+    if (beta)  { beta->N = n;  beta->a = bb;  beta->related = rb;  bb = NULL; rb = NULL; }
+done:
+    for (s = 0; s < 3; s++) free(E[s]);
+    free(rel); free(aa); free(ra); free(bb); free(rb);
+    return st;
+}
+
+/* IF-OUT-002 for "beta": "network": alpha = ln E for each related couple. */
+static gia_status write_network(const gia_model *m, const gia_mop_seed *s, const char *path,
+                                int steps, const char **why) {
+    gia_matrioska al;
+    FILE         *f;
+    int          *pairs, np = 0, i, j, r, n = m->n_nodes;
+    gia_status    st;
+    double        dt;
+
+    if (s->k.num != 1 || s->k.den != 1) {
+        if (why) *why = "beta from the network (FR-MOP-008) is defined with k = 1 only "
+                        "([23 Eq 5.5.2], PLAN R8)";
+        return GIA_E_UNSUPPORTED;
+    }
+    if ((st = gia_mop_network(m, m->t_end, &al, NULL, why)) != GIA_OK) return st;
+    pairs = (int *)malloc((size_t)n * (size_t)n * sizeof(int));
+    if (!pairs) {
+        gia_matrioska_free(&al);
+        if (why) *why = "gia_mop_write_csv: out of memory";
+        return GIA_E_NOMEM;
+    }
+    for (i = 0; i < n * n; i++) {      /* insertion by (from id, to id) */
+        int k;
+        if (!al.related[i]) continue;
+        for (k = np; k > 0; k--) {
+            const int p = pairs[k - 1];
+            int c = strcmp(m->nodes[p / n].id, m->nodes[i / n].id);
+            if (!c) c = strcmp(m->nodes[p % n].id, m->nodes[i % n].id);
+            if (c <= 0) break;
+            pairs[k] = p;
+        }
+        pairs[k] = i;
+        np++;
+    }
+    gia_matrioska_free(&al);
+    f = fopen(path, "w");
+    if (!f) {
+        free(pairs);
+        if (why) *why = "gia_mop_write_csv: cannot open the output file";
+        return GIA_E_ARG;
+    }
+    fprintf(f, "time");
+    for (j = 0; j < np; j++) {
+        const char *a = m->nodes[pairs[j] / n].id, *b = m->nodes[pairs[j] % n].id;
+        fprintf(f, ",%s__%s_re,%s__%s_im", a, b, a, b);
+    }
+    fprintf(f, "\n");
+    dt = m->t_end / (double)steps;
+    for (r = 0; r <= steps; r++) {
+        const double t = (double)r * dt;
+        if ((st = gia_mop_network(m, t, &al, NULL, why)) != GIA_OK) {
+            fclose(f); remove(path); free(pairs);
+            return st;
+        }
+        fprintf(f, "%.6f", t);
+        for (j = 0; j < np; j++)
+            fprintf(f, ",%.17g,%.17g", creal(al.a[pairs[j]]), cimag(al.a[pairs[j]]));
+        fprintf(f, "\n");
+        gia_matrioska_free(&al);
+    }
+    free(pairs);
+    if (fclose(f) != 0) {
+        remove(path);
+        if (why) *why = "gia_mop_write_csv: the output file could not be written";
+        return GIA_E_ARG;
+    }
+    return GIA_OK;
+}
+
 gia_status gia_mop_write_csv(const gia_model *m, const gia_mop_seed *s, const char *path,
                              int steps, const char **why) {
     FILE          *f;
@@ -373,12 +535,8 @@ gia_status gia_mop_write_csv(const gia_model *m, const gia_mop_seed *s, const ch
         if (why) *why = "gia_mop_write_csv: no model, no mop block, or no path";
         return GIA_E_ARG;
     }
-    if (s->form == GIA_MOP_BETA_NETWORK) {
-        if (why) *why = "beta from the network (FR-MOP-008) is not implemented yet: it lands with "
-                        "mop-network-beta (PLAN W8)";
-        return GIA_E_UNSUPPORTED;
-    }
     if (steps < 1) steps = 1;
+    if (s->form == GIA_MOP_BETA_NETWORK) return write_network(m, s, path, steps, why);
     /* Refuse before writing: a couple's domain is decided on [0, t_end]. */
     for (i = 0; i < s->n_couples; i++)
         if ((st = gia_mop_couple(&s->couples[i].beta, s->k, m->t_end, &al, why)) != GIA_OK)

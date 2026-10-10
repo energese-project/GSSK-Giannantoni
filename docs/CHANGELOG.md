@@ -85,6 +85,13 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **Boundary conditions from the network** (FR-MOP-008, PLAN R8).
+  - `gia_mop_network` sets `e^{α_ij}` to the emergy that the direct pathways `i → j` carry
+    (`gia_emergy_carried`, using the emergy pass's partition and replicate rules).
+  - It derives `β_ij = α'` by [23 Eq 5.5.2] with k = 1.
+  - Couples with no pathway are unrelated.
+  - `"beta": "network"` with k = 1 now writes the MOP CSV. With any other k it is refused.
+
 - **Ordinality as ADR 0021 defines it** (FR-ORD-001…003).
   - `gia_ordinality_record` classifies each couple of components as 2/2 (mutual reachability along
     quantity-carrying legs), 2 (both feed one interaction module) or ½ (co-products of one

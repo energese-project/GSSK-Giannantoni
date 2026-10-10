@@ -830,7 +830,8 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
 - [x] W7 `mop-ordinality` — the Ordinality record, Maximum Ordinality as strong connectivity, closure as a proxy (FR-ORD-001..003)
 - [x] W7 `mop-generative-empower` — one pathway at a time by maximum total empower; ADR 0015's emergent component retired (FR-ORD-004, 005)
 - [x] W8 `kernel-method-label` — `"expm"`, with `"incipient"` a deprecated alias (FR-KER-001, ADR 0022)
-- [ ] W8 `mop-harmony-detector`, `mop-network-beta`
+- [x] W8 `mop-network-beta` — e^α from the empower each pathway carries, β by [23 Eq 5.5.2] with k = 1 (FR-MOP-008)
+- [ ] W8 `mop-harmony-detector` (with the per-seed verdict table, T-HARM-2b)
 
 ## Continuous Concerns
 
