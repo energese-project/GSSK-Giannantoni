@@ -1405,7 +1405,10 @@ double GSSK_NextRandomUniform(GSSK_Instance *inst, double min, double max);
  * connected subgraph motifs (2–3 nodes) defined by node-type composition
  * and directed connectivity.  Motifs that appear ≥ GSSK_MOTIF_MIN_COUNT
  * times per step for ≥ GSSK_MOTIF_MIN_STEPS consecutive steps become
- * archetype candidates, implementing Giannantoni's generativity principle.
+ * archetype candidates. This is a structural recurrence detector for the
+ * archetype-proposal API; it is not Giannantoni's generativity, which is
+ * ordinal ([23] §2-3). See docs/giannantoni_assessment.md, "The kernel's
+ * generativity index G(t)".
  * ========================================================================= */
 
 /**
@@ -1464,7 +1467,9 @@ GSSK_Status GSSK_ProposeArchetype(GSSK_Instance *inst, size_t motif_idx,
 
 /**
  * @brief Scalar generativity index G(t): new candidate motifs this step ×
- *        mean complexity / dt.  Inspired by Giannantoni 2023 §4.
+ *        mean complexity / dt.  A structural statistic of this kernel: no
+ *        source defines it ([23] §4 contains no metric), and it reads no
+ *        state, only the graph and dt.
  *        Zero when no new candidates emerged in the last step.
  */
 double GSSK_GetGenerativityIndex(GSSK_Instance *inst);

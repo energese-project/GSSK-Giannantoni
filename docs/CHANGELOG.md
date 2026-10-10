@@ -101,6 +101,11 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **`docs/NON_GOALS.md`**, and the grounding of the kernel's generativity index G(t), in
+  `docs/giannantoni_assessment.md`. G(t) has no definition in the sources, and its header no longer
+  says it implements Giannantoni's generativity: it is a structural recurrence statistic for the
+  archetype-proposal API.
+
 - **`bin/gia_bridge`: one GSSK-schema model through both engines** (FR-BRG-001).
   - It steps the model with the kernel (`--method euler|rk4|expm|auto|adaptive`), solves the
     model's projection with the Giannantoni engine on the same grid, and reports the largest

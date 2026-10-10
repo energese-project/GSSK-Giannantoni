@@ -20,7 +20,9 @@ general-purpose ODE library. The wedge is:
 
 ## Non-Goals (defend these against feature creep)
 
-- [ ] Maintain explicit non-goals list in `docs/NON_GOALS.md`:
+- [x] Maintain explicit non-goals list in [`docs/NON_GOALS.md`](docs/NON_GOALS.md) (written; the
+      kernel list below, plus the Giannantoni engine's: nothing the sources do not define, no
+      second model format, no merged engine):
   - No stiff-solver zoo (BDF, Rosenbrock, SDIRK). If a problem is stiff and
     linear with constant coefficients, the matrix exponential already handles
     it; if it is stiff *and* not of that form, that is a modelling problem.
@@ -543,8 +545,10 @@ general-purpose ODE library. The wedge is:
 - [x] `GSSK_GetGenerativityIndex(inst)` — inspired by Giannantoni 2023 §4.
 - [x] Exposed in CLI: `gssk run model.json --report generativity` prints
       motif count, G(t), candidate count, and top-10 motifs table to stderr.
-- [ ] Document the metric and its theoretical grounding in
-      `docs/giannantoni_assessment.md`.
+- [x] Document the metric and its theoretical grounding in
+      `docs/giannantoni_assessment.md`. Finding: it has none in the sources. [23] §4 defines
+      no metric, and the sources' "Specific Generativity" is ordinal. G(t) is a structural
+      recurrence statistic, and the header no longer claims otherwise.
 
 ---
 
