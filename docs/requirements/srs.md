@@ -284,7 +284,7 @@ graph is strongly connected.
 The fraction of components on a closed pathway shall be reported only as `closure`, labelled a proxy,
 and shall decide nothing.
 - **Source:** PLAN R5, E6
-- **Verification:** T-ORD-03 · **Priority:** Must · **Status:** planned · **Task:** mop-ordinality
+- **Verification:** T-ORD-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-ordinality
 
 ### FR-ORD-005 — The generative step under the Maximum Em-Power Principle
 Below Maximum Ordinality, the kernel shall repeatedly add one `linear` pathway, of the seed's mean
@@ -293,7 +293,7 @@ component, choosing the candidate that maximises total empower at `t_end` with t
 lexicographic `(from, to)`, until the network is at Maximum Ordinality; at Maximum Ordinality it shall
 add nothing.
 - **Source:** [02 Eq 5.3], [22 Eq 2, §12.1]; PLAN R6
-- **Verification:** T-ORD-04 · **Priority:** Must · **Status:** planned · **Task:** mop-generative-empower
+- **Verification:** T-ORD-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-generative-empower
 
 ### FR-ORD-006 — Mode decided structurally
 Whether a run was generative or functional shall be decided by comparing the output graph with the

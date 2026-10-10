@@ -146,6 +146,32 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
 - **IF-OUT-003 stays `planned`.** Its `ordinality`, `maximum_ordinality` and `closure (proxy)`
   lines are written now. Its `harmony.<construction>: <verdict>` lines need FR-OUT-003 (W8).
 
+### `mop-generative-empower`
+
+- **"Total empower" is the sum of the components' empower at `t_end`.** ADR 0021 §2 says "the total
+  empower at `t_end` with the emergy pass" but does not say over what. The sum leaves habitat out,
+  for the reason ADR 0021 §1 gives: a sink's accumulation is outside the system [10]. It is
+  documented in `engine.h`.
+- **A tie is within 1e-9 relative, not exact equality.** The emergy pass sums in an order that
+  depends on the file. Exact comparison would let rounding break a tie differently when the nodes
+  are reordered, which would violate T-ORD-06's byte-identical output.
+- **Two refusals the ADR does not spell out.** The step returns the seed unchanged, and says so, in
+  two cases: when the emergy pass cannot evaluate any candidate (NFR-LIM-001), and when
+  `#sources + #sinks` additions have not reached Maximum Ordinality. The second cannot happen by the
+  ADR's termination argument; it is a guard, not a behaviour.
+- **The added pathway carries `"flow_type": "max_empower_pathway"`** so a reader of the output can
+  see which pathways the step added. The loader ignores `flow_type`.
+- **vv-plan §5 dispositions carried out.**
+  - `test_emergent_quality_closes`, `test_sink_is_never_closed` and
+    `test_emergent_quality_is_a_component` are retired.
+  - `test_generative` and `test_control_does_not_close_a_pathway` keep their mode assertions. Their
+    ADR 0015 ones ("one component emerged", `emerged_from`) are revised to ADR 0021's: no component
+    is added, and the added pathway is named.
+  - `test_emergence_is_order_invariant` (T-ORD-06) now compares the appended pathways.
+  - `test_mop_threads.c` detects growth by the new pathway label.
+- **`label.generative_step` becomes `implemented`** (E7), and `docs/giannantoni_assessment.md`'s rows
+  E6–E8 are updated to match.
+
 ---
 
 ## [Revision 3] — 2026-10-09

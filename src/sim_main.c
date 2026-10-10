@@ -286,8 +286,8 @@ static void report_labels(const gia_model *m, const gia_mop_seed *mop) {
     /* E5: constructed from roots of unity and checked against the
      * construction; [23 §8 ii] says the EQS assumes it. */
     printf("label.harmony: assumed\n");
-    /* E7: the ADR 0015 graph heuristic, not [02 Eq 5.3] / [22 Eq 2]. */
-    printf("label.generative_step: illustrative\n");
+    /* E7: ADR 0021 §2, maximum total empower, the discrete [02 Eq 5.3]. */
+    printf("label.generative_step: implemented\n");
     /* FR-IDC-011: exactly zero for a constant flow matrix, refused otherwise. */
     printf("label.solution_drift: implemented\n");
     if (mop->present) {

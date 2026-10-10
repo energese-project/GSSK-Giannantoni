@@ -28,6 +28,20 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **ADR 0015's emergent component is retired.** The generative step no longer adds an
+  `emergent_quality_N` node with `emerged_from` and `ordinality_rank`, and it no longer adds
+  `ordinal_ascent` or `emergent_feedback_loop` legs. Its tests are retired or revised, as vv-plan.md
+  §5 sets out.
+
+- **The generative step follows the Maximum Em-Power Principle** (FR-ORD-005, ADR 0021 §2,
+  [02 Eq 5.3]). Below Maximum Ordinality it adds one `linear` pathway at a time, from a sink SCC to a
+  source SCC of the component graph. Each time it takes the candidate that maximises total empower
+  at `t_end`, and it stops at strong connectivity.
+  - `input.json` now gains `consumer_1 → store_1`.
+  - `closed_loop.json` is already at maximum and gains nothing.
+  - Closure no longer decides anything (FR-ORD-004).
+  - `label.generative_step` is now `implemented`.
+
 - **`gia_ordinality` is deprecated, and returns `gia_closure`**: the fraction of components (habitat
   excluded) on a closed pathway. Two consequences:
   - `closed_loop.json` reads closure 1.000 (it was 0.800 with the heat sink counted), and is at

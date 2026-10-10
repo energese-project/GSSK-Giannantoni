@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -2348,6 +2349,309 @@ static void test_ord_adr_table(void) {
     if (root) { gia_model_free(&m); cJSON_Delete(root); }
 }
 
+static cJSON *gen_quiet(const gia_model *m);
+
+/* Verifies: FR-ORD-005 (T-ORD-04)
+ * Source: ADR 0021 §3, the "After" column's generative half. Oracle:
+ * input.json gains exactly consumer_1 -> store_1 (the only candidate) and
+ * becomes {2, 1, 0, 0, 0}, at maximum; closed_loop.json gains nothing. */
+static void test_ord_adr_table_generative(void) {
+    gia_model          m, ev;
+    cJSON             *root = NULL, *out = NULL;
+    gia_ordinality_rec r;
+    const char        *why = NULL;
+    int                good = 0;
+
+    printf("\n[ADR 0021 §3] the generative step on every example\n");
+    if (ord_load_file("examples/giannantoni/input.json", &m, &root)) {
+        const int e0 = m.n_edges;
+        out = gen_quiet(&m);
+        if (out && gia_model_load(&ev, out)) {
+            const gia_edge *e = &ev.edges[ev.n_edges - 1];
+            good = ev.n_edges == e0 + 1 && ev.n_nodes == m.n_nodes &&
+                   !strcmp(ev.nodes[e->from].id, "consumer_1") &&
+                   !strcmp(ev.nodes[e->to].id, "store_1") &&
+                   gia_ordinality_record(&ev, &r, &why) == GIA_OK && rec_is(&r, 2, 1, 0, 0, 0) &&
+                   gia_at_maximum_ordinality(&ev);
+            gia_model_free(&ev);
+        }
+        cJSON_Delete(out);
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+    ok("input.json: adds consumer_1 -> store_1 only; {2, 1, 0, 0, 0}, at maximum", good);
+    good = 0;
+    if (ord_load_file("examples/giannantoni/closed_loop.json", &m, &root)) {
+        out  = gen_quiet(&m);
+        good = out && gia_validate_mode(root, out) == GIA_MODE_FUNCTIONAL;
+        cJSON_Delete(out);
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+    ok("closed_loop.json: at maximum, nothing to add", good);
+}
+
+/* ------------------------------------------------------------------ *
+ * The generative step under Maximum Em-Power (ADR 0021 §2; FR-ORD-005)
+ * ------------------------------------------------------------------ */
+
+#define GEN_MAXC 5
+
+/* A graph of n storage components "a".."e" plus a source src -> a, with
+ * component edges adj[i][j] of weight w[i][j]. */
+typedef struct {
+    int    n;
+    int    adj[GEN_MAXC][GEN_MAXC];
+    double w[GEN_MAXC][GEN_MAXC];
+} gen_graph;
+
+/* Writes the seed, with `extra` added pathways (from[k] -> to[k], weight
+ * mean_w), as the engine writes them. */
+static void gen_json(const gen_graph *g, int extra, const int *from, const int *to,
+                     double mean_w, char *buf, size_t cap) {
+    size_t n = 0;
+    int    i, j, k;
+    n += (size_t)snprintf(buf + n, cap - n, "{\"system_name\":\"g\",\"nodes\":["
+                          "{\"id\":\"src\",\"type\":\"source\",\"initial_value\":1.0,"
+                          "\"quality_input\":1.0}");
+    for (i = 0; i < g->n; i++)
+        n += (size_t)snprintf(buf + n, cap - n, ",{\"id\":\"%c\",\"type\":\"storage\","
+                              "\"current_level\":%d}", 'a' + i, i + 1);
+    n += (size_t)snprintf(buf + n, cap - n, "],\"edges\":[{\"source\":\"src\",\"target\":\"a\","
+                          "\"weight\":1.0}");
+    for (i = 0; i < g->n; i++)
+        for (j = 0; j < g->n; j++)
+            if (g->adj[i][j])
+                n += (size_t)snprintf(buf + n, cap - n, ",{\"source\":\"%c\",\"target\":\"%c\","
+                                      "\"logic\":\"linear\",\"weight\":%.17g}",
+                                      'a' + i, 'a' + j, g->w[i][j]);
+    for (k = 0; k < extra; k++)
+        n += (size_t)snprintf(buf + n, cap - n, ",{\"source\":\"%c\",\"target\":\"%c\","
+                              "\"logic\":\"linear\",\"weight\":%.17g}",
+                              'a' + from[k], 'a' + to[k], mean_w);
+    snprintf(buf + n, cap - n, "],\"simulation_params\":{\"t_val\":1.0,"
+             "\"derivative_order\":2,\"generative_mode\":true}}");
+}
+
+/* Plain transitive closure of the component edges plus the extras. */
+static void gen_reach(const gen_graph *g, int extra, const int *from, const int *to,
+                      int r[GEN_MAXC][GEN_MAXC]) {
+    int i, j, k;
+    for (i = 0; i < g->n; i++)
+        for (j = 0; j < g->n; j++) r[i][j] = i == j || g->adj[i][j];
+    for (k = 0; k < extra; k++) r[from[k]][to[k]] = 1;
+    for (k = 0; k < g->n; k++)
+        for (i = 0; i < g->n; i++)
+            for (j = 0; j < g->n; j++)
+                if (r[i][k] && r[k][j]) r[i][j] = 1;
+}
+
+/* Total empower over the components a.. (not src), by the engine's emergy pass. */
+static int gen_empower(const char *json, double *total) {
+    gia_model m;
+    cJSON    *root;
+    double    em[GEN_MAXC + 1];
+    int       i, r;
+    if (!load_seed(json, &m, &root)) return 0;
+    r = gia_emergy_at(&m, m.t_end, em, NULL);
+    *total = 0.0;
+    for (i = 0; r && i < m.n_nodes; i++)
+        if (strcmp(m.nodes[i].id, "src") != 0) *total += em[i];
+    gia_model_free(&m);
+    cJSON_Delete(root);
+    return r;
+}
+
+/* The oracle: repeat, over ALL ordered pairs (i, j) with i in a sink SCC and
+ * j in a source SCC of a different SCC, the brute-force argmax of total
+ * empower, ties within 1e-9 relative to the first in (from, to) order, until
+ * strongly connected. Returns the number of additions (-1 on failure) and the
+ * initial #sources + #sinks in *bound. */
+static int gen_oracle(const gen_graph *g, double mean_w, int *from, int *to, int *bound) {
+    static char buf[8192];
+    int extra = 0;
+    *bound = -1;
+    for (;;) {
+        int    r[GEN_MAXC][GEN_MAXC], i, j, k, all = 1, n_src = 0, n_snk = 0;
+        int    is_src[GEN_MAXC], is_snk[GEN_MAXC], lead[GEN_MAXC], bi = -1, bj = -1;
+        double best = 0.0;
+        gen_reach(g, extra, from, to, r);
+        for (i = 0; i < g->n; i++) {
+            lead[i] = i;
+            for (j = 0; j < i; j++) if (r[i][j] && r[j][i]) { lead[i] = lead[j]; break; }
+        }
+        for (i = 0; i < g->n; i++) for (j = 0; j < g->n; j++) if (!r[i][j]) all = 0;
+        if (all || g->n < 2) return extra;
+        for (i = 0; i < g->n; i++) { is_src[i] = is_snk[i] = 1; }
+        for (i = 0; i < g->n; i++)
+            for (j = 0; j < g->n; j++)
+                if (lead[i] != lead[j] && r[i][j]) { is_snk[lead[i]] = 0; is_src[lead[j]] = 0; }
+        for (i = 0; i < g->n; i++) if (lead[i] == i) { n_src += is_src[i]; n_snk += is_snk[i]; }
+        if (*bound < 0) *bound = n_src + n_snk;
+        if (extra >= 2 * GEN_MAXC) return -1;
+        for (i = 0; i < g->n; i++) {
+            if (!is_snk[lead[i]]) continue;
+            for (j = 0; j < g->n; j++) {
+                double tot;
+                if (lead[i] == lead[j] || !is_src[lead[j]]) continue;
+                from[extra] = i; to[extra] = j;
+                gen_json(g, extra + 1, from, to, mean_w, buf, sizeof buf);
+                if (!gen_empower(buf, &tot)) return -1;
+                if (bi < 0 || tot > best + 1e-9 * (fabs(best) > 1.0 ? fabs(best) : 1.0)) {
+                    best = tot; bi = i; bj = j;
+                }
+            }
+        }
+        if (bi < 0) return -1;
+        from[extra] = bi; to[extra] = bj;
+        k = extra++;
+        (void)k;
+    }
+}
+
+/* gia_generate with its stdout report silenced. */
+static cJSON *gen_quiet(const gia_model *m) {
+    cJSON *out;
+    int    saved;
+    fflush(stdout);
+    saved = dup(fileno(stdout));
+    if (!freopen("/dev/null", "w", stdout)) { /* keep going: noise, not failure */ }
+    out = gia_generate(m);
+    fflush(stdout);
+    if (saved >= 0) { dup2(saved, fileno(stdout)); close(saved); }
+    return out;
+}
+
+static unsigned gen_lcg(unsigned *s) { *s = *s * 1664525u + 1013904223u; return *s >> 8; }
+
+/* Verifies: FR-ORD-005, FR-ORD-004 (T-ORD-04)
+ * Source: [02 Eq 5.3], [22 Eq 2, §12.1]; ADR 0021 §2. Oracle: for every graph
+ * of a fixed enumeration -- all 2^2 graphs on 2 components, all 2^6 on 3, and
+ * 40 each on 4 and 5 from vv-plan.md §6's LCG -- the pathways gia_generate
+ * appends equal, in order, the brute-force argmax above, computed from its own
+ * transitive closure and condensation; there are at most #sources + #sinks of
+ * them; the result is at Maximum Ordinality; and a second step adds nothing.
+ * The catalogue mutation "first candidate" fails wherever empower decides. */
+static void test_ord_generative(void) {
+    static char buf[8192];
+    unsigned    seed = 20261009u;
+    int         n_graphs = 0, agree = 1, bounded = 1, at_max = 1, fixed = 1, no_comp = 1;
+    int         decided = 0, nc, code;
+
+    printf("\n[T-ORD-04] the generative step: the argmax of total empower\n");
+    for (nc = 2; nc <= 5; nc++) {
+        int count = nc == 2 ? 4 : nc == 3 ? 64 : 40;
+        for (code = 0; code < count; code++) {
+            gen_graph g;
+            int       i, j, bit = 0, from[2 * GEN_MAXC], to[2 * GEN_MAXC], bound, want, n_e = 1;
+            double    sum_w = 1.0, mean_w;
+            gia_model m;
+            cJSON    *root, *out;
+
+            memset(&g, 0, sizeof g);
+            g.n = nc;
+            for (i = 0; i < nc; i++)
+                for (j = 0; j < nc; j++) {
+                    if (i == j) continue;
+                    g.adj[i][j] = nc <= 3 ? (code >> bit) & 1 : (gen_lcg(&seed) % 10) < 3;
+                    g.w[i][j]   = 0.1 * (double)(1 + gen_lcg(&seed) % 5);
+                    if (g.adj[i][j]) { sum_w += g.w[i][j]; n_e++; }
+                    bit++;
+                }
+            mean_w = sum_w / (double)n_e;
+            want   = gen_oracle(&g, mean_w, from, to, &bound);
+            gen_json(&g, 0, from, to, mean_w, buf, sizeof buf);
+            n_graphs++;
+            if (want < 0 || !load_seed(buf, &m, &root)) { agree = 0; continue; }
+            out = gen_quiet(&m);
+            if (!out) { agree = 0; gia_model_free(&m); cJSON_Delete(root); continue; }
+            {
+                const cJSON *edges = cJSON_GetObjectItemCaseSensitive(out, "edges");
+                int          seed_e = n_e, got = cJSON_GetArraySize(edges) - seed_e, k;
+                gia_model    ev;
+                cJSON       *out2;
+                if (got != want) agree = 0;
+                for (k = 0; k < got && k < want; k++) {
+                    const cJSON *e = cJSON_GetArrayItem(edges, seed_e + k);
+                    const cJSON *s = cJSON_GetObjectItemCaseSensitive(e, "source");
+                    const cJSON *t = cJSON_GetObjectItemCaseSensitive(e, "target");
+                    if (!cJSON_IsString(s) || !cJSON_IsString(t) ||
+                        s->valuestring[0] != 'a' + from[k] || t->valuestring[0] != 'a' + to[k]) {
+                        agree = 0;
+                        printf("    graph %d/%d step %d: got %s -> %s, argmax %c -> %c\n", nc,
+                               code, k, cJSON_IsString(s) ? s->valuestring : "?",
+                               cJSON_IsString(t) ? t->valuestring : "?", 'a' + from[k], 'a' + to[k]);
+                    }
+                }
+                if (want > 0 && bound > 0 && want > bound) bounded = 0;
+                if (cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(out, "nodes")) != nc + 1)
+                    no_comp = 0;
+                if (gia_model_load(&ev, out)) {
+                    if (!gia_at_maximum_ordinality(&ev)) at_max = 0;
+                    out2 = gen_quiet(&ev);
+                    if (!out2 || gia_validate_mode(out, out2) != GIA_MODE_FUNCTIONAL) fixed = 0;
+                    cJSON_Delete(out2);
+                    gia_model_free(&ev);
+                } else at_max = 0;
+                /* Count the graphs where empower, not order, chose the first step. */
+                if (want > 0 && (from[0] != 0 || to[0] != 0)) {
+                    int r[GEN_MAXC][GEN_MAXC], a, b, first = 1;
+                    gen_reach(&g, 0, from, to, r);
+                    for (a = 0; a < nc && first; a++)
+                        for (b = 0; b < nc && first; b++)
+                            if (a != b && !(r[a][b] && r[b][a])) {
+                                /* the first (from, to) in order that is a candidate */
+                                int sa = 1, sb = 1, x;
+                                for (x = 0; x < nc; x++) {
+                                    if (!(r[a][x] && r[x][a]) && r[a][x]) sa = 0;
+                                    if (!(r[b][x] && r[x][b]) && r[x][b]) sb = 0;
+                                }
+                                if (sa && sb && !(r[a][b] && r[b][a])) {
+                                    if (a != from[0] || b != to[0]) decided++;
+                                    first = 0;
+                                }
+                            }
+                }
+            }
+            cJSON_Delete(out);
+            gia_model_free(&m);
+            cJSON_Delete(root);
+        }
+    }
+    printf("    %d graphs; in %d the argmax is not the first candidate\n", n_graphs, decided);
+    ok("each pathway appended is the brute-force argmax of total empower", agree);
+    ok("at most #sources + #sinks additions", bounded);
+    ok("the result is at Maximum Ordinality", at_max);
+    ok("a second step adds nothing (a fixed point)", fixed);
+    ok("no component is ever added (ADR 0015's E is retired)", no_comp);
+    ok("empower decides: some graphs' first choice is not the first candidate", decided > 0);
+}
+
+/* Verifies: FR-ORD-004 (T-ORD-03)
+ * Source: ADR 0021 decision 1 (closure decides nothing). Oracle: two disjoint
+ * 2-cycles have closure 1, by hand, and are below maximum; the step still
+ * relates them. Gating the step on closure ("gate on closure") adds nothing. */
+static void test_ord_closure_decides_nothing(void) {
+    gia_model m, ev;
+    cJSON    *root = NULL, *out = NULL;
+    int       grew = 0;
+
+    printf("\n[T-ORD-03] closure decides nothing\n");
+    if (load_seed("{\"system_name\":\"c\",\"nodes\":["
+                  ORD_S("a") "," ORD_S("b") "," ORD_S("c") "," ORD_S("d") "],\"edges\":["
+                  ORD_E("a", "b") "," ORD_E("b", "a") "," ORD_E("c", "d") "," ORD_E("d", "c") "],"
+                  "\"simulation_params\":{\"t_val\":1.0,\"generative_mode\":true}}", &m, &root)) {
+        ok("two disjoint 2-cycles: closure 1, below maximum",
+           gia_closure(&m) == 1.0 && !gia_at_maximum_ordinality(&m));
+        out = gen_quiet(&m);
+        grew = out && gia_model_load(&ev, out);
+        ok("the step still relates them, to Maximum Ordinality",
+           grew && gia_at_maximum_ordinality(&ev));
+        if (grew) gia_model_free(&ev);
+        cJSON_Delete(out);
+        gia_model_free(&m);
+        cJSON_Delete(root);
+    } else ok("loads", 0);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -2396,6 +2700,9 @@ int main(void) {
     test_ord_record();
     test_ord_maximum();
     test_ord_adr_table();
+    test_ord_generative();
+    test_ord_closure_decides_nothing();
+    test_ord_adr_table_generative();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

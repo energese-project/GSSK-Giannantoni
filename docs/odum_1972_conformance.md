@@ -287,8 +287,11 @@ open component at once, adding only the direction each is missing, and the
 engine rescans before saying so. It never closes a sink — Odum §V's heat sink
 is where used energy leaves, and drawing on it would recycle it — so a model
 with a heat sink reaches a stated fixed point below maximum. Whether Odum's
-boundary, sources and sinks, should count toward ordinality at all is left
-open.
+boundary, sources and sinks, should count toward ordinality at all was left
+open there; [ADR 0021](adr/0021-ordinality-and-the-generative-step.md) settles
+it (they are habitat, and are not counted) and replaces the emergent quality
+with one pathway at a time between existing components, chosen by maximum
+empower.
 
 All nine GSSK primitive node types are accepted: `source` and `constant` are
 held rather than integrated (§II), a `sink` is never depleted (§V), and

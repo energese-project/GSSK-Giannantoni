@@ -29,7 +29,8 @@
  *   - the harmony matrix is built from roots of unity          assumed    (E5)
  *   - the Ordinality record and Maximum Ordinality (ADR 0021)  implemented
  *     (gia_closure, the fraction on a cycle, is a proxy, E6)
- *   - gia_generate is the ADR 0015 heuristic                   illustrative (E7)
+ *   - gia_generate: one pathway at a time by maximum empower  implemented (E7)
+ *     (ADR 0021 §2, [02 Eq 5.3])
  *   - the First and Second Fundamental Equations are in mop.h  (E8)
  * The derivative identities (Sections 1-2) and the emergy algebra are
  * Giannantoni's and Odum's own, and are implemented. The CLI prints one
@@ -853,14 +854,17 @@ void gia_print_trajectories(const gia_model *m, int steps);
  * is already at Maximum Ordinality, or generative mode is off, the returned
  * graph compares equal to the input and the run is functional.
  *
- * Otherwise (ADR 0015) one emergent quality -- a component typed `storage`,
- * never a module -- closes EVERY open component at once, adding only the
- * direction each is missing, so one step reaches the fixed point and a second
- * changes nothing. A sink is never closed or drawn from, so a model whose only
- * open component is a sink is returned unchanged below maximum. Hub ties break
- * by id and added legs are emitted in id order, so reordering a model appends
- * byte-identical output. The result is rescanned before closure is claimed; if
- * the rescan disagrees the seed is returned unchanged.
+ * Otherwise (ADR 0021 §2, FR-ORD-005) it adds one `linear` pathway at a time,
+ * of the seed's mean edge weight, from a component in a sink SCC of the
+ * component graph's condensation to one in a source SCC, choosing the
+ * candidate that maximises total empower at t_end -- the components' summed
+ * empower, the discrete form of [02 Eq 5.3] -- with ties within 1e-9 relative
+ * going to the lexicographically first (from, to). It stops at Maximum
+ * Ordinality, within #sources + #sinks additions. No component is added, and
+ * habitat (sources, sinks, constants) is never joined. Candidates are
+ * enumerated in id order, so reordering a model appends byte-identical
+ * output. A model the emergy pass cannot evaluate, or with fewer than two
+ * components, is returned unchanged.
  * ================================================================== */
 
 cJSON *gia_generate(const gia_model *m);
