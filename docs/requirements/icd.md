@@ -125,6 +125,11 @@ gia_status gia_mop_solve(int N, const gia_beta *beta /* N*N, diagonal ignored */
                          const char **why);                                 /* FR-MOP-003 */
 void       gia_matrioska_free(gia_matrioska *m);
 
+typedef double complex (*gia_quad_fn)(double t, void *ctx);
+gia_status gia_quad_gk15(gia_quad_fn g, void *ctx, double lo, double hi, double tol,
+                         int max_depth, double complex *integral, double *err,
+                         const char **why);                                 /* NFR-NUM-005 */
+
 typedef struct { double complex A; double complex B[2][2]; } gia_second;
 gia_status gia_mop_second(double complex alpha12_0, double c1, double c2, int N, double t,
                           gia_second *out, gia_matrioska *r, const char **why);  /* FR-MOP-005 */

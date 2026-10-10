@@ -122,7 +122,7 @@ MODEL ?= examples/giannantoni/input.json
 # The Giannantoni library units. Defined here, ahead of every rule that uses
 # them, because a prerequisite list is expanded when its rule is read.
 GIA_UNIT_SRCS = $(SRC_DIR)/engine.c $(SRC_DIR)/validation.c \
-                $(SRC_DIR)/projection.c $(SRC_DIR)/idc.c
+                $(SRC_DIR)/projection.c $(SRC_DIR)/idc.c $(SRC_DIR)/mop.c
 GIA_OBJS = $(patsubst $(SRC_DIR)/%.c,$(LIB_DIR)/%.o,$(GIA_UNIT_SRCS))
 
 # Simulation objects. sim_main.o carries the entry point, kept out of

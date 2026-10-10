@@ -15,6 +15,7 @@
 #include "engine.h"
 #include "gia_status.h"
 #include "idc.h"
+#include "mop.h"
 
 #include <complex.h>
 #include <float.h>
@@ -22,6 +23,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 /* vv-plan.md §3 */
 #define TOL_CLOSED   1e-12   /* closed form, well-conditioned: relative      */
@@ -1208,6 +1213,371 @@ static void test_em_circle_product(void) {
        gia_circle_product(&b, &a, &c, &why) == GIA_E_ARG && why != NULL);
 }
 
+/* ------------------------------------------------------------------ *
+ * 7.3 MOP — the First Fundamental Equation
+ * ------------------------------------------------------------------ */
+
+static gia_beta affine(double complex a, double complex b, double p) {
+    gia_beta be;
+    memset(&be, 0, sizeof(be));
+    be.kind = GIA_BETA_AFFINE; be.a = a; be.b = b; be.p = p;
+    return be;
+}
+
+static double complex beta_at(const gia_beta *be, double t) {
+    return cpow(be->a + be->b * t, be->p);
+}
+
+/* (alpha'/alpha)^k alpha - beta at t, with alpha' by central difference
+ * (h = 1e-5 max(1, t)) of gia_mop_couple's own output, relative to |beta|.
+ * k integer uses gia_idc_of (FR-IDC-002); k = 1/2 the principal square root. */
+static double first_eq_residual(const gia_beta *be, gia_rational k, double t) {
+    double         h = 1e-5 * (t > 1.0 ? t : 1.0);
+    double complex al, ap, am, inc = 0.0, b = beta_at(be, t);
+    if (gia_mop_couple(be, k, t, &al, NULL) != GIA_OK ||
+        gia_mop_couple(be, k, t + h, &ap, NULL) != GIA_OK ||
+        gia_mop_couple(be, k, t - h, &am, NULL) != GIA_OK) return INFINITY;
+    if (k.den == 1) {
+        if (gia_idc_of(al, (ap - am) / (2.0 * h), k.num, &inc, NULL) != GIA_OK) return INFINITY;
+    } else {
+        inc = cpow((ap - am) / (2.0 * h) / al, (double)k.num / (double)k.den) * al;
+    }
+    return cabs(inc - b) / cabs(b);
+}
+
+/* Source: [23 Eq 5.4.2, 5.5.2]; PLAN R1; numerics N1.
+ * Oracle: the defining equation's residual, on the grid
+ * k in {1, 2, 3} x p in {0, 1/2, 1, 2} x b in {0, 0.25, 1}, with a real
+ * (a = 1.3) and complex (a = 1 + 0.5i, b scaled by 1 - 0.4i), at t = 0.5, 1, 2;
+ * plus k = 1/2 with real positive a, b. */
+/* Verifies: FR-MOP-001, NFR-NUM-001 (T-MOP-01) */
+static void test_mop_first_residual(void) {
+    static const double ps[] = { 0.0, 0.5, 1.0, 2.0 }, bs[] = { 0.0, 0.25, 1.0 };
+    static const double ts[] = { 0.5, 1.0, 2.0 };
+    double worst = 0.0, worst_half = 0.0;
+    int    k, ip, ib, it, cx;
+
+    printf("\n[T-MOP-01] First Equation: residual of (d~/dt)^k alpha = beta\n");
+    for (k = 1; k <= 3; k++)
+        for (ip = 0; ip < 4; ip++)
+            for (ib = 0; ib < 3; ib++)
+                for (cx = 0; cx < 2; cx++) {
+                    double complex a = cx ? 1.0 + 0.5 * I : 1.3;
+                    double complex b = cx ? bs[ib] * (1.0 - 0.4 * I) : bs[ib];
+                    gia_beta be = affine(a, b, ps[ip]);
+                    gia_rational kk = { k, 1 };
+                    for (it = 0; it < 3; it++) {
+                        double r = first_eq_residual(&be, kk, ts[it]);
+                        if (!(r <= worst)) worst = r;
+                    }
+                }
+    printf("    worst relative residual over 216 cases: %.3g\n", worst);
+    ok("k = 1,2,3 x p = 0,1/2,1,2 x b = 0,.25,1, real and complex: <= 1e-6",
+       worst <= TOL_RESIDUAL);
+    for (ip = 0; ip < 4; ip++)
+        for (ib = 0; ib < 3; ib++) {
+            gia_beta be = affine(1.3, bs[ib], ps[ip]);
+            gia_rational half = { 1, 2 };
+            for (it = 0; it < 3; it++) {
+                double r = first_eq_residual(&be, half, ts[it]);
+                if (!(r <= worst_half)) worst_half = r;
+            }
+        }
+    ok("k = 1/2, real positive a, b: <= 1e-6", worst_half <= TOL_RESIDUAL);
+}
+
+/* The printed forms of [23 Eq 5.5.7] and [23 Eq 5.5.8], as
+ * probes/eq_5_5_8_residual.py writes them. */
+static double printed_557(double a, double b, double p, double k, double t) {
+    double I_ = (pow(a + b * t, (p + k) / k) - pow(a, (p + k) / k)) * k / (b * (p + k));
+    return (1.0 / k) * pow(I_, k);
+}
+static double printed_558(double a, double b, double p, double k, double t) {
+    return (1.0 / (k * b)) * pow((k / (p + k)) * pow(a + b * t, p / k + 1.0), k);
+}
+static double printed_residual(double (*f)(double, double, double, double, double), double t) {
+    const double a = 1.0, b = 0.25, p = 1.0, k = 2.0, h = 1e-6;
+    double d = (f(a, b, p, k, t + h) - f(a, b, p, k, t - h)) / (2.0 * h), v = f(a, b, p, k, t);
+    return pow(d / v, k) * v - pow(a + b * t, p);
+}
+
+/* Source: [23 Eq 5.5.7-5.5.8]; PLAN X1; probes/eq_5_5_8_residual.py.
+ * The printed solutions leave residuals 1.25 and -0.625 at (1, 0.25, 1, 2),
+ * t = 1, where the derived one leaves 0. */
+/* Verifies: FR-MOP-001 (T-MOP-02) */
+static void test_mop_x1(void) {
+    double r7 = printed_residual(printed_557, 1.0), r8 = printed_residual(printed_558, 1.0);
+    gia_beta be = affine(1.0, 0.25, 1.0);
+    gia_rational k2 = { 2, 1 };
+
+    printf("\n[T-MOP-02] X1: the printed [23 Eq 5.5.7-5.5.8] do not solve Eq 5.5.2\n");
+    printf("    printed 5.5.7: %.6g   printed 5.5.8: %.6g   derived: %.3g\n", r7, r8,
+           first_eq_residual(&be, k2, 1.0));
+    ok("printed 5.5.7 residual = 1.25 (> 100x tol)", fabs(r7 - 1.25) < 1e-4 && fabs(r7) > 100 * TOL_RESIDUAL);
+    ok("printed 5.5.8 residual = -0.625 (> 100x tol)", fabs(r8 + 0.625) < 1e-4 && fabs(r8) > 100 * TOL_RESIDUAL);
+    ok("the derived solution's residual is <= 1e-6", first_eq_residual(&be, k2, 1.0) <= TOL_RESIDUAL);
+}
+
+/* Source: PLAN R1 ([23 Eq 5.5.5]: lower limit 0); numerics N1.
+ * alpha(0) = 0 exactly; as b -> 0 the solution tends to the b = 0 one,
+ * (beta^{1/k} t / k)^k, continuously and to 1e-12 (no separate naive branch). */
+/* Verifies: FR-MOP-001, NFR-NUM-002 (T-MOP-03) */
+static void test_mop_b_to_zero(void) {
+    double complex al;
+    gia_rational   k2 = { 2, 1 };
+    gia_beta       be;
+    double         b;
+    int            all = 1;
+    /* a = 1, p = 1, k = 2, t = 1: alpha(b = 0) = (1 * 1 / 2)^2 = 0.25. */
+    printf("\n[T-MOP-03] alpha(0) = 0; continuity through b = 0\n");
+    be = affine(1.0, 0.25, 1.0);
+    ok("alpha(0) = 0 exactly", gia_mop_couple(&be, k2, 0.0, &al, NULL) == GIA_OK && al == 0.0);
+    be = affine(1.0, 0.0, 1.0);
+    ok("b = 0: alpha = (beta^{1/k} t / k)^k = 0.25",
+       gia_mop_couple(&be, k2, 1.0, &al, NULL) == GIA_OK && near_c(al, 0.25, TOL_CLOSED));
+    for (b = 1e-6; b >= 1e-14; b /= 100.0) {
+        /* exact: [((1+b)^{3/2} - 1)/(3b/... )]^2 -> 0.25 (1 + b/2 + ...)^2; the
+         * first-order term is 0.25 * (1 + 3b/4 ... ); within 1e-12 once b <= 1e-12 */
+        be = affine(1.0, b, 1.0);
+        if (gia_mop_couple(&be, k2, 1.0, &al, NULL) != GIA_OK ||
+            !(cabs(al - 0.25) <= 0.25 * (b + 1e-14))) all = 0;
+    }
+    ok("b = 1e-6 .. 1e-14: alpha -> 0.25 with error O(b), no jump", all);
+}
+
+/* Source: [23 Eq 5.6.1]. */
+/* Verifies: FR-MOP-003 (T-MOP-04) */
+static void test_mop_matrioska(void) {
+    gia_beta      be[16];
+    gia_matrioska M;
+    gia_rational  k1 = { 1, 1 };
+    const char   *why = NULL;
+    int           i, j, related = 0, diag = 1, indep = 1;
+
+    printf("\n[T-MOP-04] the Matrioska: zero diagonal, N(N-1) independent couples\n");
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 4; j++)
+            be[i * 4 + j] = affine(1.0 + i, 0.1 * (j + 1), 1.0);
+    be[1 * 4 + 3].kind = GIA_BETA_NONE;                 /* one unrelated couple */
+    memset(&M, 0, sizeof M);
+    ok("solves N = 4", gia_mop_solve(4, be, k1, 1.0, &M, &why) == GIA_OK && M.N == 4);
+    if (!M.a || !M.related) {
+        ok("diagonal, couples and independence (not reached)", 0);
+        return;
+    }
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 4; j++) {
+            double complex want;
+            if (i == j) { if (M.related[i * 4 + j] || M.a[i * 4 + j] != 0.0) diag = 0; continue; }
+            if (!M.related[i * 4 + j]) continue;
+            related++;
+            (void)gia_mop_couple(&be[i * 4 + j], k1, 1.0, &want, NULL);
+            if (M.a[i * 4 + j] != want) indep = 0;
+        }
+    ok("diagonal: unrelated, 0", diag);
+    ok("N(N-1) - 1 = 11 related couples; the NONE couple is unrelated, not 0",
+       related == 11 && !M.related[1 * 4 + 3]);
+    ok("each entry is its couple solved alone", indep);
+    gia_matrioska_free(&M);
+    be[0 * 4 + 1] = affine(1.0, -1.0, 1.0);             /* a + b t = 0 at t = 1 */
+    ok("a failing couple: the status, nothing allocated",
+       gia_mop_solve(4, be, k1, 2.0, &M, &why) == GIA_E_DOMAIN);
+}
+
+/* Source: PLAN R1; numerics N1, §1. */
+/* Verifies: FR-MOP-002, NFR-NUM-004 (T-MOP-05) */
+static void test_mop_domain(void) {
+    double complex al = SENTINEL_C;
+    const char    *why;
+    gia_beta       be;
+    gia_rational   half = { 1, 2 }, k1 = { 1, 1 }, k0 = { 0, 1 }, kneg = { -1, 1 }, kbad = { 1, 0 };
+    int            untouched = 1;
+
+    printf("\n[T-MOP-05] the First Equation's domain\n");
+    why = NULL; be = affine(1.0 + 0.5 * I, 0.25, 1.0);
+    ok("non-integer k with complex a: GIA_E_DOMAIN, with a reason",
+       gia_mop_couple(&be, half, 1.0, &al, &why) == GIA_E_DOMAIN && why);
+    why = NULL; be = affine(1.0, -0.25, 1.0);
+    ok("non-integer k with b < 0: GIA_E_DOMAIN",
+       gia_mop_couple(&be, half, 1.0, &al, &why) == GIA_E_DOMAIN);
+    why = NULL; be = affine(1.0, -1.0, 1.0);
+    ok("a + b t = 0 on [0, t] (t* = 1 < 2): GIA_E_DOMAIN",
+       gia_mop_couple(&be, k1, 2.0, &al, &why) == GIA_E_DOMAIN && why);
+    ok("  but t = 0.5, before the zero, solves", gia_mop_couple(&be, k1, 0.5, &al, &why) == GIA_OK);
+    al = SENTINEL_C; why = NULL; be = affine(1.0, 0.25, -1.0);
+    ok("p = -k with b != 0: GIA_E_DOMAIN",
+       gia_mop_couple(&be, k1, 1.0, &al, &why) == GIA_E_DOMAIN && why);
+    if (al != SENTINEL_C) untouched = 0;
+    ok("k = 0, k < 0, den = 0: refused",
+       gia_mop_couple(&be, k0, 1.0, &al, &why) == GIA_E_DOMAIN &&
+       gia_mop_couple(&be, kneg, 1.0, &al, &why) == GIA_E_DOMAIN &&
+       gia_mop_couple(&be, kbad, 1.0, &al, &why) == GIA_E_ARG);
+    ok("outputs untouched on refusal", untouched);
+    ok("t < 0 is GIA_E_ARG", gia_mop_couple(&be, k1, -1.0, &al, &why) == GIA_E_ARG);
+}
+
+/* Source: [23 Eq 5.5.5-5.5.7]; PLAN R1; numerics N2. */
+/* Verifies: FR-MOP-004, NFR-NUM-004 (T-MOP-06) */
+static void test_mop_samples(void) {
+    static const double         ta[3] = { 0.0, 1.0, 2.0 };
+    static const double complex va[3] = { 1.0 + 0.5 * I, 1.25 + 0.4 * I, 1.5 + 0.3 * I };
+    /* Crosses the negative real axis between t = 1 and 2 (at -1 + 0i). */
+    static const double         tc[3] = { 0.0, 1.0, 2.0 };
+    static const double complex vc[3] = { 1.0 + 0.5 * I, -1.0 + 0.5 * I, -1.0 - 0.5 * I };
+    gia_beta      s, aff;
+    gia_rational  k1 = { 1, 1 }, k2 = { 2, 1 };
+    double complex x, y, lo, hi;
+    const char   *why = NULL;
+    int           all = 1, kk;
+    double        t;
+
+    printf("\n[T-MOP-06] sampled boundary conditions\n");
+    memset(&s, 0, sizeof s);
+    s.kind = GIA_BETA_SAMPLES; s.n = 3; s.t = ta; s.v = va;
+    /* Affine through the same points: beta = (1 + 0.5i) + (0.25 - 0.1i) t, p = 1. */
+    aff = affine(1.0 + 0.5 * I, 0.25 - 0.1 * I, 1.0);
+    for (kk = 1; kk <= 2; kk++)
+        for (t = 0.0; t <= 2.0 + 1e-12; t += 0.25) {
+            gia_rational k = kk == 1 ? k1 : k2;
+            if (gia_mop_couple(&s, k, t, &x, &why) != GIA_OK ||
+                gia_mop_couple(&aff, k, t, &y, &why) != GIA_OK ||
+                !near_c(x, y, TOL_QUAD)) all = 0;
+        }
+    ok("samples of an affine beta reproduce N1 to 1e-9 (k = 1, 2)", all);
+
+    s.t = tc; s.v = vc;
+    ok("a path across the negative real axis: solves at t = 2",
+       gia_mop_couple(&s, k2, 2.0, &x, &why) == GIA_OK);
+    (void)gia_mop_couple(&s, k2, 1.5 - 1e-7, &lo, &why);
+    (void)gia_mop_couple(&s, k2, 1.5 + 1e-7, &hi, &why);
+    ok("  continuously: no jump where it crosses (|da| ~ dt)", cabs(hi - lo) < 1e-5);
+    {
+        /* Independent oracle: the test unwraps the phase itself, step by step
+         * (|d theta| < pi per step), and integrates |beta|^{1/2} e^{i theta/2}
+         * by the composite midpoint rule, 400,000 steps. A principal root taken
+         * per point flips the integrand's sign past the crossing. */
+        const int      steps = 400000;
+        double         h = 2.0 / steps, th = carg(vc[0]), prev_arg = carg(vc[0]);
+        double complex acc = 0.0, want;
+        int            q;
+        for (q = 0; q < steps; q++) {
+            double         tm = (q + 0.5) * h, w = tm < 1.0 ? tm : tm - 1.0;
+            double complex bt = tm < 1.0 ? vc[0] + w * (vc[1] - vc[0]) : vc[1] + w * (vc[2] - vc[1]);
+            double         a = carg(bt), d = a - prev_arg;
+            if (d > M_PI) d -= 2.0 * M_PI;
+            if (d < -M_PI) d += 2.0 * M_PI;
+            th += d; prev_arg = a;
+            acc += sqrt(cabs(bt)) * cexp(I * th / 2.0) * h;
+        }
+        want = (acc / 2.0) * (acc / 2.0);         /* alpha = ((1/k) int)^k, k = 2 */
+        ok("  and agrees with an independently unwrapped integral (1e-6)",
+           near_c(x, want, 1e-6));
+    }
+    ok("t past the last sample: GIA_E_DOMAIN", gia_mop_couple(&s, k1, 2.5, &x, &why) == GIA_E_DOMAIN);
+    {
+        static const double         tz[2] = { 0.0, 1.0 };
+        static const double complex vz[2] = { 1.0, -1.0 };       /* through 0 at t = 1/2 */
+        s.t = tz; s.v = vz; s.n = 2;
+        ok("a segment through beta = 0: GIA_E_DOMAIN",
+           gia_mop_couple(&s, k1, 1.0, &x, &why) == GIA_E_DOMAIN);
+    }
+}
+
+/* E(x)'s series, long double: E(x) = sum_{n>=0} binom(q, n+1) x^n / q. */
+static long double e_series(long double q, long double x) {
+    long double term = q, sum = 0.0L;    /* binom(q, 1) = q */
+    int n;
+    for (n = 0; n < 60; n++) {
+        sum += term * powl(x, (long double)n);
+        term *= (q - (long double)(n + 1)) / (long double)(n + 2);
+    }
+    return sum / q;
+}
+
+/* Source: numerics.md N1; probes/first_equation_numerics.py.
+ * a = 1, b = 0.25, p = 1, k = 2, so q = 3/2 and alpha = (t/2 E(x))^2, x = bt.
+ * The naive closed form loses 5.9e-5 at x = 1e-11; the unified form keeps
+ * 1e-12 against the long-double series. */
+/* Verifies: NFR-NUM-002, FR-MOP-001 (T-NUM-01) */
+static void test_num_cancellation(void) {
+    static const double xs[] = { 1e-2, 1e-5, 1e-8, 1e-11 };
+    gia_beta     be = affine(1.0, 0.25, 1.0);
+    gia_rational k2 = { 2, 1 };
+    size_t       i;
+    int          all = 1;
+
+    printf("\n[T-NUM-01] no cancellation near t = 0\n");
+    for (i = 0; i < 4; i++) {
+        double         t = xs[i] / 0.25;
+        long double    S = (long double)t / 2.0L * e_series(1.5L, (long double)xs[i]);
+        double         want = (double)(S * S);
+        double complex al;
+        if (gia_mop_couple(&be, k2, t, &al, NULL) != GIA_OK ||
+            !(fabs(creal(al) - want) <= TOL_CLOSED * want)) {
+            printf("    x = %g: got %.17g want %.17g\n", xs[i], creal(al), want);
+            all = 0;
+        }
+    }
+    ok("relative error <= 1e-12 for x = 1e-2, 1e-5, 1e-8, 1e-11", all);
+}
+
+/* Verifies: NFR-NUM-003 (T-NUM-02) */
+static void test_num_overflow(void) {
+    gia_beta       be = affine(1e200, 0.0, 2.0);
+    gia_rational   k1 = { 1, 1 }, k3 = { 3, 1 };
+    double complex al = SENTINEL_C;
+    const char    *why = NULL;
+    printf("\n[T-NUM-02] never a non-finite value\n");
+    ok("alpha = beta t = 1e400 overflows: GIA_E_RANGE",
+       gia_mop_couple(&be, k1, 1.0, &al, &why) == GIA_E_RANGE && al == SENTINEL_C);
+    be = affine(1e300, 0.0, 3.0);         /* S = 1e300 t/3 finite, S^3 is not */
+    ok("S^k past DBL_MAX (k = 3): GIA_E_RANGE",
+       gia_mop_couple(&be, k3, 1.0, &al, &why) == GIA_E_RANGE);
+}
+
+static double complex q_sqrt_recip(double t, void *c) { (void)c; return 1.0 / sqrt(t); }
+static double complex q_smooth(double t, void *c) { (void)c; return cexp(I * 3.0 * t) * (1.0 + t * t); }
+
+/* Source: numerics N2; NFR-NUM-005. */
+/* Verifies: NFR-NUM-005, NFR-NUM-001 (T-NUM-03) */
+static void test_num_quadrature(void) {
+    double complex I_, exact;
+    double         err = -1.0;
+    const char    *why = NULL;
+    printf("\n[T-NUM-03] the quadrature reports its error, and refuses\n");
+    /* int_0^2 e^{3it} (1 + t^2) dt by parts. */
+    {
+        double complex w = 3.0 * I, e2 = cexp(2.0 * w);
+        exact = (e2 - 1.0) / w + (e2 * (4.0 / w - 4.0 / (w * w) + 2.0 / (w * w * w)) - 2.0 / (w * w * w));
+    }
+    ok("smooth integrand: converges to 1e-10",
+       gia_quad_gk15(q_smooth, NULL, 0.0, 2.0, 1e-10, 50, &I_, &err, &why) == GIA_OK &&
+       near_c(I_, exact, TOL_QUAD));
+    ok("  and its error estimate bounds the true error", err >= cabs(I_ - exact));
+    ok("an integrable singularity (1/sqrt t at 0) past 50 levels: GIA_E_CONVERGENCE",
+       gia_quad_gk15(q_sqrt_recip, NULL, 0.0, 1.0, 1e-14, 50, &I_, &err, &why) == GIA_E_CONVERGENCE);
+}
+
+/* Source: PLAN §1 B6, G6. */
+/* Verifies: NFR-NUM-006 (T-NUM-04) */
+static void test_num_no_clamp(void) {
+    gia_beta       be = affine(-2.0, 0.5, 1.0);
+    gia_rational   k1 = { 1, 1 }, k3 = { 3, 1 };
+    double complex al;
+    printf("\n[T-NUM-04] negative and complex coordinates survive\n");
+    /* k = 1: alpha = int_0^t (-2 + 0.5 s) ds = -2t + t^2/4. */
+    ok("negative beta: alpha = -2t + t^2/4 = -1.75 at t = 1",
+       gia_mop_couple(&be, k1, 1.0, &al, NULL) == GIA_OK && near_c(al, -1.75, TOL_CLOSED));
+    /* k = 3, beta = -1: alpha = (beta^{1/3} t/3)^3 = -t^3/27 (principal cube
+     * root e^{i pi/3}, cubed: e^{i pi} = -1). */
+    be = affine(-1.0, 0.0, 1.0);
+    ok("k = 3, beta = -1: alpha = -1/27 at t = 1, sign intact",
+       gia_mop_couple(&be, k3, 1.0, &al, NULL) == GIA_OK && near_c(al, -1.0 / 27.0, TOL_CLOSED));
+    be = affine(0.5 - 2.0 * I, 0.0, 1.0);
+    ok("complex beta, k = 1: alpha = beta t", gia_mop_couple(&be, k1, 2.0, &al, NULL) == GIA_OK &&
+                                               near_c(al, 1.0 - 4.0 * I, TOL_CLOSED));
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -1231,6 +1601,16 @@ int main(void) {
     test_em_limits();
     test_em_ordinal_forms();
     test_em_circle_product();
+    test_mop_first_residual();
+    test_mop_x1();
+    test_mop_b_to_zero();
+    test_mop_matrioska();
+    test_mop_domain();
+    test_mop_samples();
+    test_num_cancellation();
+    test_num_overflow();
+    test_num_quadrature();
+    test_num_no_clamp();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

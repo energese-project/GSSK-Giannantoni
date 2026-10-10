@@ -180,28 +180,28 @@ For `β(t) = (a + b t)^p` and cardinality k, the kernel shall compute the soluti
 `α(t) = [((a+bt)^{(p+k)/k} − a^{(p+k)/k}) / (b(p+k))]^k` for `b ≠ 0`, and `α(t) = (β^{1/k} t / k)^k`
 for `b = 0`, computed per numerics N1. The printed forms [23 Eq 5.5.7–5.5.8] shall not be used.
 - **Source:** [23 Eq 5.4.2, 5.5.2–5.5.6]; PLAN R1, X1
-- **Verification:** T-MOP-01, T-MOP-02, T-MOP-03, T-NUM-01 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-01, T-MOP-02, T-MOP-03, T-NUM-01 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-002 — Domain of the First Equation
 The kernel shall accept integer `k ≥ 1` with real or complex a, b, and rational non-integer k only with
 real `a > 0`, `b ≥ 0`. It shall refuse any other k, `a + bt = 0` on `[0, t]`, and `b(p + k) = 0`
 with `b ≠ 0`.
 - **Source:** PLAN R1; numerics N1
-- **Verification:** T-MOP-05 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-05 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-003 — The Matrioska
 For N components and a boundary condition per couple, the kernel shall solve each couple independently
 and return the internal-representation Matrioska with a zero diagonal and `N(N−1)` entries; couples
 without a boundary condition shall be marked unrelated, not zero.
 - **Source:** [23 Eq 5.4.1–5.4.2, 5.6.1]
-- **Verification:** T-MOP-04 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-004 — Sampled boundary conditions
 For β given as samples `(tᵢ, βᵢ)`, linearly interpolated, the kernel shall compute
 `α(t) = {(1/k) ∫₀ᵗ β^{1/k}}^k` by adaptive quadrature with the branch of `β^{1/k}` continued along t
 from the principal branch at `t = 0` (numerics N2), and shall refuse t outside the sampled range.
 - **Source:** [23 Eq 5.5.5–5.5.7]; PLAN R1
-- **Verification:** T-MOP-06 · **Priority:** Should · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-06 · **Priority:** Should · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-005 — Second Fundamental Equation (printed solution)
 Given `α₁₂(0)`, `c₁`, `c₂` and N, the kernel shall evaluate `A(t) = α₁₂(0) ∘ r + ln(c₁ + c₂t)`, the
@@ -372,36 +372,36 @@ Closed-form results shall have relative error ≤ 1e-12 where the condition numb
 (numerics.md) is ≤ 10; residuals of defining equations shall be ≤ 1e-6 relative; quadrature shall meet
 a requested relative tolerance of 1e-10 or report failure.
 - **Source:** vv-plan.md §3
-- **Verification:** T-MOP-01, T-IDC-04, T-NUM-03 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-01, T-IDC-04, T-NUM-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-002 — No cancellation near t = 0
 FR-MOP-001 shall retain relative error ≤ 1e-12 for `|b t / a|` from 1e-12 to 1, and shall be continuous
 as b → 0.
 - **Source:** numerics N1
-- **Verification:** T-NUM-01, T-MOP-03 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-NUM-01, T-MOP-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-003 — Never emit a non-finite value
 No library function shall return, and the CLI shall not write, an infinity or NaN; a result that would
 overflow shall be refused with `GIA_E_RANGE`.
 - **Source:** `AGENTS.md` §Fail-Safe; numerics N1, N6
-- **Verification:** T-NUM-02 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-NUM-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-004 — One branch policy
 Every multivalued function shall use the branch stated in numerics.md for it, and no other.
 - **Source:** numerics.md §1
-- **Verification:** T-MOP-05, T-MOP-06 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-05, T-MOP-06 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-005 — Quadrature reports its error
 Every adaptive quadrature shall return an error estimate, and shall return `GIA_E_CONVERGENCE` when it
 cannot meet its tolerance within its subdivision limit.
 - **Source:** numerics N2
-- **Verification:** T-NUM-03 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-NUM-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-NUM-006 — No clamping in the Giannantoni units
 The Giannantoni units shall not clamp, floor or take absolute values of signed or complex coordinates
 to keep them "physical"; `AGENTS.md`'s clamp applies to the GSSK kernel only.
 - **Source:** PLAN §1 B6, G6
-- **Verification:** T-NUM-04 · **Priority:** Must · **Status:** planned · **Task:** guard-agents-wording
+- **Verification:** T-NUM-04 · **Priority:** Must · **Status:** implemented · **Task:** guard-agents-wording
 
 ### NFR-DET-001 — Bit-identical repeats
 The same binary on the same input shall produce byte-identical output.

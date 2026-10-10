@@ -65,6 +65,17 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   a duet-binary is 2 × 2. It needs the shape because the circle product of [06b Eq 2] is defined
   as a column ∘ a row.
 
+### `mop-first-equation`
+
+- **IF-API-004 gains `gia_quad_gk15`.** T-NUM-03 requires that "an integrable singularity beyond the
+  subdivision limit returns `GIA_E_CONVERGENCE`". Through `gia_mop_couple` this cannot happen: a
+  piecewise-linear β that avoids 0 gives a bounded, continuous integrand. Exposing the N2 integrator
+  makes its error estimate and its refusal testable directly.
+- **`mop.h` does not include `relational.h` yet**, and FR-MOP-007 (relational-valued couples) is
+  deferred to `mop-relational-algebra`, which creates that header. The seed's `mop` block, the MOP
+  CSV and the CLI exit codes (IF-JSON-001, IF-OUT-002, IF-CLI-001, FR-OUT-002, NFR-ROB-001) follow in
+  `mop-seed-cli`, which splits from this task to keep each PR reviewable.
+
 ---
 
 ## [Revision 3] — 2026-10-09

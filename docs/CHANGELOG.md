@@ -56,6 +56,13 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The MOP's First Fundamental Equation, `gia_mop_*`** (PLAN.md W4 `mop-first-equation`, FR-MOP-001…004, NFR-NUM-001…006). New `include/mop.h` and `src/mop.c` solve `(d̃/dt)^k α = β` per couple, with `α(0) = 0`. The solution is the one derived from [23 Eq 5.5.6], `α = {(1/k)∫β^{1/k}}^k`; the printed [23 Eq 5.5.7–5.5.8] leave residuals of 1.25 and −0.625 (erratum X1, ADR 0019).
+  - **Affine-power β:** numerics N1's unified form. It holds 1e-12 relative error down to `bt/a = 1e-11`, where the naive closed form loses 5.9e-5, and is continuous through `b = 0`.
+  - **Sampled β:** adaptive Gauss–Kronrod 7–15 on a phase continued across the negative real axis.
+  - **`gia_mop_solve`:** builds the Matrioska, marking couples with no boundary condition as unrelated rather than zero.
+  - **Domain:** the First Equation's domain (FR-MOP-002) is refused by name. Overflow is `GIA_E_RANGE`, never inf, and nothing is clamped.
+  - **`gia_quad_gk15`:** the integrator, exposed so that its error estimate and its refusal are testable.
+
 - **The ordinal forms of the emergy processes, and the circle product** (PLAN.md W3 `emergy-ordinal-forms`, FR-EM-005, FR-EM-006).
   - `gia_oform_*` builds co-production as a binary (a column of two `Em(u)` branches), interaction as a duet (a row `[Em(u₁), Em(u₂)]`), and feedback as the specular duet-binary `[[a₁, a₂], [a₂, a₁]]` [22 Eq 6–8].
   - `gia_circle_product` keeps every pair of factors, so `(a₁; a₂) ∘ [b₁, b₂] = [(a₁b₁; a₂b₁), (a₁b₂; a₂b₂)]` before reduction [06b Eq 2]. `l ∘ l` is the du-et `[l, l]`, not `l²` [02 Eq 14.11.5].
