@@ -79,7 +79,7 @@ kernel shall solve `f' + A f^{(½)} + B f = 0` as `f_σ = c_σ1 e^{u₁²t} + c_
 the roots of `u² + A u + B = 0`, half-derivative `Σ c_σi uᵢ e^{uᵢ²t}`, and constants from
 `[[1, 1], [u₁, u₂]] c_σ = (f_σ(0), f_σ^{(½)}(0))`. For `u₁ = u₂` it shall refuse (no source defines it).
 - **Source:** [02 Eq 14.7.1–14.7.7], [06 Eq 3.10–3.15]; PLAN R9, X7
-- **Verification:** T-IDC-06 · **Priority:** Must · **Status:** planned · **Task:** idc-binary
+- **Verification:** T-IDC-06 · **Priority:** Must · **Status:** implemented · **Task:** idc-binary
 
 ### FR-IDC-008 — Riccati equation by linearisation
 Given `Q(t), R(t), P(t)` with `R ≠ 0` and `f(0) = f₀`, the kernel shall solve
@@ -111,7 +111,7 @@ not report a solution drift: the sources define none for coupled nonlinear syste
 ### FR-IDC-012 — Linearity in initial conditions
 The solutions of FR-IDC-006 and FR-IDC-007 shall be linear in their initial conditions.
 - **Source:** [06b §Scientific challenges ii]
-- **Verification:** T-IDC-10 · **Priority:** Should · **Status:** planned · **Task:** idc-lde2
+- **Verification:** T-IDC-10 · **Priority:** Should · **Status:** implemented · **Task:** idc-lde2
 
 ### FR-IDC-013 — Refuse what the sources do not define
 The kernel shall refuse: the direct Riccati duet form [06 Eq 3.22] (X3); Abel's n-et [06 Eq 3.25–3.27];

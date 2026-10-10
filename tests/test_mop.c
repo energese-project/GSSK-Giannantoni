@@ -394,6 +394,105 @@ static void test_lde2_linear_in_ics(void) {
     gia_lde2_free(s1); gia_lde2_free(s2); gia_lde2_free(s12);
 }
 
+/* Source: [02 Eq 14.7.1-14.7.7], [06 Eq 3.10-3.15]; PLAN R9, X7; numerics N4.
+ *
+ * A = 1, B = -2: u^2 + u - 2 = (u - 1)(u + 2), so u = 1, -2 and the
+ * exponents are u^2 = 1, 4. By hand, for ICs (F0, H0):
+ *     c2 = (F0 - H0)/3, c1 = F0 - c2,
+ *     f = c1 e^t + c2 e^{4t},   f^(1/2) = c1 e^t - 2 c2 e^{4t}.
+ * The defining residual f' + A f^(1/2) + B f is formed from eval's own
+ * outputs with f' by central difference (residual first, vv-plan §2). */
+/* Verifies: FR-IDC-007 (T-IDC-06) */
+static void test_binary(void) {
+    const double complex F0[2] = { 2.0, -1.0 + 0.5 * I }, H0[2] = { 0.5, 3.0 };
+    gia_binary_sol sol;
+    const char    *why = NULL;
+    double complex f[2], fh[2], fp[2], fm[2];
+    int            all = 1, res_ok = 1, ic_ok, s, k;
+    double         t;
+
+    printf("\n[T-IDC-06] the binary function f' + A f^(1/2) + B f = 0\n");
+    ok("A = 1, B = -2 solves", gia_binary_solve(1.0, -2.0, F0, H0, &sol, &why) == GIA_OK);
+    for (k = 0; k <= 8; k++) {
+        t = 0.125 * (double)k;
+        if (gia_binary_eval(&sol, t, f, fh, &why) != GIA_OK) { all = res_ok = 0; continue; }
+        for (s = 0; s < 2; s++) {
+            double complex c2 = (F0[s] - H0[s]) / 3.0, c1 = F0[s] - c2;
+            if (!near_c(f[s], c1 * exp(t) + c2 * exp(4.0 * t), TOL_CLOSED) ||
+                !near_c(fh[s], c1 * exp(t) - 2.0 * c2 * exp(4.0 * t), TOL_CLOSED)) all = 0;
+        }
+        if (t > 0.0) {
+            double h = 1e-5 * (t > 1.0 ? t : 1.0);
+            (void)gia_binary_eval(&sol, t + h, fp, NULL, &why);
+            (void)gia_binary_eval(&sol, t - h, fm, NULL, &why);
+            for (s = 0; s < 2; s++) {
+                double complex d = (fp[s] - fm[s]) / (2.0 * h);
+                double complex res = d + 1.0 * fh[s] - 2.0 * f[s];
+                if (!(cabs(res) <= TOL_RESIDUAL * cabs(d))) res_ok = 0;
+            }
+        }
+    }
+    ok("both branches: f and f^(1/2) by hand, 9 times, 1e-12", all);
+    ok("residual f' + A f^(1/2) + B f <= 1e-6 (f' by central difference)", res_ok);
+    ic_ok = gia_binary_eval(&sol, 0.0, f, fh, &why) == GIA_OK;
+    for (s = 0; s < 2; s++)
+        ic_ok = ic_ok && near_c(f[s], F0[s], TOL_CLOSED) && near_c(fh[s], H0[s], TOL_CLOSED);
+    ok("the four initial conditions are reproduced", ic_ok);
+    ok("one characteristic for both branches: u = {1, -2} (X7)",
+       (near_c(sol.u[0], 1.0, TOL_CLOSED) && near_c(sol.u[1], -2.0, TOL_CLOSED)) ||
+       (near_c(sol.u[1], 1.0, TOL_CLOSED) && near_c(sol.u[0], -2.0, TOL_CLOSED)));
+
+    /* Complex coefficients: A = -(2+i), B = 1+i has roots 1 and 1+i. */
+    res_ok = gia_binary_solve(-(2.0 + I), 1.0 + I, F0, H0, &sol, &why) == GIA_OK;
+    for (k = 1; res_ok && k <= 8; k++) {
+        double h = 1e-5;
+        t = 0.125 * (double)k;
+        (void)gia_binary_eval(&sol, t, f, fh, &why);
+        (void)gia_binary_eval(&sol, t + h, fp, NULL, &why);
+        (void)gia_binary_eval(&sol, t - h, fm, NULL, &why);
+        for (s = 0; s < 2; s++) {
+            double complex d = (fp[s] - fm[s]) / (2.0 * h);
+            if (!(cabs(d - (2.0 + I) * fh[s] + (1.0 + I) * f[s]) <= TOL_RESIDUAL * cabs(d)))
+                res_ok = 0;
+        }
+    }
+    ok("complex A = -(2+i), B = 1+i: residual <= 1e-6 on both branches", res_ok);
+
+    why = NULL;
+    ok("u1 = u2 (A = 2, B = 1) is refused: GIA_E_UNSUPPORTED",
+       gia_binary_solve(2.0, 1.0, F0, H0, &sol, &why) == GIA_E_UNSUPPORTED && why);
+    ok("an overflowing exponential is GIA_E_RANGE",
+       gia_binary_solve(1.0, -2.0, F0, H0, &sol, &why) == GIA_OK &&
+       gia_binary_eval(&sol, 200.0, f, fh, &why) == GIA_E_RANGE);
+}
+
+/* Source: [06b] "linearly dependent on initial conditions" (the binary half). */
+/* Verifies: FR-IDC-012 (T-IDC-10) */
+static void test_binary_linear_in_ics(void) {
+    const double complex a0[2] = { 2.0, -1.0 }, ah[2] = { 0.5, 3.0 };
+    const double complex b0[2] = { -0.25 + I, 4.0 }, bh[2] = { 1.0, -2.0 * I };
+    double complex s0[2], sh[2], fa[2], fb[2], fs[2], ha[2], hb[2], hs[2];
+    gia_binary_sol sa, sb, ss;
+    const char    *why = NULL;
+    int            all, k, s;
+
+    printf("\n[T-IDC-10] linearity in the initial conditions: binary (N4)\n");
+    for (s = 0; s < 2; s++) { s0[s] = a0[s] + b0[s]; sh[s] = ah[s] + bh[s]; }
+    all = gia_binary_solve(1.0, -2.0, a0, ah, &sa, &why) == GIA_OK &&
+          gia_binary_solve(1.0, -2.0, b0, bh, &sb, &why) == GIA_OK &&
+          gia_binary_solve(1.0, -2.0, s0, sh, &ss, &why) == GIA_OK;
+    for (k = 0; all && k <= 16; k++) {
+        double t = 0.0625 * (double)k;
+        (void)gia_binary_eval(&sa, t, fa, ha, &why);
+        (void)gia_binary_eval(&sb, t, fb, hb, &why);
+        (void)gia_binary_eval(&ss, t, fs, hs, &why);
+        for (s = 0; s < 2; s++)
+            if (!near_c(fs[s], fa[s] + fb[s], TOL_CLOSED) ||
+                !near_c(hs[s], ha[s] + hb[s], TOL_CLOSED)) all = 0;
+    }
+    ok("binary: solve(ic1 + ic2) = solve(ic1) + solve(ic2), 17 times", all);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -401,6 +500,8 @@ int main(void) {
     test_lde2();
     test_lde2_zero_root();
     test_lde2_linear_in_ics();
+    test_binary();
+    test_binary_linear_in_ics();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);
