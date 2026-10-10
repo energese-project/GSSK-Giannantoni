@@ -68,6 +68,11 @@ jobs:
       - name: Run regression tests
         run: make test
 
+      # A model with no golden file fails `make test` unless allowlisted with a
+      # reason (ADR 0018 rule 1). This checks the guard itself still bites.
+      - name: Regression guard — no silent SKIPPED
+        run: make test-guard-no-skip
+
       # Unit suites, not CSV regressions. The node-type gate is the check that
       # stops a mistyped `type` silently becoming a storage node.
       - name: Node type validation tests
