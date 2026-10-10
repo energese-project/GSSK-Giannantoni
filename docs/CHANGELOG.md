@@ -56,6 +56,12 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The Second Fundamental Equation's printed solution** (FR-MOP-005, [23 Eq 6.1–6.3]).
+  `gia_mop_second` evaluates `A(t) = α₁₂(0)·w + ln(c₁ + c₂t)`, the specular
+  `B = [[A, −A], [−A, A]]`, and the Matrioska row `r₁ⱼ = (e^B)₁₁ w^{j−2}`, with `e^B` in closed form.
+  `w = e^{2πi/(N−1)}` is this kernel's reading of the undefined ordinal power in Eq 6.3 (PLANLOG).
+  `c₁ + c₂s ≤ 0` on `[0, t]` is refused. T-MOP-07 checks that `u = Ȧ` solves `u' + u² = 0`.
+
 - **The EQS operative form, `gia_eqs`** (PLAN.md W5 `mop-eqs`, FR-MOP-006). It evaluates `ρ₁ⱼ`, `φ₁ⱼ` and `θ₁ⱼ` of [23 Eq 7.1–7.5] for each root `l`, computing the three brackets as the relational product of the De Moivre root `(B, C, C)` with the reference couple's coordinates. Unequal j and k angles are refused, because [23 Eq 7.4] writes one angle for both (erratum X11). The construction is tagged as harmony-assuming [23 §8 ii]. A validation test reproduces the source's printed brackets from the table product over 1000 seeded draws, to 4.4e-16 (VAL-02).
 
 - **The Relational Space algebra, `rel_*`, and relational-valued couples** (PLAN.md W5 `mop-relational-algebra`, FR-REL-001…004, FR-MOP-007; ADR 0020).

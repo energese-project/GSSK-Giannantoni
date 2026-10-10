@@ -113,4 +113,24 @@ typedef struct { double psi1[3], psi2, eps[3], A; int N; } gia_eqs_params;
 gia_status gia_eqs(const gia_eqs_params *p, rel_t ref, int l, double out[3],
                    const char **why);
 
+/* FR-MOP-005 — the Second Fundamental Equation's printed solution
+ * [23 Eq 6.1-6.3] (PLAN R4, ADR 0019 §2), with lambda null [23 §8 ii]:
+ *
+ *   A(t) = alpha12(0) o w + ln(c1 + c2 t)        (6.3; {c2, t} reduces to c2 t)
+ *   B(t) = [[A, -A], [-A, A]]                    (6.2, the specular duet-binary)
+ *   r_1j = (e^{B(t)})_11 w^{j-2},  j = 2..N      (6.1)
+ *
+ * w = e^{2 pi i/(N-1)} is the principal (N-1)-th root of unity: the reading
+ * this kernel takes of the ordinal power ({N-1 root of 1})^{up N N} in Eq 6.3,
+ * which no source defines (PLANLOG). e^B is exact: B = A M with M^2 = 2M, so
+ * e^B = I + (e^{2A} - 1)/2 M. The time dependence is ln(c1 + c2 t) alone, so
+ * u = A' solves the Riccati equation u' + u^2 = 0 -- the oracle, reconstructed
+ * from the printed solution, since no source writes Eq 4.2 explicitly.
+ * c1 + c2 s <= 0 for some s in [0, t] is GIA_E_DOMAIN. `r` receives the
+ * Matrioska's row 1 (couples 1j), every other couple unrelated; it may be
+ * NULL. N >= 2. */
+typedef struct { double complex A; double complex B[2][2]; } gia_second;
+gia_status gia_mop_second(double complex alpha12_0, double c1, double c2, int N, double t,
+                          gia_second *out, gia_matrioska *r, const char **why);
+
 #endif /* GIA_MOP_H */

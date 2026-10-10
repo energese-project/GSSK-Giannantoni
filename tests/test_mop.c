@@ -1777,6 +1777,67 @@ static void test_val_eqs_brackets(void) {
     ok("1000 seeded draws: <= 1e-12", worst <= TOL_CLOSED);
 }
 
+/* Source: [23 Eq 6.1-6.3]; PLAN R4 (reconstructed oracle), R12.
+ * u = A' must solve u' + u^2 = 0 (derivatives by central differences of the
+ * returned A); B is specular; {c2, t} is c2 t: A(t) - A(0) = ln(1 + c2 t/c1);
+ * c1 + c2 t <= 0 is refused. The mutation ln(c1 + c2 + t) fails the
+ * reduction and the Riccati residual. */
+/* Verifies: FR-MOP-005 (T-MOP-07) */
+static void test_mop_second(void) {
+    const double complex a0 = 0.3 + 0.1 * I;
+    const double         c1 = 1.0, c2 = 0.5;
+    gia_second           s0, sp, sm, s;
+    gia_matrioska        r;
+    const char          *why = NULL;
+    double               t;
+    int                  ric = 1, spec = 1, red = 1, j;
+
+    printf("\n[T-MOP-07] the Second Equation's printed solution\n");
+    for (t = 0.25; t <= 2.0 + 1e-12; t += 0.25) {
+        const double h = 1e-3;
+        double complex u, up;
+        if (gia_mop_second(a0, c1, c2, 4, t, &s, NULL, &why) != GIA_OK ||
+            gia_mop_second(a0, c1, c2, 4, t + h, &sp, NULL, &why) != GIA_OK ||
+            gia_mop_second(a0, c1, c2, 4, t - h, &sm, NULL, &why) != GIA_OK ||
+            gia_mop_second(a0, c1, c2, 4, 0.0, &s0, NULL, &why) != GIA_OK) {
+            ric = spec = red = 0; continue;
+        }
+        u  = (sp.A - sm.A) / (2.0 * h);
+        up = (sp.A - 2.0 * s.A + sm.A) / (h * h);
+        if (!(cabs(up + u * u) <= TOL_RESIDUAL * cabs(u * u) * 10.0)) ric = 0;
+        if (s.B[0][0] != s.A || s.B[1][1] != s.A || s.B[0][1] != -s.A || s.B[1][0] != -s.A)
+            spec = 0;
+        if (!near_c(s.A - s0.A, log(1.0 + c2 * t / c1), TOL_CLOSED)) red = 0;
+    }
+    ok("u = A' solves u' + u^2 = 0 (central differences, 1e-5)", ric);
+    ok("B = [[A, -A], [-A, A]], exactly", spec);
+    ok("{c2, t} reduces to c2 t: A(t) - A(0) = ln(1 + c2 t / c1)", red);
+    ok("A(0) = alpha12(0) w, w = e^{2 pi i/(N - 1)}",
+       gia_mop_second(a0, c1, c2, 4, 0.0, &s, NULL, &why) == GIA_OK &&
+       near_c(s.A, a0 * cexp(2.0 * M_PI * I / 3.0) + log(c1), TOL_CLOSED));
+    {
+        const int      solved = gia_mop_second(a0, c1, c2, 5, 1.0, &s, &r, &why) == GIA_OK;
+        double complex eB11   = solved ? 1.0 + (cexp(2.0 * s.A) - 1.0) / 2.0 : 0.0;
+        int            row = solved, rest = solved;
+        ok("solves with a Matrioska row", solved);
+        if (solved) for (j = 1; j < 5; j++)
+            if (!r.related[j] || !near_c(r.a[j], eB11 * cexp(2.0 * M_PI * I * (j - 1) / 4.0), TOL_CLOSED))
+                row = 0;
+        if (solved) for (j = 5; j < 25; j++) if (r.related[j]) rest = 0;
+        ok("r_1j = (e^B)_11 w^{j-2}, e^B exact: I + (e^{2A} - 1)/2 M", row);
+        ok("only row 1 is related", rest && !r.related[0]);
+        if (solved) gia_matrioska_free(&r);
+    }
+    why = NULL;
+    ok("c1 + c2 t <= 0 on [0, t]: GIA_E_DOMAIN",
+       gia_mop_second(a0, 1.0, -0.5, 4, 3.0, &s, NULL, &why) == GIA_E_DOMAIN && why);
+    ok("c1 <= 0: GIA_E_DOMAIN; N < 2: GIA_E_ARG",
+       gia_mop_second(a0, 0.0, 1.0, 4, 1.0, &s, NULL, &why) == GIA_E_DOMAIN &&
+       gia_mop_second(a0, 1.0, 1.0, 1, 1.0, &s, NULL, &why) == GIA_E_ARG);
+    ok("e^{2A} past DBL_MAX (alpha12(0) = 400, N = 2): GIA_E_RANGE",
+       gia_mop_second(400.0, 1.0, 1.0, 2, 1.0, &s, NULL, &why) == GIA_E_RANGE);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -1817,6 +1878,7 @@ int main(void) {
     test_mop_relational_couple();
     test_mop_eqs();
     test_val_eqs_brackets();
+    test_mop_second();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

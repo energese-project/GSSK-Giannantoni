@@ -84,6 +84,19 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   Equation componentwise on relational elements for k = 1, refuse k > 1", and no interface carried
   it.
 
+### `mop-second-equation`
+
+- **The ordinal power in [23 Eq 6.3] is read as the principal root of unity.** FR-MOP-005 writes
+  `A(t) = α₁₂(0) ∘ r + ln(c₁ + c₂t)`, and Eq 6.3 writes `r` as `({ᴺ⁻¹√1})^{↑N N}`. No source defines
+  that ordinal power. The engine takes `r = w = e^{2πi/(N−1)}`, the principal (N−1)-th root of
+  unity, and the roots of Eq 6.1 as `w^{j−2}`, j = 2…N. `mop.h` says the reading is the kernel's,
+  and T-MOP-07 pins it, so a different reading is a visible change rather than a silent one.
+- **T-MOP-07's oracle is reconstructed.** No source writes Eq 4.2 explicitly. The time dependence of
+  the printed solution is `ln(c₁ + c₂t)` alone, so `u = Ȧ` satisfies `u' + u² = 0`, and that is
+  what the test checks, by central differences.
+- **`e^B` is computed in closed form.** `B = A·M` with `M = [[1, −1], [−1, 1]]` and `M² = 2M`, so
+  `e^B = I + (e^{2A} − 1)/2 · M` exactly. Overflow of `e^{2A}` is `GIA_E_RANGE` (NFR-NUM-003).
+
 ---
 
 ## [Revision 3] — 2026-10-09

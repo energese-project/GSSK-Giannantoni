@@ -826,7 +826,7 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
 - [x] W3 `emergy-source-terms`, `emergy-ordinal-forms`
 - [ ] W4 `mop-first-equation`
 - [x] W5 `mop-relational-algebra`, `mop-eqs`
-- [ ] W6 `mop-second-equation`
+- [x] W6 `mop-second-equation`
 - [ ] W7 `mop-ordinality`, `mop-generative-empower`
 - [ ] W8 `mop-harmony-detector`, `mop-network-beta`, `kernel-method-label`
 

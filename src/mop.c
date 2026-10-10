@@ -382,3 +382,43 @@ gia_status gia_eqs(const gia_eqs_params *p, rel_t ref, int l, double out[3],
     for (i = 0; i < 3; i++) out[i] = res[i];
     return GIA_OK;
 }
+
+/* FR-MOP-005. */
+gia_status gia_mop_second(double complex alpha12_0, double c1, double c2, int N, double t,
+                          gia_second *out, gia_matrioska *r, const char **why) {
+    const double    two_pi = 6.283185307179586476925286766559;
+    double complex  w, A, eB11, *a = NULL;
+    unsigned char  *rel = NULL;
+    int             j;
+
+    if (!out || N < 2 || !finite_c(alpha12_0) || !isfinite(c1) || !isfinite(c2) ||
+        !(t >= 0.0) || !isfinite(t))
+        return fail(GIA_E_ARG, "gia_mop_second: N >= 2, t >= 0 and finite arguments required", why);
+    /* c1 + c2 s is affine in s, so it is positive on [0, t] iff it is at both ends. */
+    if (!(c1 > 0.0) || !(c1 + c2 * t > 0.0))
+        return fail(GIA_E_DOMAIN, "gia_mop_second: c1 + c2 s <= 0 on [0, t]; ln is undefined "
+                    "(FR-MOP-005)", why);
+    w    = cexp(I * (two_pi / (double)(N - 1)));
+    A    = alpha12_0 * w + log(c1 + c2 * t);
+    eB11 = 1.0 + (cexp(2.0 * A) - 1.0) / 2.0;
+    if (!finite_c(A) || !finite_c(eB11))
+        return fail(GIA_E_RANGE, "gia_mop_second: e^{2A} overflows (N6)", why);
+    if (r) {
+        a   = (double complex *)calloc((size_t)N * (size_t)N, sizeof(double complex));
+        rel = (unsigned char *)calloc((size_t)N * (size_t)N, 1);
+        if (!a || !rel) {
+            free(a); free(rel);
+            return fail(GIA_E_NOMEM, "gia_mop_second: out of memory", why);
+        }
+        /* Row 1, couples 1j for j = 2..N: 0-based index j, exponent j - 1. */
+        for (j = 1; j < N; j++) {
+            a[j]   = eB11 * cexp(I * (two_pi * (double)(j - 1) / (double)(N - 1)));
+            rel[j] = 1;
+        }
+        r->N = N; r->a = a; r->related = rel;
+    }
+    out->A       = A;
+    out->B[0][0] = A;  out->B[0][1] = -A;
+    out->B[1][0] = -A; out->B[1][1] = A;
+    return GIA_OK;
+}

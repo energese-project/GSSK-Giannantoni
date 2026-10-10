@@ -208,7 +208,7 @@ Given `α₁₂(0)`, `c₁`, `c₂` and N, the kernel shall evaluate `A(t) = α�
 specular `B(t) = [[A, −A], [−A, A]]`, and `{r} = e^{B(t)} ∘ (roots 13…1N)` of [23 Eq 6.1–6.3], with λ
 null; it shall refuse `c₁ + c₂t ≤ 0` on `[0, t]`.
 - **Source:** [23 Eq 6.1–6.3, §8 ii]; PLAN R4, R12
-- **Verification:** T-MOP-07 · **Priority:** Must · **Status:** planned · **Task:** mop-second-equation
+- **Verification:** T-MOP-07 · **Priority:** Must · **Status:** implemented · **Task:** mop-second-equation
 
 ### FR-MOP-006 — The EQS operative form
 Given the reference couple's coordinates `Σ₀(t), Φ₀(t), Θ₀(t)`, the factors `ψ₁,ᵢ`, `ψ₂`, ε₁, ε₂ = ε₃,
