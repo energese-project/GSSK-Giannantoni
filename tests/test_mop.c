@@ -12,6 +12,7 @@
 
 #define _POSIX_C_SOURCE 200809L
 
+#include "engine.h"
 #include "gia_status.h"
 #include "idc.h"
 
@@ -753,6 +754,173 @@ static void test_nl1410(void) {
        gia_nl1410_roots(1.0, 1.0, NULL, &why) == GIA_E_ARG);
 }
 
+/* ------------------------------------------------------------------ *
+ * Network drift (FR-IDC-011, FR-IDC-014)
+ * ------------------------------------------------------------------ */
+
+/* Two storages, a -> b linear k = 0.5: a constant flow matrix with two modes. */
+static const char *TWO_MODE =
+    "{\"system_name\":\"two_mode\",\"nodes\":["
+    " {\"id\":\"a\",\"type\":\"storage\",\"current_level\":10.0},"
+    " {\"id\":\"b\",\"type\":\"storage\",\"current_level\":1.0}],"
+    "\"edges\":[{\"source\":\"a\",\"target\":\"b\",\"logic\":\"linear\",\"weight\":0.5}],"
+    "\"simulation_params\":{\"t_val\":2.0,\"derivative_order\":2,\"generative_mode\":false}}";
+
+/* A third constant-matrix seed: a chain with a held source and a sink. */
+static const char *CHAIN =
+    "{\"system_name\":\"chain\",\"nodes\":["
+    " {\"id\":\"s\",\"type\":\"source\",\"initial_value\":3.0},"
+    " {\"id\":\"x\",\"type\":\"storage\",\"current_level\":2.0},"
+    " {\"id\":\"y\",\"type\":\"storage\",\"current_level\":0.5},"
+    " {\"id\":\"z\",\"type\":\"sink\"}],"
+    "\"edges\":[{\"source\":\"s\",\"target\":\"x\",\"weight\":0.3},"
+    " {\"source\":\"x\",\"target\":\"y\",\"weight\":0.7},"
+    " {\"source\":\"y\",\"target\":\"z\",\"weight\":0.2}],"
+    "\"simulation_params\":{\"t_val\":3.0,\"derivative_order\":2,\"generative_mode\":false}}";
+
+/* The example seed's shape: an interaction module, so the flow matrix depends
+ * on the state (gia_flow_matrix_is_constant is false). */
+static const char *INTERACTION =
+    "{\"system_name\":\"interaction\",\"nodes\":["
+    " {\"id\":\"source_1\",\"type\":\"source\",\"initial_value\":2.0},"
+    " {\"id\":\"interaction_1\",\"type\":\"interaction\",\"module\":{\"k\":0.1}},"
+    " {\"id\":\"store_1\",\"type\":\"storage\",\"current_level\":10.0},"
+    " {\"id\":\"consumer_1\",\"type\":\"storage\",\"current_level\":1.0}],"
+    "\"edges\":["
+    " {\"source\":\"source_1\",\"target\":\"interaction_1\",\"role\":\"energy\"},"
+    " {\"source\":\"store_1\",\"target\":\"interaction_1\",\"role\":\"control\",\"use_ratio\":0},"
+    " {\"source\":\"interaction_1\",\"target\":\"store_1\",\"weight\":1.0},"
+    " {\"source\":\"store_1\",\"target\":\"consumer_1\",\"weight\":0.5}],"
+    "\"simulation_params\":{\"t_val\":1.5,\"derivative_order\":2,\"generative_mode\":false}}";
+
+static int load_seed(const char *json, gia_model *m, cJSON **root) {
+    *root = cJSON_Parse(json);
+    memset(m, 0, sizeof(*m));
+    if (!*root) return 0;
+    if (!gia_model_load(m, *root)) { cJSON_Delete(*root); *root = NULL; return 0; }
+    return 1;
+}
+
+/* Source: [06 §4 (i)]; PLAN E4b, R16.
+ * Oracle: exactly 0.0 (not "small"), for every node and every order 1..4, on
+ * every constant-matrix seed here; and the refusal on a non-constant one.
+ * The negative control shows why E4b had to be guarded: drift taken from
+ * phi = ln Q_b on the two-mode network is phi'' != 0, so the mutation
+ * "phi = ln Q_i" would report drift where [06 §4 (i)] says there is none. */
+/* Verifies: FR-IDC-011, FR-IDC-013 (T-IDC-11, T-IDC-13) */
+static void test_solution_drift(void) {
+    const char *seeds[2] = { TWO_MODE, CHAIN };
+    gia_model   m;
+    cJSON      *root;
+    const char *why = NULL;
+    double      out[8], q[2], qp[2], qm[2];
+    int         k, n, i, all = 1;
+
+    printf("\n[T-IDC-11] solution drift on network trajectories\n");
+    for (k = 0; k < 2; k++) {
+        if (!load_seed(seeds[k], &m, &root)) { all = 0; continue; }
+        if (!gia_flow_matrix_is_constant(&m)) all = 0;
+        for (n = 1; n <= 4; n++) {
+            for (i = 0; i < 8; i++) out[i] = 99.0;
+            if (gia_solution_drift(&m, n, out, &why) != GIA_OK) { all = 0; continue; }
+            for (i = 0; i < m.n_nodes; i++) if (out[i] != 0.0) all = 0;
+        }
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+    ok("constant flow matrix: exactly 0.0, every node, n = 1..4, 2 seeds", all);
+
+    /* The hazard E4b: phi = ln Q_b on the two-mode network. phi'' at t = 1 by
+     * central difference of the engine's own Q_b. */
+    if (load_seed(TWO_MODE, &m, &root)) {
+        const double h = 1e-3;
+        double phi2;
+        (void)gia_network_state(&m, 1.0, q, NULL);
+        (void)gia_network_state(&m, 1.0 + h, qp, NULL);
+        (void)gia_network_state(&m, 1.0 - h, qm, NULL);
+        phi2 = (log(qp[1]) - 2.0 * log(q[1]) + log(qm[1])) / (h * h);
+        printf("    (phi = ln Q_b would give drift phi'' = %.6g at t = 1)\n", phi2);
+        ok("negative control: phi = ln Q_i is not affine on a two-mode network",
+           fabs(phi2) > 1e-3);
+        ok("order outside 1..4 is GIA_E_ARG",
+           gia_solution_drift(&m, 0, out, &why) == GIA_E_ARG &&
+           gia_solution_drift(&m, 5, out, &why) == GIA_E_ARG);
+        gia_model_free(&m); cJSON_Delete(root);
+    }
+
+    why = NULL;
+    if (load_seed(INTERACTION, &m, &root)) {
+        ok("non-constant flow matrix: refused, GIA_E_UNSUPPORTED",
+           gia_solution_drift(&m, 2, out, &why) == GIA_E_UNSUPPORTED);
+        ok("  and the reason cites FR-IDC-011 / [06 §4]",
+           why && strstr(why, "FR-IDC-011") && strstr(why, "06"));
+        gia_model_free(&m); cJSON_Delete(root);
+    } else {
+        ok("interaction seed loads", 0);
+    }
+}
+
+/* Source: [09 Eq 9-13] at k = 2; numerics.md N7.
+ * Two-mode network, by hand (k = 0.5, Q_a(0) = 10, Q_b(0) = 1):
+ *   Q_a = 10 e^{-kt}, Q_b = 1 + 10 (1 - e^{-kt}),
+ *   Q_a' = -k Q_a, Q_b' = k Q_a,  Q_a'' = k^2 Q_a,  Q_b'' = -k^2 Q_a,
+ * so drift_a = 0 (a single exponential projects exactly) and
+ * drift_b = (-k^2 Q_a - (k Q_a)^2 / Q_b) dt^2 / 2.
+ * Interaction seed: Q' and Q'' against central differences of the engine's
+ * own Q (h = 1e-3), and the drift scales as dt^2 (Q'' does not depend on dt). */
+/* Verifies: FR-IDC-014 (T-IDC-12) */
+static void test_drift_projection(void) {
+    gia_model   m;
+    cJSON      *root;
+    const char *why = NULL;
+    double      out[8], out2[8];
+    const double k = 0.5, dt = 0.2;
+    int         i, all = 1;
+
+    printf("\n[T-IDC-12] output-projection drift\n");
+    if (!load_seed(TWO_MODE, &m, &root)) { ok("two-mode seed loads", 0); return; }
+    for (i = 0; i <= 8; i++) {
+        double t = 0.25 * (double)i, qa = 10.0 * exp(-k * t);
+        double qb = 1.0 + 10.0 * (1.0 - exp(-k * t));
+        double want_b = (-k * k * qa - (k * qa) * (k * qa) / qb) * dt * dt / 2.0;
+        if (gia_drift_projection(&m, t, dt, out, &why) != GIA_OK ||
+            !near_c(out[0], 0.0, TOL_CLOSED * k * k * qa * dt * dt) ||
+            !near_c(out[1], want_b, TOL_CLOSED)) {
+            printf("    t = %g: got %.15g %.15g want 0 %.15g\n", t, out[0], out[1], want_b);
+            all = 0;
+        }
+    }
+    ok("constant matrix: drift_a = 0, drift_b by hand, 9 times, 1e-12", all);
+    gia_model_free(&m); cJSON_Delete(root);
+
+    if (!load_seed(INTERACTION, &m, &root)) { ok("interaction seed loads", 0); return; }
+    all = 1;
+    for (i = 1; i <= 5; i++) {
+        double t = 0.25 * (double)i, h = 1e-3, q[4], qp[4], qm[4];
+        int c;
+        if (gia_drift_projection(&m, t, dt, out, &why) != GIA_OK ||
+            gia_drift_projection(&m, t, dt / 2.0, out2, &why) != GIA_OK) { all = 0; continue; }
+        (void)gia_network_state(&m, t, q, NULL);
+        (void)gia_network_state(&m, t + h, qp, NULL);
+        (void)gia_network_state(&m, t - h, qm, NULL);
+        for (c = 2; c <= 3; c++) {            /* store_1, consumer_1 */
+            double d1 = (qp[c] - qm[c]) / (2.0 * h);
+            double d2 = (qp[c] - 2.0 * q[c] + qm[c]) / (h * h);
+            double want = (d2 - d1 * d1 / q[c]) * dt * dt / 2.0;
+            if (!(fabs(out[c] - want) <= 1e-4 * (fabs(want) + dt * dt))) {
+                printf("    t = %g, node %d: got %.10g, finite differences %.10g\n", t, c,
+                       out[c], want);
+                all = 0;
+            }
+            if (!near_c(out2[c] * 4.0, out[c], 1e-9)) all = 0;
+        }
+        if (out[0] != 0.0 || out[1] != 0.0) all = 0;     /* source, module: not components */
+    }
+    ok("interaction: converges; agrees with differences of Q; scales as dt^2", all);
+    ok("Q = 0 or a non-component: 0, not a division by zero",
+       gia_drift_projection(&m, 0.0, dt, out, &why) == GIA_OK && out[1] == 0.0);
+    gia_model_free(&m); cJSON_Delete(root);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -767,6 +935,8 @@ int main(void) {
     test_idc_taylor();
     test_val_zoli_2009();
     test_nl1410();
+    test_solution_drift();
+    test_drift_projection();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

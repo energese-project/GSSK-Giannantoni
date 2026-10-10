@@ -23,7 +23,9 @@
  * Status of record (PLAN.md §2; docs/giannantoni_assessment.md). What is here
  * is NOT yet an implementation of IDC or the MOP:
  *   - network trajectories are the matrix exponential          classical  (E3)
- *   - the per-node phi behind _idc/_tdc/_drift is invented     illustrative (E4)
+ *   - drift: solution drift and [09 Eq 13] output-projection   implemented
+ *     drift of the solved trajectory (the invented-phi
+ *     _idc/_tdc/_drift columns, E4, are removed)
  *   - the harmony matrix is built from roots of unity          assumed    (E5)
  *   - gia_ordinality is the fraction of components on a cycle  proxy      (E6)
  *   - gia_generate is the ADR 0015 heuristic                   illustrative (E7)
@@ -41,6 +43,7 @@
 #include <stddef.h>
 
 #include "cJSON.h"
+#include "gia_status.h"
 
 /* ------------------------------------------------------------------ *
  * Limits
@@ -702,6 +705,33 @@ bool gia_at_maximum_ordinality(gia_model *m);
 bool gia_sample_at(const gia_model *m, double t,
                    double *q, double *idc, double *tdc, double *psi);
 
+/* FR-IDC-011 — solution drift on network trajectories [06 §4 (i)]. For a
+ * network whose flow matrix is constant (gia_flow_matrix_is_constant) the
+ * solution is a superposition of exponentials, so its incipient and
+ * traditional solutions coincide term by term (PLAN R16) and the drift is
+ * exactly zero: out[i] = 0.0 for every node, without computing anything.
+ * For any other network the sources define no solution drift, and this
+ * refuses (GIA_E_UNSUPPORTED). `order` must be 1..4 (GIA_E_ARG). */
+gia_status gia_solution_drift(const gia_model *m, int order, double *out,
+                              const char **why);
+
+/* FR-IDC-014 — output-projection drift [09 Eq 9-13] at k = 2, per node:
+ *
+ *     ((Q_i'' - (Q_i')^2 / Q_i) * dt^2 / 2
+ *
+ * with Q' the flow balance along the engine's own solution and Q'' its time
+ * derivative (numerics.md N7): (A^2 x)_i exactly for a constant flow matrix,
+ * otherwise Richardson-extrapolated central differences of the flow balance
+ * (one-sided at t = 0). Nodes that are not components (modules, sources,
+ * sinks, constants) and components with Q_i(t) = 0 get 0. Two extrapolations
+ * that disagree by more than 1e-6 relative are GIA_E_CONVERGENCE. */
+gia_status gia_drift_projection(const gia_model *m, double t, double dt,
+                                double *out, const char **why);
+
+/* IF-OUT-001. Columns: time; per node in seed order <id>_Q, <id>_Em, <id>_Tr,
+ * <id>_drift_proj; then conservation, emergy_excess. A drift that cannot be
+ * computed at a sample (GIA_E_CONVERGENCE) leaves its cell empty rather than
+ * writing a number that is not one. */
 bool gia_write_trajectories(const gia_model *m, const char *path, int steps);
 
 /* The same values gia_write_trajectories() writes, rendered as aligned tables

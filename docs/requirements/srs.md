@@ -106,7 +106,7 @@ For a network whose flow matrix is constant, the kernel shall report solution dr
 for every component and order 1–4, without computing it numerically. For any other network it shall
 not report a solution drift: the sources define none for coupled nonlinear systems.
 - **Source:** [06 §4 (i)]; PLAN E4b
-- **Verification:** T-IDC-11, T-IDC-13 · **Priority:** Must · **Status:** planned · **Task:** idc-drift-coupled
+- **Verification:** T-IDC-11, T-IDC-13 · **Priority:** Must · **Status:** implemented · **Task:** idc-drift-coupled
 
 ### FR-IDC-012 — Linearity in initial conditions
 The solutions of FR-IDC-006 and FR-IDC-007 shall be linear in their initial conditions.
@@ -125,7 +125,7 @@ over the output step Δ, `[09 Eq 13]` at k = 2: `(Q_i'' − (Q_i')²/Q_i) · Δ�
 balance and `Q_i''` its time derivative along the solved trajectory (numerics N7). It shall be labelled
 as output-projection drift, distinct from FR-IDC-011.
 - **Source:** [09 Eq 9–13], [10 Eq 12–16]
-- **Verification:** T-IDC-12 · **Priority:** Should · **Status:** planned · **Task:** idc-drift-coupled
+- **Verification:** T-IDC-12 · **Priority:** Should · **Status:** implemented · **Task:** idc-drift-coupled
 
 ### 2.2 Emergy algebra
 

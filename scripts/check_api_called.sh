@@ -21,7 +21,7 @@ API_HEADERS=${API_HEADERS:-"include/gia_status.h include/idc.h include/relationa
 # engine.h predates the baseline and is not NFR-API-001's; only the functions IF-API-005 adds to it
 # are checked, and each only once it is declared.
 API_ENGINE=${API_ENGINE:-include/engine.h}
-API_ENGINE_FUNCS=${API_ENGINE_FUNCS:-"gia_ordinality_record gia_at_maximum_ordinality gia_closure gia_drift_projection gia_emergy_source_term"}
+API_ENGINE_FUNCS=${API_ENGINE_FUNCS:-"gia_ordinality_record gia_at_maximum_ordinality gia_closure gia_solution_drift gia_drift_projection gia_emergy_source_term"}
 API_SOURCES=${API_SOURCES:-"src/idc.c src/relational.c src/mop.c src/harmony.c"}
 API_TESTS=${API_TESTS:-"tests/test_giannantoni.c tests/test_mop.c tests/test_mop_emergence.c tests/test_mop_threads.c"}
 

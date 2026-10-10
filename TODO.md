@@ -596,7 +596,8 @@ general-purpose ODE library. The wedge is:
 
 ### 10.4 Dual modes and structural validation
 
-- [x] Mode 1 writes `_idc`, `_tdc` and `_drift` per component to CSV.
+- [x] ~~Mode 1 writes `_idc`, `_tdc` and `_drift` per component to CSV.~~ Removed by PLAN W2
+      `idc-drift-coupled`: they judged an invented φ (E4). The CSV now carries `_drift_proj`.
 - [x] Mode 2 spawns a regulator to close an open pathway when the graph is
       below maximum ordinality; verified to actually raise ordinality to 1 and
       then to be a fixed point.
@@ -821,7 +822,7 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
 - [x] W2 `idc-riccati` — Riccati by linearisation; refusals (FR-IDC-008, 013)
 - [x] W2 `idc-taylor` — incipient Taylor projection, [09] validation (FR-IDC-010, VAL-01)
 - [x] W2 `idc-nonlinear-14-10` — [02 Eq 14.10.1] (FR-IDC-009)
-- [ ] W2 `idc-drift-coupled` — solution drift and output-projection drift (FR-IDC-011, 014)
+- [x] W2 `idc-drift-coupled` — solution drift and output-projection drift (FR-IDC-011, 014)
 - [ ] W3 `emergy-source-terms`, `emergy-ordinal-forms`
 - [ ] W4 `mop-first-equation`
 - [ ] W5 `mop-relational-algebra`, `mop-eqs`

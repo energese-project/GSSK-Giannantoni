@@ -153,38 +153,20 @@ static void report_model(gia_model *m) {
                m->nodes[e->from].id, m->nodes[e->to].id);
     }
 
-    printf("\n  component            kind          phi degree   calculi\n");
-    for (i = 0; i < m->n_nodes; i++) {
-        const gia_node *nd = &m->nodes[i];
-        bool            df = gia_drift_free(&nd->phi);
-        printf("  %-20s %-13s %6d       %s\n",
-               nd->id, gia_node_kind_name(nd->kind), nd->phi.degree,
-               df ? "agree" : "TDC drifts");
-    }
-    printf("    'agree' means phi is affine, so the incipient and\n");
-    printf("    traditional derivatives coincide identically. 'TDC drifts'\n");
-    printf("    means phi carries curvature and the Bell expansion picks up\n");
-    printf("    terms the incipient derivative does not.\n");
-}
-
-static void report_duet(const gia_model *m) {
-    int i;
-    for (i = 0; i < m->n_nodes; i++) {
-        const gia_node *nd = &m->nodes[i];
-        gia_net         d;
-        if (nd->kind != GIA_NODE_INTERACTION) continue;
-
-        /* The half-order incipient derivative of an interaction does not
-         * return a function but a couple -- the binary/duet of the 2006
-         * paper, carried as one state rather than two candidates. */
-        d = gia_incipient_fractional(&nd->phi, 1, 2, m->t_end);
-        printf("\n  duet at '%s', order 1/2, t = %g\n", nd->id, m->t_end);
-        printf("    branch +   %+.6f %+.6fi\n",
-               creal(d.branch[0]), cimag(d.branch[0]));
-        printf("    branch -   %+.6f %+.6fi\n",
-               creal(d.branch[1]), cimag(d.branch[1]));
-        printf("    sum        %+.3e %+.3ei  (branches cancel)\n",
-               creal(gia_net_sum(&d)), cimag(gia_net_sum(&d)));
+    /* Solution drift (FR-IDC-011): exactly zero for a constant flow matrix,
+     * undefined by the sources otherwise. The per-node "calculi agree / TDC
+     * drifts" table that stood here judged a phi the engine invented, not the
+     * trajectory (PLAN E4), and is gone. */
+    {
+        double     *zero = (double *)calloc((size_t)m->n_nodes, sizeof(double));
+        const char *why  = NULL;
+        if (zero && gia_solution_drift(m, m->order >= 1 && m->order <= 4 ? m->order : 2,
+                                       zero, &why) == GIA_OK)
+            printf("  solution drift    0 for every component  (constant flow "
+                   "matrix, [06 §4 (i)])\n");
+        else
+            printf("  solution drift    not defined: %s\n", why ? why : "out of memory");
+        free(zero);
     }
 }
 
@@ -215,13 +197,9 @@ static void report_labels(const gia_model *m) {
         /* Odum's emergy algebra, [02 p. 23 rules 1-4] (FR-EM-001..003). */
         printf("label.%s_Em: implemented\n", id);
         printf("label.%s_Tr: implemented\n", id);
-        /* E4: the drift identity is Giannantoni's, but the per-node phi it is
-         * applied to is invented by phi_for_node, not derived from Q. */
-        printf("label.%s_idc: illustrative\n", id);
-        printf("label.%s_tdc: illustrative\n", id);
-        printf("label.%s_drift: illustrative\n", id);
+        /* FR-IDC-014: [09 Eq 13] at k = 2 along the solved trajectory. */
+        printf("label.%s_drift_proj: implemented\n", id);
     }
-    printf("label.psi_network: illustrative\n");
     printf("label.conservation: classical\n");
     printf("label.emergy_excess: implemented\n");
 
@@ -232,8 +210,8 @@ static void report_labels(const gia_model *m) {
     printf("label.harmony: assumed\n");
     /* E7: the ADR 0015 graph heuristic, not [02 Eq 5.3] / [22 Eq 2]. */
     printf("label.generative_step: illustrative\n");
-    /* FR-IDC-005 is implemented, but the duet is taken of an invented phi. */
-    printf("label.duet: illustrative\n");
+    /* FR-IDC-011: exactly zero for a constant flow matrix, refused otherwise. */
+    printf("label.solution_drift: implemented\n");
 }
 
 int main(int argc, char **argv) {
@@ -328,7 +306,6 @@ int main(int argc, char **argv) {
     if (!gia_model_load(&model, root)) goto done;
 
     report_model(&model);
-    report_duet(&model);
 
     /* ---- Mode 1: functional. Numbers move, the graph does not. ---- */
     printf("\n%s\n", RULE);
@@ -336,9 +313,9 @@ int main(int argc, char **argv) {
     printf("%s\n", RULE);
     if (!gia_write_trajectories(&model, csv_path, steps)) goto done;
     printf("  wrote %s  (%d steps to t = %g)\n", csv_path, steps, model.t_end);
-    printf("  columns per component: _Q (network), _Em (empower), _Tr\n");
-    printf("  (transformity), then _idc, _tdc, _drift; plus psi_network,\n");
-    printf("  conservation and emergy_excess for the run as a whole\n");
+    printf("  columns per node: _Q (network), _Em (empower), _Tr\n");
+    printf("  (transformity), _drift_proj (output-projection drift, [09 Eq 13]);\n");
+    printf("  plus conservation and emergy_excess for the run as a whole\n");
     if (show_table) gia_print_trajectories(&model, steps);
 
     /* ---- MOP harmony relationships over the N components ---- */

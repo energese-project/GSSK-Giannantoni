@@ -28,6 +28,12 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **Drift on network trajectories, from the sources: solution drift and output-projection drift** (PLAN.md W2 `idc-drift-coupled`, FR-IDC-011, FR-IDC-014, IF-OUT-001). Breaking for consumers of `giannantoni_sim`'s CSV.
+  - **Removed:** the `_idc`, `_tdc`, `_drift` and `psi_network` columns. They applied the drift identity to a per-node φ the engine invented, which was decoupled from `_Q` (PLAN E4).
+  - **Added:** a `_drift_proj` column per node, the [09 Eq 13] output-projection drift `(Q'' − Q'²/Q)·Δ²/2` along the solved trajectory. `Q''` is exact (`A²x`) for a constant flow matrix, and Richardson-extrapolated otherwise (numerics N7).
+  - **`gia_solution_drift`:** reports solution drift as exactly zero for a constant flow matrix [06 §4 (i)] and refuses it for any other network, which the sources do not define.
+  - **Run report:** the per-node "calculi agree / TDC drifts" table and the duet section are gone, since both judged the invented φ. The report now states the solution drift.
+
 - **`AGENTS.md` and `TODO.md` no longer equate the incipient calculus with the matrix exponential** (PLAN.md W1 `guard-agents-wording`, B5 and B6). The changes:
   - The Overview now describes both engines. It no longer says "Euler or RK4" for a repository with four integrators, and it labels the kernel's `"incipient"` method as classical.
   - A new "Giannantoni work: the protocol" section summarises ADR 0018's G1–G7.

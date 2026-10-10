@@ -44,6 +44,12 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   to supply it. `t_fail` is there for the same reason as in `gia_lde2_solve`: the solve runs through
   the LDE solver, so a root collision must report its time the same way.
 
+### `idc-drift-coupled`
+
+- **IF-API-005 gains `gia_solution_drift`.** FR-IDC-011 requires the kernel to *report* solution
+  drift as exactly zero for a constant flow matrix, and to refuse it otherwise. No function in the
+  interface did either.
+
 ---
 
 ## [Revision 3] — 2026-10-09
