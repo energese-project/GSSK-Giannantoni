@@ -801,9 +801,11 @@ general-purpose ODE library. The wedge is:
       (PR #31), so only the processing-node finding remains — a GSSK
       processing node finds its legs by position, which ADR 0013 will not
       guess.
-- [ ] More seed graphs under `examples/giannantoni/` — the vocabulary is
-      separate from `gssk.schema.json` by design, which is why the seeds live
-      one directory down and out of both regression globs.
+- [x] More seed graphs under `examples/giannantoni/`: `trophic_chain`, `coproduction` and
+      `harmonic_couples`, each exercising what `input` and `closed_loop` do not (a computed
+      network harmony verdict; ½ and 2 couples; a harmonic `mop` row). The vocabulary is
+      separate from `gssk.schema.json` by design, which is why the seeds live one directory
+      down and out of both regression globs.
 
 ---
 

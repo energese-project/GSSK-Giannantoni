@@ -101,6 +101,16 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **Three example seeds for the Giannantoni engine**, each checked by hand in `tests/mop_cli.sh` and
+  `test_mop.c`:
+  - `trophic_chain.json`: the network harmony verdict is computed.
+  - `coproduction.json`: the ordinality record shows ½ and 2 couples, and the generative step adds
+    three pathways.
+  - `harmonic_couples.json`: `--mop-out` writes `R_H = 0`.
+
+  Every seed now runs through the CLI system tests, and `docs/results/harmony_verdicts.md` lists
+  them all.
+
 - **`make check-errata`** (VAL-08, in CI): every erratum in PLAN.md §5 has a test assertion naming
   it. X6 and X9 gain theirs.
 

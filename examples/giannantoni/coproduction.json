@@ -1,0 +1,21 @@
+{
+  "system_name": "Co-production: one interaction, two products",
+  "nodes": [
+    { "id": "sun", "label": "Sunlight", "type": "source", "initial_value": 2.0, "quality_input": 1.0 },
+    { "id": "soil", "label": "Soil organic matter", "type": "storage", "current_level": 4.0 },
+    { "id": "nutrients", "label": "Nutrient pool", "type": "storage", "current_level": 2.0 },
+    { "id": "growth", "label": "Growth", "type": "interaction", "module": { "k": 0.1 } },
+    { "id": "wood", "label": "Wood", "type": "storage", "current_level": 1.0 },
+    { "id": "seeds", "label": "Seeds", "type": "storage", "current_level": 0.2 },
+    { "id": "heat", "label": "Heat sink", "type": "sink" }
+  ],
+  "edges": [
+    { "source": "sun", "target": "soil", "weight": 0.3, "label": "inflow" },
+    { "source": "soil", "target": "growth", "role": "energy", "label": "drawn energy" },
+    { "source": "nutrients", "target": "growth", "role": "control", "use_ratio": 0.3, "label": "nutrients, drawn" },
+    { "source": "growth", "target": "wood", "weight": 1.0, "output_mode": "replicate", "label": "co-product" },
+    { "source": "growth", "target": "seeds", "weight": 1.0, "output_mode": "replicate", "label": "co-product" },
+    { "source": "growth", "target": "heat", "role": "used", "label": "used energy" }
+  ],
+  "simulation_params": { "t_val": 1.5, "derivative_order": 2, "generative_mode": true }
+}

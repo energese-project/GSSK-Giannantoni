@@ -43,7 +43,7 @@ echo "=== giannantoni_sim system tests ==="
 # ---------------------------------------------------------------------------
 LABELS='implemented classical assumed proxy illustrative'
 
-for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.json; do
+for model in examples/giannantoni/*.json; do
     name=$(basename "$model" .json)
     run "$name" "$model"
     ok "$name: exits 0" "$(cat "$tmp/$name.rc")"
@@ -99,6 +99,9 @@ want_header() {  # want_header <node ids...>
     printf ',conservation,emergy_excess\n'
 }
 for spec in "input:source_1 interaction_1 store_1 consumer_1 heat_1" \
+            "trophic_chain:sun producer herbivore decomposer heat" \
+            "coproduction:sun soil nutrients growth wood seeds heat" \
+            "harmonic_couples:sun a b c" \
             "closed_loop:source_1 interaction_1 store_1 consumer_1 recycler_1 heat_1"; do
     name=${spec%%:*}; ids=${spec#*:}
     run "$name" "examples/giannantoni/$name.json"
@@ -120,7 +123,7 @@ done
 # The same binary on the same input writes byte-identical output: CSV, generated
 # graph and report. Both runs use the same paths, since the report names them.
 # ---------------------------------------------------------------------------
-for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.json; do
+for model in examples/giannantoni/*.json; do
     name=$(basename "$model" .json)
     st=0
     for r in 1 2; do
@@ -142,7 +145,15 @@ done
 # maximum, closure 1.000. The catalogue mutation "gate on closure" is
 # closed_loop's old 0.800 with the sink counted.
 # ---------------------------------------------------------------------------
-for spec in "input:{2, 0, 0, 0, 1}:no:0.000" "closed_loop:{3, 3, 0, 0, 0}:yes:1.000"; do
+# The three later seeds, by hand from each drawing:
+#   trophic_chain    producer -> herbivore -> decomposer, producer -> decomposer: every couple one-way,
+#                    no module, no replicate: {3, 0, 0, 0, 3}, no cycle.
+#   coproduction     soil (energy) and nutrients (drawn control) both feed `growth`: (nutrients, soil)
+#                    is 2; wood and seeds are its replicated products: 1/2; the other four unrelated.
+#   harmonic_couples a -> b -> c -> a: all three couples 2/2, closure 1.
+for spec in "input:{2, 0, 0, 0, 1}:no:0.000" "closed_loop:{3, 3, 0, 0, 0}:yes:1.000" \
+            "trophic_chain:{3, 0, 0, 0, 3}:no:0.000" "coproduction:{4, 0, 1, 1, 4}:no:0.000" \
+            "harmonic_couples:{3, 3, 0, 0, 0}:yes:1.000"; do
     name=${spec%%:*}; rest=${spec#*:}; rec=${rest%%:*}; rest=${rest#*:}
     max=${rest%%:*}; clo=${rest#*:}
     run "$name" "examples/giannantoni/$name.json"
@@ -205,7 +216,7 @@ ok "--mop-out: IF-OUT-002's header, 1 + steps rows, labelled" "$st"
 # nodes but two components (store_1, consumer_1), closed_loop.json three. It was once sized from
 # every node, modules and habitat included, under a "components N" label.
 # ---------------------------------------------------------------------------
-for spec in "input:2" "closed_loop:3"; do
+for spec in "input:2" "closed_loop:3" "trophic_chain:3" "coproduction:4" "harmonic_couples:3"; do
     name=${spec%%:*}; want=${spec#*:}
     run "$name" "examples/giannantoni/$name.json"
     st=0
@@ -241,6 +252,27 @@ for v in $(sed -n 's/^harmony\.[a-z_]*: //p' "$tmp/hv.out"); do
     case "$v" in imposed|transported|present|absent) ;; *) echo "    verdict '$v'" >&2; st=1 ;; esac
 done
 ok "every harmony verdict is one of FR-HAR-002's four words" "$st"
+
+# ---------------------------------------------------------------------------
+# Verifies: IF-OUT-002, FR-HAR-001 (T-OUT-01)
+#
+# harmonic_couples.json's mop block gives beta_ac = -beta_ab, k = 1, so alpha_ac = -alpha_ab at every
+# t, and with N = 3 the one root is -1: R_H = 0 (to rounding) for t > 0, and the cell is empty at
+# t = 0 where alpha_12 = 0. By hand: alpha_ab(1) = 1 + 0.25/2 = 1.125.
+# ---------------------------------------------------------------------------
+set +e
+"$SIM" examples/giannantoni/harmonic_couples.json --steps 4 --csv "$tmp/hc.csv" --out "$tmp/hc.json" \
+    --mop-out "$tmp/hc.mop.csv" > "$tmp/hc.out" 2>&1
+rc=$?
+set -e
+st=0
+[ "$rc" -eq 0 ] || st=1
+[ "$(head -n 1 "$tmp/hc.mop.csv")" = "time,a__b_re,a__b_im,a__c_re,a__c_im,R_H" ] || st=1
+awk -F, 'NR == 2 && $6 != "" { bad = 1 }
+         NR > 2 { r = $6 + 0; if ($6 == "" || r > 1e-12 || r < -1e-12) bad = 1 }
+         END { if (NR != 6) bad = 1; exit bad }' "$tmp/hc.mop.csv" || st=1
+awk -F, 'END { if ($2 != 1.125 || $4 != -1.125) exit 1 }' "$tmp/hc.mop.csv" || st=1
+ok "harmonic_couples: R_H = 0 for t > 0, empty at t = 0; alpha_ab(1) = 1.125" "$st"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "ALL PASS"; else echo "FAILURES PRESENT"; fi

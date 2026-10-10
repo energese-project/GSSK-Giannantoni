@@ -65,6 +65,18 @@ make demo-giannantoni
 
 Runs the same binary three times with no configuration change between them. A seed below Maximum Ordinality gains pathways and reports a generative run; one already closed reports a functional run; feeding the first run's own output back in is a fixed point. Which mode a run was in is decided by diffing the output graph against the seed, not by trusting a flag.
 
+Five seeds live in `examples/giannantoni/`, each showing something the others do not:
+
+| Seed | Shows |
+|---|---|
+| `input.json` | Odum's work gate. Below maximum, one pathway added. |
+| `closed_loop.json` | Already at Maximum Ordinality: a functional run. |
+| `trophic_chain.json` | A network harmony verdict actually computed: the pathways carry emergy, and its `mop` block sets the reference couple. |
+| `coproduction.json` | ½ and 2 couples in the ordinality record. Three pathways are added. |
+| `harmonic_couples.json` | A `mop` block whose First Equation row is harmonic: `--mop-out` writes `R_H = 0`. |
+
+Each seed's verdicts are in [docs/results/harmony_verdicts.md](docs/results/harmony_verdicts.md), and `tests/mop_cli.sh` holds the CLI to them.
+
 ### Benchmark
 
 ```bash

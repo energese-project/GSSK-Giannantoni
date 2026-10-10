@@ -2460,6 +2460,57 @@ static void test_ord_adr_table_generative(void) {
     ok("closed_loop.json: at maximum, nothing to add", good);
 }
 
+/* Verifies: FR-ORD-005, BR-006 (T-ORD-04)
+ * Source: ADR 0021 §2, applied by hand to the later example seeds.
+ *   trophic_chain.json: SCCs {producer} (source), {herbivore}, {decomposer}
+ *     (sink); the one candidate is decomposer -> producer, and it closes the
+ *     chain into one SCC: exactly that pathway is added.
+ *   coproduction.json: four singleton SCCs; sources soil and nutrients, sinks
+ *     nutrients, seeds and wood -- #sources + #sinks = 5; the step must reach
+ *     maximum within 5 additions, adding no component.
+ *   harmonic_couples.json: a -> b -> c -> a is already strongly connected:
+ *     nothing is added. */
+static void test_ord_seed_generative(void) {
+    static const struct { const char *path; int max_added; const char *from, *to; } seeds[] = {
+        {"examples/giannantoni/trophic_chain.json", 1, "decomposer", "producer"},
+        {"examples/giannantoni/coproduction.json", 5, NULL, NULL},
+        {"examples/giannantoni/harmonic_couples.json", 0, NULL, NULL},
+    };
+    size_t i;
+
+    printf("\n[T-ORD-04] the generative step on the later example seeds\n");
+    for (i = 0; i < sizeof seeds / sizeof seeds[0]; i++) {
+        gia_model   m, ev;
+        cJSON      *root = NULL, *out = NULL;
+        char        line[160];
+        int         good = 0;
+        if (ord_load_file(seeds[i].path, &m, &root)) {
+            const int e0 = m.n_edges, n0 = m.n_nodes;
+            out = gen_quiet(&m);
+            if (out && gia_model_load(&ev, out)) {
+                const int added = ev.n_edges - e0;
+                good = ev.n_nodes == n0 && added <= seeds[i].max_added &&
+                       gia_at_maximum_ordinality(&ev) &&
+                       (seeds[i].max_added > 0 || added == 0);
+                if (good && seeds[i].from) {
+                    const gia_edge *e = &ev.edges[ev.n_edges - 1];
+                    good = added == 1 && !strcmp(ev.nodes[e->from].id, seeds[i].from) &&
+                           !strcmp(ev.nodes[e->to].id, seeds[i].to);
+                }
+                gia_model_free(&ev);
+            }
+            cJSON_Delete(out);
+            gia_model_free(&m);
+            cJSON_Delete(root);
+        }
+        snprintf(line, sizeof line, "%s: at maximum, <= %d additions%s%s%s, no component",
+                 strrchr(seeds[i].path, '/') + 1, seeds[i].max_added,
+                 seeds[i].from ? " (" : "", seeds[i].from ? seeds[i].from : "",
+                 seeds[i].from ? " -> producer)" : "");
+        ok(line, good);
+    }
+}
+
 /* ------------------------------------------------------------------ *
  * The generative step under Maximum Em-Power (ADR 0021 §2; FR-ORD-005)
  * ------------------------------------------------------------------ */
@@ -2981,6 +3032,7 @@ int main(void) {
     test_ord_generative();
     test_ord_closure_decides_nothing();
     test_ord_adr_table_generative();
+    test_ord_seed_generative();
     test_mop_network();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",

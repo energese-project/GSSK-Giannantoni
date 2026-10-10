@@ -1,0 +1,25 @@
+{
+  "system_name": "Harmonic couples: a First Equation row with R_H = 0",
+  "nodes": [
+    { "id": "sun", "label": "Sunlight", "type": "source", "initial_value": 1.0, "quality_input": 1.0 },
+    { "id": "a", "label": "Reference component", "type": "storage", "current_level": 2.0 },
+    { "id": "b", "label": "Second component", "type": "storage", "current_level": 1.0 },
+    { "id": "c", "label": "Third component", "type": "storage", "current_level": 1.0 }
+  ],
+  "edges": [
+    { "source": "sun", "target": "a", "weight": 0.4 },
+    { "source": "a", "target": "b", "weight": 0.2 },
+    { "source": "b", "target": "c", "weight": 0.2 },
+    { "source": "c", "target": "a", "weight": 0.2 }
+  ],
+  "simulation_params": { "t_val": 1.0, "derivative_order": 2, "generative_mode": true },
+  "mop": {
+    "k": 1,
+    "beta": [
+      { "from": "a", "to": "b", "a": 1.0, "b": 0.25, "p": 1.0 },
+      { "from": "a", "to": "c", "a": -1.0, "b": -0.25, "p": 1.0 }
+    ],
+    "second_equation": { "alpha12_0": [0.3, 0.1], "c1": 1.0, "c2": 0.5 },
+    "eqs": { "psi1": [1, 1, 1], "psi2": 1, "epsilon": [0, 0, 0], "A": 1 }
+  }
+}
