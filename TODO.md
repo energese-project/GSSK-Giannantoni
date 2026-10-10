@@ -1,6 +1,6 @@
 # GSK Production Roadmap
 
-> General Systems Kernel. A domain-specific simulation engine for Odum-style energy systems and General Systems Theory, with first-class support for emergy/transformity accounting, runtime topology mutation,  incipient-calculus integration, and replayable execution.
+> General Systems Kernel. A domain-specific simulation engine for Odum-style energy systems and General Systems Theory, with first-class support for emergy/transformity accounting, runtime topology mutation, matrix-exponential integration, and replayable execution.
 
 ---
 
@@ -11,7 +11,9 @@ for systems-dynamics and ecological-economic modelling specifically** — not a
 general-purpose ODE library. The wedge is:
 
 1. JSON schema with emergy/transformity semantics built in.
-2. Incipient-calculus solver as baseline, not as fast-path.
+2. A classical solver as baseline (the matrix exponential, which the kernel has long called
+   "incipient" though it is not Giannantoni's incipient calculus; PLAN.md §2 E2, R15). The incipient
+   calculus itself is the Giannantoni engine's to build ([PLAN.md](PLAN.md) W2).
 3. Topology that can mutate at runtime, with full replay.
 4. Deployable from one C99 core to native, WASM, Swift, Python, JS.
 5. Honest scholarship in the docs.
@@ -19,9 +21,11 @@ general-purpose ODE library. The wedge is:
 ## Non-Goals (defend these against feature creep)
 
 - [ ] Maintain explicit non-goals list in `docs/NON_GOALS.md`:
-  - No stiff-solver zoo (BDF, Rosenbrock, SDIRK). If a problem is stiff in
-    IDC-eligible form, the matrix exponential already handles it; if it is
-    stiff *and* not IDC-eligible, that is a modelling problem.
+  - No stiff-solver zoo (BDF, Rosenbrock, SDIRK). If a problem is stiff and
+    linear with constant coefficients, the matrix exponential already handles
+    it; if it is stiff *and* not of that form, that is a modelling problem.
+    (This used to say "IDC-eligible", equating the incipient calculus with the
+    matrix exponential. They are different things: PLAN.md §1 B5.)
   - No DAE / index-reduction support.
   - No symbolic Jacobian engine.
   - No automatic differentiation framework. Adjoint sensitivity is hand-coded
@@ -75,6 +79,11 @@ general-purpose ODE library. The wedge is:
 ---
 
 ## Phase 1 — IDC as Baseline (No Silent Fallback)
+
+> **What "IDC" means in this phase.** Throughout Phase 1, "IDC" names the kernel's Padé matrix
+> exponential and its flow-matrix machinery. That is a classical (TDC) method. It is not Giannantoni's
+> incipient calculus, which is PLAN.md W2's to build in the Giannantoni engine. The checked items below
+> are correct as classical numerics (PLAN.md §2 E2; R15 renames the method `"expm"`).
 
 ### 1.1 Riccati Exact Duet (interaction edges)
 - [x] Derive duet-of-exponentials closed form for `F = k·Q_origin·Q_control`
