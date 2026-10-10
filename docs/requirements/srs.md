@@ -471,7 +471,7 @@ No Giannantoni unit shall include `gssk.h`.
 ### NFR-COV-001 — Coverage of the Giannantoni units
 Line coverage of the Giannantoni units shall be ≥ 90%, measured in CI; an unparsable figure shall fail.
 - **Source:** PLAN §1 B3, G2
-- **Verification:** T-COV-01 · **Priority:** Must · **Status:** planned · **Task:** guard-coverage-giannantoni
+- **Verification:** T-COV-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-coverage-giannantoni
 
 ### NFR-API-001 — No untested or stubbed API
 Every function declared in `idc.h`, `mop.h` and `relational.h` shall be called by a test, and none

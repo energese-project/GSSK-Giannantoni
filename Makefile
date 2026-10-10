@@ -721,12 +721,65 @@ coverage-report: coverage-build
 	     --ignore-errors mismatch,unused
 	genhtml coverage/lcov.info --output-directory coverage/html --quiet
 
-coverage-check: coverage-report
-	@line_pct=$$(lcov --summary coverage/lcov.info 2>&1 | grep 'lines' | grep -oP '[0-9]+\.[0-9]+(?=%)' | head -1); \
-	echo "Line coverage: $${line_pct}% (gate: $(COVERAGE_MIN_LINE)%)"; \
-	if [ -n "$$line_pct" ] && [ $$(echo "$$line_pct < $(COVERAGE_MIN_LINE)" | bc -l) -eq 1 ]; then \
+# The kernel gate. It used to parse with `grep -oP` (absent from macOS grep)
+# and print OK whenever it parsed nothing (PLAN.md §1 B3); an unreadable
+# summary now fails. The Giannantoni gate is coverage-gia, below.
+coverage-check: coverage-report coverage-gia
+	@line_pct=$$(lcov --summary coverage/lcov.info 2>&1 | awk '/lines/ { for (i = 1; i <= NF; i++) if ($$i ~ /^[0-9]+(\.[0-9]+)?%$$/) { sub(/%/, "", $$i); print $$i; exit } }'); \
+	if [ -z "$$line_pct" ]; then echo "FAIL: cannot read a line percentage from lcov --summary"; exit 1; fi; \
+	echo "Kernel line coverage: $${line_pct}% (gate: $(COVERAGE_MIN_LINE)%)"; \
+	if awk -v p="$$line_pct" -v m="$(COVERAGE_MIN_LINE)" 'BEGIN { exit !(p < m) }'; then \
 		echo "FAIL: line coverage below $(COVERAGE_MIN_LINE)%"; exit 1; \
 	else echo "OK"; fi
+
+# Giannantoni units (NFR-COV-001, ADR 0018 rule 2): >= 90% of lines, measured
+# with gcov over every Giannantoni suite. The units are those srs.md names;
+# validation.c and projection.c are reported but not gated. A unit listed here
+# whose source does not exist yet is skipped, so W2-W8 join the gate by landing.
+GIA_COV_MIN    = 90
+GIA_COV_UNITS  = engine idc mop relational harmony
+GIA_COV_EXTRA  = validation projection
+GIA_COV_DIR    = coverage/gia
+GCOV          ?= gcov
+GIA_COV_FLAGS  = -std=c99 -Iinclude -O0 -g --coverage
+
+.PHONY: coverage-gia
+coverage-gia: directories
+	@rm -rf $(GIA_COV_DIR) && mkdir -p $(GIA_COV_DIR)
+	@for u in $(GIA_COV_UNITS) $(GIA_COV_EXTRA); do \
+		[ -f $(SRC_DIR)/$$u.c ] || continue; \
+		gcc $(GIA_COV_FLAGS) -c $(SRC_DIR)/$$u.c -o $(GIA_COV_DIR)/$$u.o || exit 1; \
+	done
+	@gcc -std=c99 -Iinclude -O0 -c $(SRC_DIR)/cJSON.c -o $(GIA_COV_DIR)/cJSON.o
+	@objs=$$(ls $(GIA_COV_DIR)/*.o); \
+	for t in $(GIA_COV_TESTS); do \
+		gcc $(GIA_COV_FLAGS) $(TEST_DIR)/$$t.c $$objs -o $(GIA_COV_DIR)/$$t $(LDFLAGS) -lpthread || exit 1; \
+		./$(GIA_COV_DIR)/$$t > $(GIA_COV_DIR)/$$t.log 2>&1 || { echo "coverage-gia: $$t failed"; tail -20 $(GIA_COV_DIR)/$$t.log; exit 1; }; \
+	done; \
+	gcc $(GIA_COV_FLAGS) $(SRC_DIR)/sim_main.c $$objs -o $(GIA_COV_DIR)/giannantoni_sim $(LDFLAGS) || exit 1; \
+	SIM=$(GIA_COV_DIR)/giannantoni_sim sh $(TEST_DIR)/mop_cli.sh > $(GIA_COV_DIR)/mop_cli.log 2>&1 \
+		|| { echo "coverage-gia: mop_cli.sh failed"; tail -20 $(GIA_COV_DIR)/mop_cli.log; exit 1; }
+	@: > $(GIA_COV_DIR)/gated.txt; : > $(GIA_COV_DIR)/extra.txt
+	@for u in $(GIA_COV_UNITS); do \
+		[ -f $(SRC_DIR)/$$u.c ] || continue; \
+		$(GCOV) -n -o $(GIA_COV_DIR) $(SRC_DIR)/$$u.c 2>/dev/null | awk -v f="$(SRC_DIR)/$$u.c" 'index($$0, "File \047" f "\047") == 1 { p = 1; print; next } p { print; exit }' >> $(GIA_COV_DIR)/gated.txt; \
+	done
+	@for u in $(GIA_COV_EXTRA); do \
+		$(GCOV) -n -o $(GIA_COV_DIR) $(SRC_DIR)/$$u.c 2>/dev/null | awk -v f="$(SRC_DIR)/$$u.c" 'index($$0, "File \047" f "\047") == 1 { p = 1; print; next } p { print; exit }' >> $(GIA_COV_DIR)/extra.txt; \
+	done
+	@echo "Giannantoni units outside the gate (reported only):"
+	@awk '/^File /{ f = $$2 } /^Lines/{ print "  " f " " $$0 }' $(GIA_COV_DIR)/extra.txt
+	@echo "Giannantoni units, gated:"
+	@sh scripts/coverage_gate.sh $(GIA_COV_MIN) $(GIA_COV_DIR)/gated.txt
+
+# Every Giannantoni test binary built from tests/<name>.c. A W2-W8 suite joins
+# coverage by being listed here.
+GIA_COV_TESTS = test_giannantoni test_mop_threads
+
+# The gate's own self-test: garbage, an empty report and 89% must all fail.
+.PHONY: test-coverage-gate
+test-coverage-gate:
+	@sh $(TEST_DIR)/coverage_gate_selftest.sh
 
 # ──────────────────────────────────────────────────────────────
 # Valgrind memory-error check (Linux only)
@@ -988,7 +1041,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
            test-gnp-loop test-giannantoni test-mop-cli test-mop-threads check-symbols \
-           test-guard-no-skip check-trace check-version test-schema
+           test-guard-no-skip test-coverage-gate check-trace check-version test-schema
 
 # Full native build + CI's suites under real GCC with -Werror.
 test-linux: container-image-linux
