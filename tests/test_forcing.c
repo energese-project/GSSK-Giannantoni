@@ -22,6 +22,8 @@
  * Formulas are asserted against HAND-COMPUTED values, never golden numbers.
  */
 
+/* Verifies: FR-KER-002 (T-KER-02) */
+
 #include "gssk.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -651,7 +653,10 @@ static void test_round_trip(void) {
     assert_round_trips("{ \"waveform\": \"sine\", \"mean\": 3, \"amplitude\": 1, \"period\": 4, \"phase\": 1.25, \"min\": 2.5 }", "sine");
     assert_round_trips("{ \"waveform\": \"exponential\", \"v0\": 1, \"rate\": 0.1, \"max\": 4 }", "exponential");
     assert_round_trips("{ \"waveform\": \"jitter\", \"mean\": 3, \"amplitude\": 1 }", "jitter");
-    printf("  All 8 waveforms round-trip\n");
+    assert_round_trips("{ \"waveform\": \"table\", \"times\": [0, 1.5, 4], \"values\": [2, 5, 3] }", "table, linear hold");
+    assert_round_trips("{ \"waveform\": \"table\", \"times\": [0, 1.5, 4], \"values\": [2, 5, 3],"
+                       "  \"interpolation\": \"step\", \"extrapolation\": \"cycle\", \"max\": 4.5 }", "table, step cycle");
+    printf("  All 9 waveforms round-trip\n");
 }
 
 /* An unforced model must behave EXACTLY as before. */
@@ -684,6 +689,286 @@ static void test_unforced_unchanged(void) {
     printf("  Unforced models unchanged\n");
 }
 
+/* ================================================================
+ * 7. Table — a source driven by observed data (h8c)
+ *
+ * READ/DATA in Odum's BASIC, and any measured series. Schema v5 §7 fixes the
+ * shape: `times` (strictly increasing, absolute model time), `values` (same
+ * length), `interpolation` step | linear, `extrapolation` hold | cycle.
+ * Every expected value below is hand-computed from the four-point series
+ * times 0,1,2,3 / values 4.1,5.0,6.2,5.8.
+ * ================================================================ */
+
+#define SERIES "\"times\": [0, 1, 2, 3], \"values\": [4.1, 5.0, 6.2, 5.8]"
+
+static void test_table_step(void) {
+    printf("Testing table, step interpolation...\n");
+    const char *f = "{ \"waveform\": \"table\", " SERIES ", \"interpolation\": \"step\" }";
+    expect_wave(f, 0.0,   4.1, 0.0, "step table at the first knot");
+    expect_wave(f, 0.5,   4.1, 0.0, "step table holds the last value read");
+    /* A knot is closed on the right, like the `step` waveform at t_on. */
+    expect_wave(f, 1.0,   5.0, 0.0, "step table AT a knot reads that knot");
+    expect_wave(f, 2.999, 6.2, 0.0, "step table just before a knot");
+    expect_wave(f, 3.0,   5.8, 0.0, "step table at the last knot");
+    expect_wave(f, 9.0,   5.8, 0.0, "hold (the default) keeps the last value");
+    expect_wave(f, -1.0,  4.1, 0.0, "hold before the first knot keeps the first value");
+    printf("  step table OK\n");
+}
+
+static void test_table_linear(void) {
+    printf("Testing table, linear interpolation...\n");
+    const char *f = "{ \"waveform\": \"table\", " SERIES ", \"interpolation\": \"linear\" }";
+    expect_wave(f, 0.5,  4.55, 1e-12, "linear: (4.1 + 5.0)/2");
+    expect_wave(f, 1.0,  5.0,  0.0,   "linear: exactly the knot");
+    expect_wave(f, 2.25, 6.1,  1e-12, "linear: 6.2 + 0.25*(5.8 - 6.2)");
+    expect_wave(f, 7.0,  5.8,  0.0,   "linear, hold after the last knot");
+    /* linear is the default interpolation */
+    expect_wave("{ \"waveform\": \"table\", " SERIES " }", 0.5, 4.55, 1e-12,
+                "interpolation defaults to linear");
+    /* Clamped last, as for every waveform. */
+    expect_wave("{ \"waveform\": \"table\", " SERIES ", \"max\": 6.0 }", 2.0, 6.0, 0.0,
+                "table clamped at max");
+    expect_wave("{ \"waveform\": \"table\", " SERIES ", \"min\": 4.5 }", 0.0, 4.5, 0.0,
+                "table clamped at min");
+    /* One point is a constant: there is nothing to interpolate. */
+    expect_wave("{ \"waveform\": \"table\", \"times\": [2], \"values\": [7.5] }", 0.0, 7.5, 0.0,
+                "a one-point table is its value everywhere");
+    printf("  linear table OK\n");
+}
+
+static void test_table_cycle(void) {
+    printf("Testing table, cycle extrapolation...\n");
+    /* Period = times[last] - times[0] = 3. The last knot marks the END of the
+     * cycle, so t = 3 is t = 0 of the next pass: a year of monthly DATA is
+     * thirteen times, 0..12, with the thirteenth value the approach to it. */
+    const char *fl = "{ \"waveform\": \"table\", " SERIES ","
+                     "  \"interpolation\": \"linear\", \"extrapolation\": \"cycle\" }";
+    expect_wave(fl, 3.5,  4.55, 1e-12, "cycle: t=3.5 is t=0.5");
+    expect_wave(fl, 4.0,  5.0,  1e-12, "cycle: t=4 is the knot at 1");
+    expect_wave(fl, 3.0,  4.1,  1e-12, "cycle: t=3 wraps to the first knot");
+    expect_wave(fl, 32.25, 6.1, 1e-9,  "cycle: t=32.25 is t=2.25, ten periods on");
+    expect_wave(fl, -0.5, 6.0,  1e-12, "cycle before the first knot: t=-0.5 is t=2.5");
+    const char *fs = "{ \"waveform\": \"table\", " SERIES ","
+                     "  \"interpolation\": \"step\", \"extrapolation\": \"cycle\" }";
+    expect_wave(fs, 5.5,  6.2,  0.0, "step cycle: t=5.5 is t=2.5");
+    /* Offset origin: the cycle is anchored at times[0], not at zero. */
+    expect_wave("{ \"waveform\": \"table\", \"times\": [10, 12], \"values\": [1, 3],"
+                "  \"extrapolation\": \"cycle\" }", 13.0, 2.0, 1e-12,
+                "cycle anchored at times[0] = 10: t=13 is t=11");
+    printf("  cycle OK\n");
+}
+
+/* The kernel integrates what the evaluator reports. A linear table is
+ * piecewise linear, and RK4 integrates a linear integrand exactly on a step
+ * that does not straddle a knot, so with dt = 0.25 (exact in binary, knots on
+ * step boundaries) the tank is the trapezoid sum to rounding:
+ *   (4.1+5.0)/2 + (5.0+6.2)/2 + (6.2+5.8)/2 = 4.55 + 5.6 + 6.0 = 16.15.
+ * Step interpolation under Euler reads the left end of every step, so the
+ * tank is the rectangle sum 4.1 + 5.0 + 6.2 = 15.3. */
+static void table_tank(const char *forcing, const char *method, double want,
+                       const char *what) {
+    char cfg[96];
+    snprintf(cfg, sizeof(cfg), ", \"method\": \"%s\"", method);
+    char json[2048];
+    snprintf(json, sizeof(json),
+        "{ \"metadata\": { \"schema_version\": 4 },"
+        "  \"nodes\": [ { \"id\": \"sun\", \"type\": \"source\", \"value\": 1.0, \"forcing\": %s },"
+        "               { \"id\": \"tank\", \"type\": \"storage\", \"value\": 0.0 } ],"
+        "  \"edges\": [ { \"id\": \"e1\", \"origin\": \"sun\", \"target\": \"tank\","
+        "                 \"logic\": \"linear\", \"params\": { \"k\": 1.0 } } ],"
+        "  \"config\": { \"t_start\": 0, \"t_end\": 3, \"dt\": 0.25%s } }", forcing, cfg);
+    GSSK_Instance *inst = NULL;
+    GSSK_Status st = GSSK_Init(json, &inst);
+    CHECK(st == GSSK_SUCCESS, "%s: load failed: %s", what,
+          inst ? GSSK_GetErrorDescription(inst) : "");
+    if (st == GSSK_SUCCESS) {
+        for (int i = 0; i < 12; i++) GSSK_Step(inst, GSSK_GetDt(inst));
+        CHECK(NEAR(GSSK_GetState(inst)[1], want, 1e-12),
+              "%s: tank(3) = %.15g, hand-computed %.15g", what,
+              GSSK_GetState(inst)[1], want);
+        /* The reported source state is the forced value, not the declared 1.0. */
+        CHECK(NEAR(GSSK_GetState(inst)[0], 5.8, 0.0),
+              "%s: source state at t=3 = %.15g, the table says 5.8", what,
+              GSSK_GetState(inst)[0]);
+    }
+    GSSK_Free(inst);
+}
+
+static void test_table_drives_the_kernel(void) {
+    printf("Testing a table-forced source drives the integration...\n");
+    table_tank("{ \"waveform\": \"table\", " SERIES ", \"interpolation\": \"linear\" }",
+               "rk4", 16.15, "linear table, rk4");
+    table_tank("{ \"waveform\": \"table\", " SERIES ", \"interpolation\": \"step\" }",
+               "euler", 15.3, "step table, euler");
+
+    /* And on an edge: k from the table, source fixed at 2, so flow = 2*k(t)
+     * and the tank is twice the trapezoid sum. */
+    const char *MODEL =
+        "{ \"metadata\": { \"schema_version\": 4 },"
+        "  \"nodes\": [ { \"id\": \"src\", \"type\": \"source\", \"value\": 2.0 },"
+        "               { \"id\": \"tank\", \"type\": \"storage\", \"value\": 0.0 } ],"
+        "  \"edges\": [ { \"id\": \"e1\", \"origin\": \"src\", \"target\": \"tank\","
+        "                 \"logic\": \"linear\", \"params\": { \"k\": 1.0 },"
+        "                 \"forcing\": { \"waveform\": \"table\", " SERIES " } } ],"
+        "  \"config\": { \"t_start\": 0, \"t_end\": 3, \"dt\": 0.25, \"method\": \"rk4\" } }";
+    GSSK_Instance *inst = NULL;
+    GSSK_Status st = GSSK_Init(MODEL, &inst);
+    CHECK(st == GSSK_SUCCESS, "edge table: load failed: %s",
+          inst ? GSSK_GetErrorDescription(inst) : "");
+    if (st == GSSK_SUCCESS) {
+        CHECK(GSSK_GetEdgeForcingKind(inst, 0) == GSSK_FORCING_TABLE,
+              "edge forcing kind %d, expected GSSK_FORCING_TABLE",
+              GSSK_GetEdgeForcingKind(inst, 0));
+        CHECK(NEAR(GSSK_EvaluateEdgeForcing(inst, 0, 0.5), 4.55, 1e-12),
+              "edge table k(0.5) = %.15g, hand-computed 4.55",
+              GSSK_EvaluateEdgeForcing(inst, 0, 0.5));
+        for (int i = 0; i < 12; i++) GSSK_Step(inst, GSSK_GetDt(inst));
+        CHECK(NEAR(GSSK_GetState(inst)[1], 32.3, 1e-11),
+              "edge table: tank(3) = %.15g, hand-computed 2*16.15 = 32.3",
+              GSSK_GetState(inst)[1]);
+    }
+    GSSK_Free(inst);
+    printf("  table drives node value and edge rate\n");
+}
+
+/* Long series: the lookup is a bisection, so check it against a sampled
+ * function at points between every knot, not just near the ends. */
+static void test_table_long_series(void) {
+    printf("Testing a long table...\n");
+    enum { N = 1000 };
+    size_t cap = 64 + (size_t)N * 48;
+    char *f = malloc(cap);
+    assert(f);
+    size_t n = (size_t)snprintf(f, cap, "{ \"waveform\": \"table\", \"times\": [");
+    for (int i = 0; i < N; i++)
+        n += (size_t)snprintf(f + n, cap - n, "%s%d", i ? "," : "", i);
+    n += (size_t)snprintf(f + n, cap - n, "], \"values\": [");
+    for (int i = 0; i < N; i++)
+        n += (size_t)snprintf(f + n, cap - n, "%s%d", i ? "," : "", 3 * i + 1);
+    snprintf(f + n, cap - n, "] }");
+
+    /* values = 3*times + 1 is linear, so linear interpolation reproduces it. */
+    char *json = malloc(cap + 1024);
+    assert(json);
+    snprintf(json, cap + 1024,
+        "{ \"metadata\": { \"schema_version\": 4 },"
+        "  \"nodes\": [ { \"id\": \"sun\", \"type\": \"source\", \"value\": 1.0, \"forcing\": %s },"
+        "               { \"id\": \"tank\", \"type\": \"storage\", \"value\": 0.0 } ],"
+        "  \"edges\": [ { \"origin\": \"sun\", \"target\": \"tank\","
+        "                 \"logic\": \"linear\", \"params\": { \"k\": 1.0 } } ],"
+        "  \"config\": { \"t_start\": 0, \"t_end\": 1, \"dt\": 0.1 } }", f);
+    GSSK_Instance *inst = NULL;
+    GSSK_Status st = GSSK_Init(json, &inst);
+    CHECK(st == GSSK_SUCCESS, "long table: load failed: %s",
+          inst ? GSSK_GetErrorDescription(inst) : "");
+    if (st == GSSK_SUCCESS) {
+        int bad = 0;
+        for (int i = 0; i < N - 1; i++) {
+            double t = i + 0.375;
+            double v = GSSK_EvaluateNodeForcing(inst, 0, t);
+            if (!NEAR(v, 3.0 * t + 1.0, 1e-9)) bad++;
+        }
+        CHECK(bad == 0, "long table: %d of %d interior points wrong", bad, N - 1);
+    }
+    GSSK_Free(inst);
+    free(json);
+    free(f);
+    printf("  1000-point table OK\n");
+}
+
+static void test_table_rejected(void) {
+    printf("Testing malformed tables are rejected...\n");
+    char json[2048];
+    const char *TMPL =
+        "{ \"metadata\": { \"schema_version\": 4 },"
+        "  \"nodes\": [ { \"id\": \"src\", \"type\": \"source\", \"value\": 1.0, \"forcing\": %s },"
+        "               { \"id\": \"tank\", \"type\": \"storage\", \"value\": 0.0 } ],"
+        "  \"edges\": [ { \"origin\": \"src\", \"target\": \"tank\", \"logic\": \"linear\", \"params\": { \"k\": 1 } } ],"
+        "  \"config\": { \"t_start\": 0, \"t_end\": 1, \"dt\": 0.1 } }";
+    struct { const char *forcing, *what, *needle; } cases[] = {
+        { "{ \"waveform\": \"table\", \"values\": [1, 2] }",
+          "table without times", "times" },
+        { "{ \"waveform\": \"table\", \"times\": [0, 1] }",
+          "table without values", "values" },
+        { "{ \"waveform\": \"table\", \"times\": [], \"values\": [] }",
+          "empty table", "times" },
+        { "{ \"waveform\": \"table\", \"times\": [0, 1, 2], \"values\": [1, 2] }",
+          "length mismatch", "same length" },
+        { "{ \"waveform\": \"table\", \"times\": [0, 2, 1], \"values\": [1, 2, 3] }",
+          "times out of order", "strictly increasing" },
+        { "{ \"waveform\": \"table\", \"times\": [0, 1, 1], \"values\": [1, 2, 3] }",
+          "repeated time", "strictly increasing" },
+        { "{ \"waveform\": \"table\", \"times\": [0, \"1\"], \"values\": [1, 2] }",
+          "a time that is not a number", "times" },
+        { "{ \"waveform\": \"table\", \"times\": [0, 1], \"values\": [1, null] }",
+          "a value that is not a number", "values" },
+        { "{ \"waveform\": \"table\", \"times\": [0, 1], \"values\": [1, 2], \"interpolation\": \"cubic\" }",
+          "unknown interpolation", "cubic" },
+        { "{ \"waveform\": \"table\", \"times\": [0, 1], \"values\": [1, 2], \"extrapolation\": \"zero\" }",
+          "unknown extrapolation", "zero" },
+        { "{ \"waveform\": \"table\", \"times\": [5], \"values\": [1], \"extrapolation\": \"cycle\" }",
+          "cycle over a one-point table (period 0)", "cycle" },
+        /* times are absolute, so an onset would be a second, conflicting clock */
+        { "{ \"waveform\": \"table\", \"times\": [0, 1], \"values\": [1, 2], \"t_on\": 3 }",
+          "t_on on a table", "t_on" },
+        /* a data series on another waveform would be silently ignored */
+        { "{ \"waveform\": \"sine\", \"period\": 2, \"amplitude\": 1, \"times\": [0, 1], \"values\": [1, 2] }",
+          "table fields on a sine", "times" },
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        snprintf(json, sizeof(json), TMPL, cases[i].forcing);
+        expect_reject(json, cases[i].what, cases[i].needle);
+    }
+
+    /* At runtime too: GSSK_AddNode and GSSK_AddEdge are separate parsers, and
+     * a rejected add must leave the instance as it was. */
+    const char *BASE =
+        "{ \"metadata\": { \"schema_version\": 4 },"
+        "  \"nodes\": [ { \"id\": \"src\", \"type\": \"source\", \"value\": 1.0 },"
+        "               { \"id\": \"tank\", \"type\": \"storage\", \"value\": 0.0 } ],"
+        "  \"edges\": [ { \"origin\": \"src\", \"target\": \"tank\", \"logic\": \"linear\", \"params\": { \"k\": 1 } } ],"
+        "  \"config\": { \"t_start\": 0, \"t_end\": 1, \"dt\": 0.1 } }";
+    GSSK_Instance *inst = NULL;
+    assert(GSSK_Init(BASE, &inst) == GSSK_SUCCESS);
+    /* storage: the table parses, then the node is refused — the table must
+     * not leak (the ASan build of this suite checks that). */
+    CHECK(GSSK_AddNode(inst,
+        "{\"id\":\"t2\",\"type\":\"storage\",\"value\":1.0,"
+        " \"forcing\":{\"waveform\":\"table\",\"times\":[0,1],\"values\":[1,2]}}")
+          == GSSK_ERR_SCHEMA_VIOLATION, "AddNode must refuse a table-forced storage node");
+    CHECK(GSSK_AddNode(inst,
+        "{\"id\":\"s2\",\"type\":\"source\",\"value\":1.0,"
+        " \"forcing\":{\"waveform\":\"table\",\"times\":[1,0],\"values\":[1,2]}}")
+          == GSSK_ERR_SCHEMA_VIOLATION, "AddNode must refuse an unordered table");
+    /* unknown target: the table parses, then the edge is refused */
+    CHECK(GSSK_AddEdge(inst,
+        "{\"id\":\"e9\",\"origin\":\"src\",\"target\":\"nowhere\",\"logic\":\"linear\","
+        " \"params\":{\"k\":1},\"forcing\":{\"waveform\":\"table\",\"times\":[0,1],\"values\":[1,2]}}")
+          == GSSK_ERR_SCHEMA_VIOLATION, "AddEdge must refuse an edge to an unknown node");
+    CHECK(GSSK_GetStateSize(inst) == 2, "rejected adds must be no-ops");
+
+    /* and a good one is accepted and evaluates */
+    CHECK(GSSK_AddNode(inst,
+        "{\"id\":\"s3\",\"type\":\"source\",\"value\":1.0,"
+        " \"forcing\":{\"waveform\":\"table\",\"times\":[0,1],\"values\":[1,3]}}")
+          == GSSK_SUCCESS, "AddNode must accept a table-forced source: %s",
+          GSSK_GetErrorDescription(inst));
+    CHECK(NEAR(GSSK_EvaluateNodeForcing(inst, 2, 0.5), 2.0, 1e-12),
+          "added table source at t=0.5: %.15g, expected 2",
+          GSSK_EvaluateNodeForcing(inst, 2, 0.5));
+    CHECK(GSSK_AddEdge(inst,
+        "{\"id\":\"e2\",\"origin\":\"s3\",\"target\":\"tank\",\"logic\":\"linear\","
+        " \"params\":{\"k\":1},\"forcing\":{\"waveform\":\"table\",\"times\":[0,1],\"values\":[2,4]}}")
+          == GSSK_SUCCESS, "AddEdge must accept a table-forced edge: %s",
+          GSSK_GetErrorDescription(inst));
+    CHECK(NEAR(GSSK_EvaluateEdgeForcing(inst, 1, 0.5), 3.0, 1e-12),
+          "added table edge at t=0.5: %.15g, expected 3",
+          GSSK_EvaluateEdgeForcing(inst, 1, 0.5));
+    CHECK(GSSK_Step(inst, GSSK_GetDt(inst)) == GSSK_SUCCESS, "instance must still step");
+    GSSK_Free(inst);
+    printf("  Malformed tables rejected on all three parsers\n");
+}
+
 /* ---------------------------------------------------------------- */
 
 int main(void) {
@@ -704,6 +989,12 @@ int main(void) {
     test_authoring_mistakes_rejected();
     test_round_trip();
     test_unforced_unchanged();
+    test_table_step();
+    test_table_linear();
+    test_table_cycle();
+    test_table_drives_the_kernel();
+    test_table_long_series();
+    test_table_rejected();
 
     printf("\n");
     if (failures) { printf("=== FAILED (%d) ===\n", failures); return 1; }

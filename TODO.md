@@ -400,8 +400,11 @@ general-purpose ODE library. The wedge is:
 - [x] `jitter` latched once per accepted step from the instance RNG.
 - [x] Shared evaluator exported (`GSSK_EvaluateNodeForcing` /
       `GSSK_EvaluateEdgeForcing`) so consumers do not reimplement the formulas.
-- [ ] Drive a source from observed data (tabulated series) — tracked in `crux`
-      as `h8c-data-driven-forcing`.
+- [x] Drive a source from observed data (tabulated series) — tracked in `crux`
+      as `h8c-data-driven-forcing`. `waveform: "table"`, in Schema v5 §7's
+      shape (`times`, `values`, `interpolation` step|linear,
+      `extrapolation` hold|cycle). See ADR 0006 addendum,
+      `examples/tabulated_source_model.json` and FR-KER-002.
 
 ### 7.2 New Fundamental Node Types
 
@@ -629,7 +632,7 @@ general-purpose ODE library. The wedge is:
       It cannot show how often that holds for real Odum graphs, which is the
       actual Level 1 claim. ADR 0011 decision 3 is how it gets quantified.
       Quantified in `docs/results/level1_survey.md` (`make level1-survey`,
-      FR-BRG-002): of 23 examples, 11 are in exponential form and 5 are
+      FR-BRG-002): of 24 examples, 12 are in exponential form and 5 are
       carried whole, of which 3 are both. Under RK4 the kernel is within 2.2e-7
       (scaled) of `exp(A t)` on every model carried whole. The survey also found
       that the projection was silently dropping kernel forcing; that is now fixed.

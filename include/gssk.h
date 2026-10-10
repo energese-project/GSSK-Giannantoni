@@ -1011,6 +1011,14 @@ GSSK_Status GSSK_CalibrateGradient(GSSK_Instance *inst,
  *   EXPONENTIAL  t <  t_on -> v0
  *                t >= t_on -> v0 * exp(rate * tau)
  *   JITTER       mean + amplitude * (2u - 1), u in [0,1) from the instance RNG
+ *   TABLE        a data series: `times` (strictly increasing, ABSOLUTE model
+ *                time, so `t_on` is refused) and `values`, the same length.
+ *                interpolation "linear" (default) joins the knots; "step"
+ *                holds the value of the last knot at or before t (READ/DATA).
+ *                extrapolation "hold" (default) keeps the end values outside
+ *                [times[0], times[n-1]]; "cycle" repeats with period
+ *                times[n-1] - times[0], so the last knot is the start of the
+ *                next pass and its value is reached only as a limit.
  *
  * PHASE CONVENTION, stated because an ambiguous one is how two
  * implementations diverge: `phase` is a TIME offset in the same units as t.
@@ -1031,7 +1039,8 @@ typedef enum {
   GSSK_FORCING_SQUARE,
   GSSK_FORCING_SINE,
   GSSK_FORCING_EXPONENTIAL,
-  GSSK_FORCING_JITTER
+  GSSK_FORCING_JITTER,
+  GSSK_FORCING_TABLE       /**< Observed data: `times`/`values` (h8c). */
 } GSSK_ForcingKind;
 
 /**

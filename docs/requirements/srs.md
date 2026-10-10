@@ -363,6 +363,21 @@ exponential.
 - **Source:** PLAN R15
 - **Verification:** T-KER-01 · **Priority:** Should · **Status:** implemented · **Task:** kernel-method-label
 
+### FR-KER-002 — A source driven by observed data
+The GSSK kernel shall accept forcing `waveform: "table"` on a node's value or an edge's rate. It
+takes `times` (strictly increasing, in absolute model time), `values` (the same length),
+`interpolation` (`linear` by default, or `step`, closed on the right) and `extrapolation` (`hold`
+by default, or `cycle`, with period `times[last] − times[0]`), as Schema v5 §7 specifies. It shall
+reject the following, naming the reason, at `GSSK_Init`, `GSSK_AddNode` and `GSSK_AddEdge`:
+- a malformed table
+- `t_on` on a table
+- a table key on any other waveform
+
+It shall serialise a table so that it reloads to the same values. The Giannantoni projection shall
+refuse it by name.
+- **Source:** TODO.md §7.1; ADR 0006 (addendum); Schema v5 §7
+- **Verification:** T-KER-02 · **Priority:** Should · **Status:** implemented · **Task:** h8c-data-driven-forcing
+
 ### 2.9 Between the engines
 
 ### FR-BRG-001 — One model through both engines

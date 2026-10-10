@@ -1543,6 +1543,8 @@ static void test_projection_forcing(void) {
             {"a ramp that switches on mid-run", "{\"waveform\":\"ramp\",\"t_on\":5,\"v0\":1,\"slope\":1}", "", "switches on"},
             {"a sine whose min clamp binds", "{\"waveform\":\"sine\",\"mean\":1,\"amplitude\":2,\"period\":10,\"min\":0}", "", "clamp"},
             {"an edge step (its rate)", "", "{\"waveform\":\"step\",\"t_on\":5,\"v0\":0.1,\"v1\":0.2}", "edge 'prod'"},
+            /* h8c: a data series has no generator in the engine's vocabulary */
+            {"a data table", "{\"waveform\":\"table\",\"times\":[0,10],\"values\":[1,2]}", "", "table"},
         };
         size_t b;
         int    all = 1;
@@ -1559,7 +1561,7 @@ static void test_projection_forcing(void) {
             if (r == 2) gia_model_free(&m);
             cJSON_Delete(mop);
         }
-        ok("square, step, a late ramp, a binding clamp, an edge step: refused by name", all);
+        ok("square, step, a late ramp, a binding clamp, an edge step, a table: refused by name", all);
     }
 }
 
