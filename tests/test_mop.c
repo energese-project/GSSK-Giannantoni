@@ -174,10 +174,233 @@ static void test_idc_general_f(void) {
        gia_idc_of(1.0, INFINITY, 1, &out, &why) == GIA_E_DOMAIN);
 }
 
+/* Coefficient functions for the LDE tests. ctx is unused except where a
+ * test counts calls. */
+static double complex zero_fn(double t, void *ctx)    { (void)t; (void)ctx; return 0.0; }
+static double complex neg_sq1p(double t, void *ctx)   { (void)ctx; return -(1.0 + t) * (1.0 + t); }
+static double complex neg2t(double t, void *ctx)      { (void)ctx; return -2.0 * t; }
+static double complex tsq(double t, void *ctx)        { (void)ctx; return t * t; }
+static double complex neg_sq_half(double t, void *ctx){ (void)ctx; return -(t - 0.5) * (t - 0.5); }
+static double complex onept(double t, void *ctx)      { (void)ctx; return 1.0 + t; }
+static double complex neg_tsq(double t, void *ctx)    { (void)ctx; return -t * t; }
+static double complex neg_sq1psin(double t, void *ctx){ (void)ctx; return -(1.0 + sin(t)) * (1.0 + sin(t)); }
+static double complex neg_sq1pit(double t, void *ctx) { (void)ctx; return -(1.0 + I * t) * (1.0 + I * t); }
+
+/* Source: [06 Eq 3.3-3.6], [09 Eq 3, 7], [10 Eq 8.1, 10.1]; PLAN R13, R16,
+ * X12; numerics.md N3.
+ *
+ * (i) a1 = 0, a0 = -(1+t)^2: the incipient characteristic r^2 - (1+t)^2 = 0
+ *     has roots r = +-(1+t), so by hand
+ *         f = c+ e^{phi} + c- e^{-phi},   phi = t + t^2/2,
+ *     with c+ + c- = f0 and c+ - c- = f1 (since r(0) = +-1). The termwise
+ *     incipient residual is sum c (r^2 + a1 r + a0) E = 0, and the traditional
+ *     residual is sum c r' E = c+ e^{phi} - c- e^{-phi}, because r' = +-1.
+ *     (The catalogue writes this case as a0 = -t^2, roots +-t; those roots
+ *     coincide at t = 0, where N3 itself refuses the initial conditions, so
+ *     the shifted coefficient keeps the test's intent with ICs that
+ *     determine the constants. vv-plan.md T-IDC-04 is revised to match.)
+ * (ii) a1 = -2t, a0 = t^2: discriminant 4t^2 - 4t^2 = 0 everywhere, a double
+ *     root r = t. f1 = r(0) f0 = 0 is solved as f0 e^{t^2/2}; f1 != 0 is
+ *     refused, and [06 Eq 3.7]'s second solution is not used (X12).
+ * (iii) a1 = 0, a0 = -(t - 1/2)^2: roots +-(t - 1/2), distinct at 0, collide
+ *     at t = 1/2: refused, naming the time. */
+/* Verifies: FR-IDC-006, NFR-NUM-001 (T-IDC-04) */
+static void test_lde2(void) {
+    static const double ts[] = { 0.0, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0 };
+    gia_lde2_sol  *sol = NULL;
+    const char    *why = NULL;
+    double         t_fail = -1.0;
+    size_t         i;
+    int            all, res_ok, trad_ok, ic_ok, roots_ok;
+    double complex c[2], r[2], E[2], f, trad;
+    const double complex f0 = 2.0, f1 = 0.5;
+    const double complex cp = (f0 + f1) / 2.0, cm = (f0 - f1) / 2.0;
+
+    printf("\n[T-IDC-04] second-order incipient LDE, variable coefficients\n");
+
+    /* (i) */
+    ok("(i) a1 = 0, a0 = -(1+t)^2 solves",
+       gia_lde2_solve(zero_fn, neg_sq1p, NULL, f0, f1, 2.0, &sol, &t_fail, &why) == GIA_OK && sol);
+    if (sol) {
+        all = res_ok = trad_ok = roots_ok = 1;
+        for (i = 0; i < sizeof ts / sizeof ts[0]; i++) {
+            double t = ts[i], phi = t + t * t / 2.0;
+            double complex want = cp * exp(phi) + cm * exp(-phi);
+            double complex a1 = 0.0, a0 = -(1.0 + t) * (1.0 + t), resid = 0.0;
+            int k;
+            if (gia_lde2_eval(sol, t, &f, &trad, &why) != GIA_OK ||
+                gia_lde2_terms(sol, t, c, r, E, &why) != GIA_OK) { all = 0; continue; }
+            if (!near_c(f, want, TOL_CLOSED)) all = 0;
+            for (k = 0; k < 2; k++) {
+                /* each term is one of the two hand-derived ones */
+                double sgn = creal(r[k]) > 0 ? 1.0 : -1.0;
+                if (!near_c(r[k], sgn * (1.0 + t), TOL_CLOSED) ||
+                    !near_c(E[k], exp(sgn * phi), TOL_CLOSED) ||
+                    !near_c(c[k], sgn > 0 ? cp : cm, TOL_CLOSED)) roots_ok = 0;
+                resid += c[k] * (r[k] * r[k] + a1 * r[k] + a0) * E[k];
+            }
+            if (!(cabs(resid) <= TOL_CLOSED * cabs(want))) res_ok = 0;
+            if (!near_c(trad, cp * exp(phi) - cm * exp(-phi), TOL_RESIDUAL)) trad_ok = 0;
+        }
+        ok("(i) f = c+ e^{t+t^2/2} + c- e^{-(t+t^2/2)} by hand, 7 times, 1e-12", all);
+        ok("(i) roots +-(1+t), E = e^{+-phi}, constants from the ICs", roots_ok);
+        ok("(i) termwise incipient residual sum c(r^2+a1 r+a0)E = 0", res_ok);
+        ok("(i) traditional residual = c+ e^{phi} - c- e^{-phi} (not 0)", trad_ok);
+        ic_ok = gia_lde2_terms(sol, 0.0, c, r, E, &why) == GIA_OK &&
+                near_c(c[0] * E[0] + c[1] * E[1], f0, TOL_CLOSED) &&
+                near_c(c[0] * r[0] * E[0] + c[1] * r[1] * E[1], f1, TOL_CLOSED);
+        ok("(i) f(0) = f0 and f~'(0) = sum c r(0) = f1", ic_ok);
+        ok("eval outside [0, t_max] is GIA_E_ARG",
+           gia_lde2_eval(sol, 2.5, &f, NULL, &why) == GIA_E_ARG &&
+           gia_lde2_eval(sol, -0.1, &f, NULL, &why) == GIA_E_ARG);
+        gia_lde2_free(sol); sol = NULL;
+    }
+
+    /* (i), with coefficients the quadrature cannot integrate exactly:
+     * a0 = -(1 + sin t)^2, roots +-(1 + sin t), psi = t + 1 - cos t; and a
+     * complex one, a0 = -(1 + i t)^2, roots +-(1 + i t), psi = t + i t^2/2. */
+    {
+        int k2;
+        for (k2 = 0; k2 < 2; k2++) {
+            gia_cfn a0f = k2 == 0 ? neg_sq1psin : neg_sq1pit;
+            all = 1; res_ok = 1;
+            if (gia_lde2_solve(zero_fn, a0f, NULL, f0, f1, 6.0, &sol, NULL, &why) != GIA_OK) {
+                ok(k2 == 0 ? "(i') a0 = -(1+sin t)^2 solves" : "(i'') a0 = -(1+it)^2 solves", 0);
+                continue;
+            }
+            for (i = 0; i <= 24; i++) {
+                double t = 0.25 * (double)i;
+                double complex psi = k2 == 0 ? t + 1.0 - cos(t) : t + I * t * t / 2.0;
+                double complex want = cp * cexp(psi) + cm * cexp(-psi), resid = 0.0;
+                double complex a0v = a0f(t, NULL);
+                int k;
+                if (gia_lde2_eval(sol, t, &f, NULL, &why) != GIA_OK ||
+                    gia_lde2_terms(sol, t, c, r, E, &why) != GIA_OK ||
+                    !near_c(f, want, TOL_CLOSED)) all = 0;
+                for (k = 0; k < 2; k++) resid += c[k] * (r[k] * r[k] + a0v) * E[k];
+                if (!(cabs(resid) <= TOL_CLOSED * cabs(want))) res_ok = 0;
+            }
+            ok(k2 == 0 ? "(i') a0 = -(1+sin t)^2: f by hand on [0, 6], 1e-12"
+                       : "(i'') complex a0 = -(1+it)^2: f by hand on [0, 6], 1e-12", all && res_ok);
+            gia_lde2_free(sol); sol = NULL;
+        }
+    }
+
+    /* (ii) */
+    ok("(ii) double root, consistent ICs (f1 = r(0) f0 = 0) solves",
+       gia_lde2_solve(neg2t, tsq, NULL, 3.0, 0.0, 2.0, &sol, NULL, &why) == GIA_OK && sol);
+    if (sol) {
+        all = 1;
+        for (i = 0; i < sizeof ts / sizeof ts[0]; i++) {
+            double t = ts[i];
+            if (gia_lde2_eval(sol, t, &f, &trad, &why) != GIA_OK ||
+                !near_c(f, 3.0 * exp(t * t / 2.0), TOL_CLOSED)) all = 0;
+            /* traditional residual of f0 e^{t^2/2} under a1 = -2t, a0 = t^2:
+             * (1 + t^2) - 2t^2 + t^2 = 1, times f */
+            if (!near_c(trad, 3.0 * exp(t * t / 2.0), TOL_RESIDUAL)) all = 0;
+        }
+        ok("(ii) f = f0 e^{t^2/2}; traditional residual = f, by hand", all);
+        gia_lde2_free(sol); sol = NULL;
+    }
+    why = NULL;
+    ok("(ii) double root, inconsistent ICs refused (GIA_E_DOMAIN)",
+       gia_lde2_solve(neg2t, tsq, NULL, 3.0, 1.0, 2.0, &sol, NULL, &why) == GIA_E_DOMAIN && !sol);
+    ok("  and the reason cites X12, not [06 Eq 3.7]'s second solution",
+       why && strstr(why, "X12") != NULL);
+
+    /* (iii) */
+    why = NULL; t_fail = -1.0;
+    ok("(iii) roots colliding at t = 1/2: GIA_E_CONVERGENCE",
+       gia_lde2_solve(zero_fn, neg_sq_half, NULL, 1.0, 0.2, 1.0, &sol, &t_fail, &why)
+           == GIA_E_CONVERGENCE && !sol);
+    ok("  with the collision time reported (|t* - 1/2| < 1e-6)", fabs(t_fail - 0.5) < 1e-6);
+
+    /* Roots that coincide at t = 0 only (a0 = -t^2, the catalogue's original
+     * case): [[1, 1], [r1(0), r2(0)]] is singular, so the ICs cannot fix c. */
+    why = NULL;
+    ok("roots coinciding at t = 0 only (a0 = -t^2): refused, GIA_E_DOMAIN",
+       gia_lde2_solve(zero_fn, neg_tsq, NULL, 1.0, 0.0, 1.0, &sol, NULL, &why) == GIA_E_DOMAIN &&
+       !sol && why != NULL);
+    ok("t_max <= 0 or NULL coefficient is GIA_E_ARG",
+       gia_lde2_solve(zero_fn, neg_sq1p, NULL, 1.0, 0.0, 0.0, &sol, NULL, &why) == GIA_E_ARG &&
+       gia_lde2_solve(NULL, neg_sq1p, NULL, 1.0, 0.0, 1.0, &sol, NULL, &why) == GIA_E_ARG);
+}
+
+/* Source: [10 App. Eq 28-34] (catalogue reading; [10] is not in docs/).
+ *
+ * u^2 + psi_f u = 0 with psi_f = 1 + t: roots 0 and -(1+t), so
+ * g = C1 + C2 e^{-(t + t^2/2)}. With f = e^{int psi_f} = e^{t + t^2/2}, the
+ * product F = f g~' = C2 (-(1+t)) is not constant although g satisfies the
+ * incipient condition: the paper's "24.1 does not imply 24". */
+/* Verifies: FR-IDC-006, BR-001, BR-008 (T-IDC-05, VAL-05) */
+static void test_lde2_zero_root(void) {
+    gia_lde2_sol  *sol = NULL;
+    const char    *why = NULL;
+    const double   C1 = 1.0, C2 = 0.5;
+    double complex c[2], r[2], E[2], g, F0 = 0.0, F1 = 0.0;
+    int            all = 1, res_ok = 1;
+    double         t;
+
+    printf("\n[T-IDC-05 / VAL-05] [10 App. Eq 28-34]: a zero root\n");
+    ok("g~'' + (1+t) g~' = 0 solves",
+       gia_lde2_solve(onept, zero_fn, NULL, C1 + C2, -C2, 2.0, &sol, NULL, &why) == GIA_OK && sol);
+    if (!sol) return;
+    for (t = 0.0; t <= 2.0 + 1e-12; t += 0.25) {
+        double phi = t + t * t / 2.0;
+        double complex gp = 0.0, resid = 0.0, F;
+        int k;
+        if (gia_lde2_eval(sol, t, &g, NULL, &why) != GIA_OK ||
+            gia_lde2_terms(sol, t, c, r, E, &why) != GIA_OK) { all = 0; continue; }
+        if (!near_c(g, C1 + C2 * exp(-phi), TOL_CLOSED)) all = 0;
+        for (k = 0; k < 2; k++) {
+            gp    += c[k] * r[k] * E[k];
+            resid += c[k] * (r[k] * r[k] + (1.0 + t) * r[k]) * E[k];
+        }
+        if (!(cabs(resid) <= TOL_CLOSED)) res_ok = 0;
+        F = exp(phi) * gp;
+        if (!near_c(F, -C2 * (1.0 + t), TOL_CLOSED)) all = 0;
+        if (t == 0.0) F0 = F;
+        if (t == 1.0) F1 = F;
+    }
+    ok("g = C1 + C2 e^{-(t+t^2/2)}; F = f g~' = -C2 (1+t), by hand", all);
+    ok("the incipient condition holds (termwise residual 0)", res_ok);
+    ok("F is not constant: |F(1) - F(0)| > 100x tolerance",
+       cabs(F1 - F0) > 100.0 * TOL_CLOSED);
+    gia_lde2_free(sol);
+}
+
+/* Source: [06b] "linearly dependent on initial conditions".
+ * solve(ic1 + ic2) = solve(ic1) + solve(ic2), pointwise. */
+/* Verifies: FR-IDC-012 (T-IDC-10) */
+static void test_lde2_linear_in_ics(void) {
+    gia_lde2_sol  *s1 = NULL, *s2 = NULL, *s12 = NULL;
+    const char    *why = NULL;
+    int            all = 1;
+    double         t;
+
+    printf("\n[T-IDC-10] linearity in the initial conditions: LDE (N3)\n");
+    if (gia_lde2_solve(zero_fn, neg_sq1p, NULL, 2.0, 0.5, 2.0, &s1, NULL, &why) != GIA_OK ||
+        gia_lde2_solve(zero_fn, neg_sq1p, NULL, -1.0 + 0.5 * I, 3.0, 2.0, &s2, NULL, &why) != GIA_OK ||
+        gia_lde2_solve(zero_fn, neg_sq1p, NULL, 1.0 + 0.5 * I, 3.5, 2.0, &s12, NULL, &why) != GIA_OK)
+        all = 0;
+    for (t = 0.0; all && t <= 2.0 + 1e-12; t += 0.125) {
+        double complex a, b, ab;
+        (void)gia_lde2_eval(s1, t, &a, NULL, &why);
+        (void)gia_lde2_eval(s2, t, &b, NULL, &why);
+        (void)gia_lde2_eval(s12, t, &ab, NULL, &why);
+        if (!near_c(ab, a + b, TOL_CLOSED)) all = 0;
+    }
+    ok("LDE: solve(ic1 + ic2) = solve(ic1) + solve(ic2), 17 times", all);
+    gia_lde2_free(s1); gia_lde2_free(s2); gia_lde2_free(s12);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
     test_idc_general_f();
+    test_lde2();
+    test_lde2_zero_root();
+    test_lde2_linear_in_ics();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

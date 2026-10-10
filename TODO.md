@@ -816,7 +816,7 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
       `guard-api-called`, `guard-agents-wording`
 - [x] ADRs 0019 (MOP equations), 0020 (relational algebra), 0021 (ordinality), 0022 (method label)
 - [x] W2 `idc-general-f` — `gia_idc_of`, (f'/f)^n f (FR-IDC-002); `gia_status` (IF-API-001)
-- [ ] W2 `idc-lde2` — second-order incipient LDE, variable coefficients (FR-IDC-006, 012)
+- [x] W2 `idc-lde2` — second-order incipient LDE, variable coefficients (FR-IDC-006, 012)
 - [ ] W2 `idc-binary` — the binary function (FR-IDC-007)
 - [ ] W2 `idc-riccati` — Riccati by linearisation; refusals (FR-IDC-008, 013)
 - [ ] W2 `idc-taylor` — incipient Taylor projection, [09] validation (FR-IDC-010, VAL-01)

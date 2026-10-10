@@ -10,6 +10,29 @@ from an assumption.
 
 ---
 
+## [Baseline amendments during implementation] — 2026-10-09
+
+Changes to `docs/requirements/` found necessary while implementing it. They are not a plan
+revision: the plan's decisions stand. Each one corrects the baseline where it contradicted itself.
+
+### `idc-lde2`
+
+- **T-IDC-04 (i) could not run as written.** The catalogue's case `a₁ = 0, a₀ = −t²` has roots `±t`,
+  which coincide at `t = 0`. There `[[1, 1], [r₁(0), r₂(0)]]` is singular, and numerics.md N3 itself
+  refuses the initial conditions. The test now uses `a₀ = −(1+t)²`, with roots `±(1+t)`. That keeps
+  everything the case was for: variable roots, a zero termwise residual, and a traditional residual
+  `c₁e^{φ} − c₂e^{−φ}` (here `φ = t + t²/2`). The original `a₀ = −t²` stays in the test as a refusal
+  case (`GIA_E_DOMAIN`).
+- **IF-API-002 gains two things it needed.**
+  - `gia_lde2_solve` takes `double *t_fail`. A root collision is refused "with the time" (N3,
+    T-IDC-04 (iii)), but a static `why` string cannot carry a number, and a file-scope buffer would
+    break NFR-REE-001.
+  - `gia_lde2_terms` is new. It returns `c`, `r(t)` and `E = e^{∫r}`, so that a test can form the
+    defining equation's termwise residual itself. vv-plan.md §2 rule 2 ("residual first") requires
+    this, and `f` alone cannot provide it.
+
+---
+
 ## [Revision 3] — 2026-10-09
 
 A requirements baseline, written from a senior C developer's view of what was missing. The plan

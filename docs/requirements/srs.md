@@ -71,7 +71,7 @@ whole interval (a double root α̃), the solution set is the one family `c·e^{�
 solve it when `f₁ = α̃(0) f₀` and refuse otherwise. It shall not use [06 Eq 3.7], which solves the
 equation under no reading (X12). Where the roots collide at an isolated time, it shall refuse.
 - **Source:** [06 Eq 3.3–3.6], [09 Eq 3, 7], [10 Eq 8.1, 10.1]; PLAN R13, X12
-- **Verification:** T-IDC-04, T-IDC-05, VAL-05 · **Priority:** Must · **Status:** planned · **Task:** idc-lde2
+- **Verification:** T-IDC-04, T-IDC-05, VAL-05 · **Priority:** Must · **Status:** implemented · **Task:** idc-lde2
 
 ### FR-IDC-007 — The binary function
 Given constants `A, B` and the four initial conditions `f_σ(0)`, `f_σ^{(½)}(0)` for `σ ∈ {1, 2}`, the
