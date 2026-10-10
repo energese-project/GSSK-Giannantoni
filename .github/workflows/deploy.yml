@@ -202,6 +202,10 @@ jobs:
       - name: Giannantoni structural checks
         run: make check-symbols
 
+      # NFR-API-001: no declared Giannantoni function goes untested or stubbed.
+      - name: Giannantoni API is called by tests
+        run: make check-api-called test-api-called
+
       # Requirements traceability (docs/requirements/). Fails on an untraced
       # requirement, an orphan Verifies: tag, or an `implemented` claim no
       # test backs — the ways a green build can avoid being built to spec.

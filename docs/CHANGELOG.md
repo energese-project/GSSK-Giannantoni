@@ -42,6 +42,8 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **Every Giannantoni API function must be called by a test, and none may be a stub** (PLAN.md W1 `guard-api-called`, NFR-API-001, ADR 0018 rule 3). `make check-api-called` (`scripts/check_api_called.sh`) parses every function declared in `gia_status.h`, `idc.h`, `relational.h` and `mop.h`, plus the functions IF-API-005 adds to `engine.h`. A declaration that no test names fails, and so does a not-implemented marker in `idc.c`, `relational.c`, `mop.c` or `harmony.c`. `AGENTS.md`'s `(void)`-stub allowance never covered these headers, and now cannot. `make test-api-called` runs the check against the C blocks of `docs/requirements/icd.md` itself: it must find exactly the 27 functions declared there, and must name each one when it is left uncalled. Both run in CI.
+
 - **Reentrancy, memory and separation checks for the Giannantoni units** (PLAN.md W1 `guard-reentrancy`). Four checks, all in CI:
   - `make test-mop-threads` runs two models on two threads and requires each to match its solo run (T-REE-01).
   - `make check-symbols` (`scripts/check_symbols.sh`) fails on a writable data symbol, decided by section rather than by `nm` letter so `const` tables pass. It also fails on a call to `exit`, `abort` or `assert`, and on any `#include "gssk.h"` (T-REE-02, T-ERR-01, INS-SEP-01).

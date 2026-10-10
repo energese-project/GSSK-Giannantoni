@@ -477,4 +477,4 @@ Line coverage of the Giannantoni units shall be ≥ 90%, measured in CI; an unpa
 Every function declared in `idc.h`, `mop.h` and `relational.h` shall be called by a test, and none
 shall return a not-implemented code.
 - **Source:** PLAN §1 B4, G3
-- **Verification:** T-API-02 · **Priority:** Must · **Status:** planned · **Task:** guard-api-called
+- **Verification:** T-API-02 · **Priority:** Must · **Status:** implemented · **Task:** guard-api-called
