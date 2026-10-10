@@ -1,0 +1,58 @@
+{
+  "metadata": {
+    "schema_version": 4,
+    "name": "Sine-forced source",
+    "description": "T-BRG-01 fixture: a source driven by an annual sine (clamp cannot bind), feeding one store that drains linearly. Linear in the state, forced only through the source, so both engines must agree."
+  },
+  "nodes": [
+    {
+      "id": "sun",
+      "type": "source",
+      "value": 1.0,
+      "forcing": {
+        "waveform": "sine",
+        "mean": 200.0,
+        "amplitude": 150.0,
+        "period": 365.0,
+        "phase": 91.25,
+        "min": 0.0
+      }
+    },
+    {
+      "id": "producer",
+      "type": "storage",
+      "value": 100.0
+    },
+    {
+      "id": "harvest",
+      "type": "sink",
+      "value": 0.0
+    }
+  ],
+  "edges": [
+    {
+      "id": "photosynthesis",
+      "origin": "sun",
+      "target": "producer",
+      "logic": "linear",
+      "params": {
+        "k": 0.25
+      }
+    },
+    {
+      "id": "cropping",
+      "origin": "producer",
+      "target": "harvest",
+      "logic": "linear",
+      "params": {
+        "k": 0.03
+      }
+    }
+  ],
+  "config": {
+    "t_start": 0.0,
+    "t_end": 730.0,
+    "dt": 0.5,
+    "method": "rk4"
+  }
+}

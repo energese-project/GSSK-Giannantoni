@@ -88,6 +88,23 @@ got=$(value "$tmp/diff.out" "bridge.max_rel_difference")
 awk -v g="$got" 'BEGIN { exit !(g != "" && g + 0 <= 1e-6) }' || { echo "    got $got" >&2; st=1; }
 ok "diffusion_model, kernel expm: the engines agree to 1e-6" "$st"
 
+# A source driven by a sine (ADR 0006), projected into this engine's waveform vocabulary on its own
+# clock: linear in the state, so under RK4 the engines agree to 1e-6, the forced source itself
+# exactly. forced_source_model adds a square and a step on its edges, which no generator carries:
+# refused, each named.
+brun sine tests/fixtures/bridge_sine_source.json --method rk4
+st=0; [ "$(cat "$tmp/sine.rc")" -eq 0 ] || st=1
+got=$(value "$tmp/sine.out" "bridge.max_rel_difference")
+awk -v g="$got" 'BEGIN { exit !(g != "" && g + 0 <= 1e-6) }' || { echo "    got $got" >&2; st=1; }
+got=$(value "$tmp/sine.out" "bridge.max_rel_difference.sun")
+awk -v g="$got" 'BEGIN { exit !(g != "" && g + 0 <= 1e-12) }' || { echo "    sun $got" >&2; st=1; }
+ok "a sine-forced source, kernel rk4: the engines agree to 1e-6" "$st"
+brun forced examples/forced_source_model.json
+st=0; [ "$(cat "$tmp/forced.rc")" -eq 2 ] || st=1
+grep -q "edge 'cropping': forcing not carried .*square" "$tmp/forced.out" || st=1
+grep -q "edge 'respiration': forcing not carried .*step" "$tmp/forced.out" || st=1
+ok "forced_source_model: square and step forcing named, refused (exit 2)" "$st"
+
 # Refusals and load errors.
 brun partial examples/atwood_model.json
 st=0; [ "$(cat "$tmp/partial.rc")" -eq 2 ] || st=1

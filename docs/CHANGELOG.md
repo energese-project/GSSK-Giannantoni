@@ -281,6 +281,17 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Fixed
 
+- **The projection no longer drops forcing silently.** The kernel's forcing (`waveform`, `mean`,
+  `period`, `phase` in time, `t_on`, `min`/`max`) was read with the Giannantoni engine's vocabulary
+  (`kind`). So `forced_source_model`'s seasonal sine was carried as a constant, and the model still
+  reported 100% coverage.
+  - A sine, a ramp or an exponential is now translated exactly onto the engine's clock,
+    `s = t - t_start`, wherever it is one formula over the run and its clamp cannot bind.
+  - Every other waveform, on a node or an edge, is a named finding, and the element is not counted
+    as carried.
+  - The projected horizon is `t_end - t_start`, not `t_end`.
+  - `gia_bridge` compares a forced source at its forced value.
+
 - **The harmony constructor's matrix is sized by components, not nodes** (ADRs 0014, 0021). It had one
   row per node, including modules and habitat, under a "components N" label: `input.json` reported
   N = 5 for its two components.

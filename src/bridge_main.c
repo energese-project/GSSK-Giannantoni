@@ -182,6 +182,15 @@ int main(int argc, char **argv) {
             goto done;
         }
         if (csv) fprintf(csv, "%.6f", t0 + t);
+        /* A forced held node (a source driven by its waveform, ADR 0006) is
+         * reported by the kernel at its forced value; this engine holds the
+         * declared value in its state and applies the waveform where the
+         * node is read. Compare like with like. */
+        for (i = 0; i < (int)nk; i++) {
+            int j = gidx[i];
+            if (j >= 0 && !gm.nodes[j].integrates)
+                q[j] = gia_forcing_value(&gm.nodes[j].forcing, q[j], t);
+        }
         for (i = 0; i < (int)nk; i++) {
             double a, r;
             if (gidx[i] < 0) continue;
