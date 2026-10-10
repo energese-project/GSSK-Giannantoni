@@ -364,6 +364,17 @@ report shall still be written when `make test` fails.
 - **Source:** maintainer request (2026-10-10); ADR 0018 rule 1
 - **Verification:** T-OUT-04 · **Priority:** Should · **Status:** implemented · **Task:** sim-report
 
+### FR-OUT-005 — Both engines on the same models, plotted
+The repository shall publish, generated and checked against a fresh run, a page with an SVG plot
+for every model in `examples/` and `examples/giannantoni/`. For a kernel model it gives each
+storage's trajectory and the largest scaled difference over time for kernel RK4, Euler and expm.
+The reference is the Giannantoni engine's `exp(A t)` where the projection carries the model whole.
+Otherwise it is the kernel's RK4 at dt/8, labelled as such, beside the coverage report's reasons.
+For a Giannantoni-format model it gives the network trajectories and the output-projection drift.
+Differences shall be computed from full-precision output, never from a rounded printout.
+- **Source:** maintainer request (2026-10-10); FR-BRG-001; PLAN E3
+- **Verification:** T-OUT-05 · **Priority:** Should · **Status:** implemented · **Task:** engine-comparison
+
 ### 2.8 GSSK kernel
 
 ### FR-KER-001 — The kernel's method label

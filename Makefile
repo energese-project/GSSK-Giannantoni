@@ -273,6 +273,22 @@ sim-report: all $(TARGET_COMPARE)
 test-sim-report: all $(TARGET_COMPARE)
 	@sh $(TEST_DIR)/sim_report.sh
 
+# FR-OUT-005 (T-OUT-05): both engines on the same models, as SVG plots and a
+# markdown page in docs/results/. engine-comparison rewrites them;
+# check-engine-comparison (quality gate, Linux gcc: ~2 min) fails when they no
+# longer match a fresh run; test-engine-comparison is the fast self-test.
+.PHONY: engine-comparison
+engine-comparison: all $(TARGET_BRIDGE) $(TARGET_SIM)
+	@python3 -I scripts/engine_compare.py
+
+.PHONY: check-engine-comparison
+check-engine-comparison: all $(TARGET_BRIDGE) $(TARGET_SIM)
+	@python3 -I scripts/engine_compare.py --check
+
+.PHONY: test-engine-comparison
+test-engine-comparison: all $(TARGET_BRIDGE) $(TARGET_COMPARE)
+	@sh $(TEST_DIR)/engine_compare.sh
+
 # VAL-08 (BR-010): every erratum in PLAN.md §5 has a test assertion naming it.
 .PHONY: check-errata
 check-errata:
@@ -1146,7 +1162,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-bridge test-sim-report test-mop-threads check-symbols check-errata check-ci-matrix \
+           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-bridge test-sim-report test-engine-comparison test-mop-threads check-symbols check-errata check-ci-matrix \
            test-guard-no-skip test-coverage-gate check-api-called \
            test-api-called check-trace check-version test-schema
 

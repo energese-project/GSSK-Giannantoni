@@ -371,6 +371,44 @@ now `implemented`. What the check found, and what was changed so that it holds:
   but checking them mechanically would need a per-model assertion format, and that is a separate
   task.
 
+### `engine-comparison`
+
+- **FR-OUT-005 and T-OUT-05 are new**, at the maintainer's request (2026-10-10): show both engines
+  on the same models, as SVG plots. `scripts/engine_compare.py` writes
+  `docs/results/engine_comparison.md` and `docs/results/plots/*.svg`. GitHub renders them in the
+  repository; a job summary cannot embed a runner's images. The quality gate checks them against a
+  fresh run, uploads them as an artifact, and puts the table on the summary. The fast self-test,
+  `tests/engine_compare.sh`, runs in CI_TESTS on all three toolchains.
+- **What "Giannantoni method" can mean here.** Both engines' network trajectories are classical
+  (PLAN E3), so for a kernel model the engine contributes the exact `exp(A t)`, and only where the
+  projection carries the model whole (5 of 24). For the rest the reference is the kernel's own RK4
+  at dt/8, with its own error against dt/64 alongside. The page never presents a kernel-vs-kernel
+  difference as a comparison of engines. For the Giannantoni-format models, the plot is the one
+  incipient quantity the engine reports per component, the output-projection drift.
+- **A measurement defect, found and fixed before publishing.** The `gssk` CLI writes `%.6f`, so a
+  comparison of kernel runs measured the rounding of the printout: oscillator RK4 read 1e-7, in
+  bands. `--full-precision` prints `%.17g`, and the default stays as it is for the golden files.
+  The self-test checks that the flag's output rounds to the default output row for row.
+- **Found:**
+  - The kernel's `expm` adds processing-node flows (interaction, gain, exchange, switch,
+    loop-limited) as a constant over the step, evaluated at its start (`idc_step_ex`). On models
+    those flows drive, `expm` is first order: its figure equals Euler's to three significant
+    figures (`atwood_model`, `economic_model`, the `exchange_price_node` models). This is recorded
+    in TODO.md, not fixed here.
+  - In the Odum countercurrent models a `price` storage relaxes from 0.02 to about 65 in the first
+    four steps, which dt = 0.02 barely resolves, so RK4's largest difference there is 1.6e-3, at
+    the start of the run.
+- **Palette:** the dataviz reference palette, run through its validator. Slots 1-3 (kernel RK4,
+  Euler, expm) pass all-pairs in both modes. Light slots 3-5 sit below 3:1 contrast, so every
+  series is direct-labelled and the page carries a table of the same numbers.
+- **Mutations.** Each of these was caught:
+  - dropping `--full-precision`'s effect;
+  - deleting a plot, caught by two checks;
+  - editing a figure on the page, caught by both the self-test and `--check`.
+
+  The self-test's loop checks first exited the whole script silently, without a FAIL line; they now
+  run in subshells.
+
 ---
 
 ## [Revision 3] — 2026-10-09

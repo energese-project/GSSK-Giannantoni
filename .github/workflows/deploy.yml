@@ -85,6 +85,9 @@ jobs:
       - name: Simulation report self-test
         run: make test-sim-report
 
+      - name: Engine comparison self-test
+        run: make test-engine-comparison
+
       # Unit suites, not CSV regressions. The node-type gate is the check that
       # stops a mistyped `type` silently becoming a storage node.
       - name: Node type validation tests
@@ -320,6 +323,34 @@ jobs:
       - name: Level 1 survey → job summary
         if: success()
         run: cat docs/results/level1_survey.md >> "$GITHUB_STEP_SUMMARY"
+
+      # FR-OUT-005: both engines on the same models. The page and its SVG
+      # plots are committed, so GitHub renders them at
+      # docs/results/engine_comparison.md; this fails when they go stale.
+      - name: Engine comparison — committed plots match a fresh run
+        run: make check-engine-comparison
+
+      # A job summary cannot embed an image from the runner, so the plots go
+      # up as an artifact and the summary points at both.
+      - name: Engine comparison — upload plots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-comparison-plots
+          path: |
+            docs/results/engine_comparison.md
+            docs/results/plots/
+
+      - name: Engine comparison → job summary
+        if: always()
+        run: |
+          {
+            echo "## Both engines on the same models"
+            echo
+            echo "Plots: \`docs/results/engine_comparison.md\` on this commit, or the **engine-comparison-plots** artifact of this run."
+            echo
+            sed -n '/^| Model | Coverage/,/^$/p' docs/results/engine_comparison.md
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: ASan + UBSan — build
         env:
