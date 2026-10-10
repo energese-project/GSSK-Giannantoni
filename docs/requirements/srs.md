@@ -354,6 +354,16 @@ from FR-HAR-002.
 - **Source:** PLAN R7
 - **Verification:** T-OUT-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
+### FR-OUT-004 — Simulation results, readable in CI
+Each CI run shall publish, on its job summary page and in GitHub-flavoured markdown, a report of
+the simulation regression tests. For every model in `examples/` it gives the verdict against the
+golden trajectory, decided by the gate's own comparator, and the largest deviation. For every node
+it gives the start, minimum, maximum and end, with a sparkline. A model that fails, does not run
+or has no golden file shall be reported as such, and the report shall then exit non-zero. The
+report shall still be written when `make test` fails.
+- **Source:** maintainer request (2026-10-10); ADR 0018 rule 1
+- **Verification:** T-OUT-04 · **Priority:** Should · **Status:** implemented · **Task:** sim-report
+
 ### 2.8 GSSK kernel
 
 ### FR-KER-001 — The kernel's method label

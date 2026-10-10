@@ -352,6 +352,25 @@ now `implemented`. What the check found, and what was changed so that it holds:
 - **crux.** This container has no `crux` binary and no crux MCP server, so the task could not be
   marked done here. The maintainer should close `h8c-data-driven-forcing` once this merges.
 
+### `sim-report`
+
+- **FR-OUT-004 and T-OUT-04 are new**, at the maintainer's request (2026-10-10): CI should show
+  the simulation tests' results in a readable form, not only PASSED. `scripts/sim_report.py` runs
+  every example, decides each verdict with `bin/csv_compare`, so the report and the gate cannot
+  disagree, and writes markdown for the job summary.
+- **What it can and cannot claim.** A golden file pins a trajectory; it does not say that the
+  trajectory is right. The report says so, and points to the two checks that do: the hand-computed
+  suites, and the Level 1 survey against `exp(A t)`. The quality gate now puts the survey on the
+  summary page too.
+- **Self-test oracle:** a copy of `tests/expected/` with one value moved by a known amount (1e-3
+  must fail and print 1.0e-03; 5e-7 must pass and print 5.0e-07), plus a deleted golden. There are
+  two mutations: a comparator that always passes (4 FAILs) and a sparkline that is always flat
+  (1 FAIL). Both were caught.
+- **Not done here.** Several example models state invariants in their descriptions, such as
+  `archetype_price_per_instance`'s price ratios and conservation of money. The report quotes them,
+  but checking them mechanically would need a per-model assertion format, and that is a separate
+  task.
+
 ---
 
 ## [Revision 3] — 2026-10-09
