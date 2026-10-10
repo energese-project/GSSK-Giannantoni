@@ -375,6 +375,17 @@ equations of the nodes they touched, so a difference would measure them, not int
 - **Source:** TODO.md §10.5 (the bridge); ADR 0011; PLAN E3
 - **Verification:** T-BRG-01 · **Priority:** Could · **Status:** implemented · **Task:** engine-bridge
 
+### FR-BRG-002 — The Level 1 claim, measured
+For every model in `examples/` the repository shall publish, generated rather than written by
+hand, whether the projection carries it whole, whether it is in exponential form (every edge
+logic linear, reversible or constant, and no edge forcing), and for each kernel method (RK4,
+Euler, expm) the bridge's largest difference scaled by the node's largest magnitude. The build
+shall fail when the published table no longer matches a fresh run. A kernel forcing the
+projection can translate exactly (sine, ramp, exponential, an unbinding clamp) shall be carried;
+one it cannot shall be refused by name, never dropped silently.
+- **Source:** TODO.md §12 (Level 1 claim); ADR 0011; PLAN E3
+- **Verification:** T-BRG-02 · **Priority:** Could · **Status:** implemented · **Task:** level1-survey
+
 ---
 
 ## 3. Non-functional requirements

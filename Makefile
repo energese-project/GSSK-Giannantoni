@@ -251,6 +251,17 @@ $(TARGET_BRIDGE): $(SRC_DIR)/bridge_main.c $(GIA_OBJS) $(TARGET_LIB)
 test-bridge: directories $(TARGET_BRIDGE)
 	@sh $(TEST_DIR)/bridge_cli.sh
 
+# FR-BRG-002 (T-BRG-02): the Level 1 claim as a table. level1-survey rewrites
+# it; check-level1 fails when the committed table no longer matches a run.
+# Linux gcc only (the quality gate): supply_chain_30 alone takes ~30 s a run.
+.PHONY: level1-survey
+level1-survey: directories $(TARGET_BRIDGE)
+	@python3 -I scripts/level1_survey.py > docs/results/level1_survey.md
+
+.PHONY: check-level1
+check-level1: directories $(TARGET_BRIDGE)
+	@python3 -I scripts/level1_survey.py --check docs/results/level1_survey.md
+
 # VAL-08 (BR-010): every erratum in PLAN.md §5 has a test assertion naming it.
 .PHONY: check-errata
 check-errata:

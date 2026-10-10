@@ -625,9 +625,14 @@ general-purpose ODE library. The wedge is:
       or graph machinery in the timing loop, which is the honest way to test
       the calculus claim; an end-to-end number against `bin/gssk` would be
       dominated by infrastructure and measures a different question.
-- [ ] The benchmark shows the payoff *when* a system is in exponential form.
+- [x] The benchmark shows the payoff *when* a system is in exponential form.
       It cannot show how often that holds for real Odum graphs, which is the
       actual Level 1 claim. ADR 0011 decision 3 is how it gets quantified.
+      Quantified in `docs/results/level1_survey.md` (`make level1-survey`,
+      FR-BRG-002): of 23 examples, 11 are in exponential form and 5 are
+      carried whole, of which 3 are both. Under RK4 the kernel is within 2.2e-7
+      (scaled) of `exp(A t)` on every model carried whole. The survey also found
+      that the projection was silently dropping kernel forcing; that is now fixed.
 
 ### 10.5 The two engines (ADR 0011)
 

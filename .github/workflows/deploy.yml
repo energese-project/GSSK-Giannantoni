@@ -297,6 +297,11 @@ jobs:
       - name: Schema conformance — examples/ must match gssk.schema.json
         run: make test-schema
 
+      # FR-BRG-002: docs/results/level1_survey.md is generated, so a change
+      # that moves a number must regenerate it (make level1-survey).
+      - name: Level 1 survey — published table matches a fresh run
+        run: make check-level1
+
       - name: ASan + UBSan — build
         env:
           CC: clang

@@ -288,6 +288,31 @@ now `implemented`. What the check found, and what was changed so that it holds:
   `Q0 Rⁿ` exactly, so the reported difference is fixed by arithmetic. The tolerance comes from
   cancellation: the RK4 difference (3.3e-9 out of 0.37) is good to about 1e-5 relative.
 
+### `level1-survey`
+
+- **FR-BRG-002 and T-BRG-02 are new.** TODO.md asked how often the exponential form holds for real
+  Odum graphs ("the actual Level 1 claim"), and the baseline had no requirement for answering it.
+  `scripts/level1_survey.py` writes `docs/results/level1_survey.md`, and `make check-level1` fails
+  the quality gate when the committed table no longer matches a fresh run. It runs only there
+  (Linux gcc), not in CI_TESTS, because `supply_chain_30` alone takes about 30 s a bridge run.
+- **The survey found a silent projection defect, now fixed.** The projection read the engine's
+  forcing key (`kind`) from the kernel's forcing object (`waveform`), found none, and dropped the
+  forcing while reporting `forced_source_model` as 100% carried. The engines then disagreed by
+  99.8%. The projection now translates sine, ramp (from t_on ≤ t_start), exponential and an
+  unbinding clamp exactly, onto the engine's clock (t_start → 0). It refuses square, step,
+  sawtooth, impulse, jitter, a late ramp and a binding clamp by name. Before the fix, the red run
+  of `[29b]` failed all six of its assertions.
+- **The bridge compared a forced source's base value** with the kernel's forced value. It now
+  applies `gia_forcing_value` to held nodes before comparing.
+- **A scaled metric was added.** The relative difference read 1.00 wherever both engines hold a
+  node near zero (Euler on `diffusion_model`), which is noise, not error. The bridge now also
+  reports `max_scaled_difference`, the largest absolute difference divided by the node's largest
+  magnitude over the run, and the survey tabulates that.
+- **The kernel's `expm` freezes forcing over a step.** It is exact only for an autonomous model. On
+  the sine-forced fixture at dt 0.5 it is off by about 0.4%, where RK4 is off by about 1e-9.
+  `docs/results/level1_survey.md` says so beside the numbers.
+- `invalid_model.json` is a negative fixture, so the survey excludes it.
+
 ---
 
 ## [Revision 3] — 2026-10-09

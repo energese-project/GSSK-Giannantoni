@@ -2,6 +2,7 @@
 # System tests for bin/gia_bridge: one GSSK-schema model through both engines.
 #
 # Verifies: FR-BRG-001 (T-BRG-01)
+# Verifies: FR-BRG-002 (T-BRG-02)
 #
 # The oracle is closed form, never a previous run. examples/decay_model.json is one linear pathway,
 # dQ/dt = -k Q, with k = 0.05, dt = 0.5, t_end = 20, Q0 = 100, so h = k dt = 0.025 and n = 40 steps:

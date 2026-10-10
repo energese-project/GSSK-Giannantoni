@@ -180,6 +180,7 @@ Columns: ID · Verifies · Level · Oracle / procedure · Mutation that must fai
 | T-OUT-02 | FR-OUT-001, FR-OUT-003, IF-OUT-003 | System | One `label.` line per column; one `harmony.` line per construction | Omit a label | `tests/mop_cli.sh` |
 | T-OUT-03 | FR-OUT-002, IF-CLI-001 | System | Each refusal exits 2 with the source on stderr; load error exits 1 | Exit 0 | `tests/mop_cli.sh` |
 | T-BRG-01 | FR-BRG-001 | System | `decay_model` (h = 0.025, n = 40): the reported difference equals the closed form's, for Euler `Q0(1−h)ⁿ`, RK4 `Q0 Rⁿ` and expm `Q0 e^{−1}`; a partial projection is refused, exit 2 | Compare on a shifted grid; compare a partial projection | `tests/bridge_cli.sh` |
+| T-BRG-02 | FR-BRG-002 | System | `docs/results/level1_survey.md` equals a fresh `scripts/level1_survey.py` run; a sine-forced source agrees to 1e-6 under RK4; square and step forcing are refused by name, exit 2 | Regenerate and diff; bridge the sine and forced-source fixtures | `scripts/level1_survey.py`, `tests/bridge_cli.sh` |
 | T-KER-01 | FR-KER-001 | System | `"incipient"` output byte-identical to `"expm"`, one notice | — | kernel regression |
 
 ### 7.8 Non-functional

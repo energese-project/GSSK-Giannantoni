@@ -70,7 +70,8 @@ int main(int argc, char **argv) {
     gia_coverage   cov;
     FILE          *csv = NULL;
     int           *gidx = NULL, ncmp = 0, i, s, steps, rc = EXIT_FAILURE, loaded = 0;
-    double        *q = NULL, *max_abs = NULL, *max_rel = NULL, t0, t_end, dt, worst = 0.0;
+    double        *q = NULL, *max_abs = NULL, *max_rel = NULL, *max_mag = NULL;
+    double         t0, t_end, dt, worst = 0.0, worst_scaled = 0.0;
     size_t         nk;
 
     memset(&gm, 0, sizeof gm);
@@ -146,8 +147,9 @@ int main(int argc, char **argv) {
     gidx    = (int *)malloc(nk * sizeof(int));
     max_abs = (double *)calloc(nk, sizeof(double));
     max_rel = (double *)calloc(nk, sizeof(double));
+    max_mag = (double *)calloc(nk, sizeof(double));
     q       = (double *)calloc((size_t)gm.n_nodes, sizeof(double));
-    if (!gidx || !max_abs || !max_rel || !q) goto done;
+    if (!gidx || !max_abs || !max_rel || !max_mag || !q) goto done;
     for (i = 0; i < (int)nk; i++) {
         const char *id = GSSK_GetNodeID(inst, (size_t)i);
         int         j;
@@ -197,6 +199,7 @@ int main(int argc, char **argv) {
             a = fabs(qk[i] - q[gidx[i]]);
             r = rel_diff(qk[i], q[gidx[i]]);
             if (a > max_abs[i]) max_abs[i] = a;
+            if (fabs(q[gidx[i]]) > max_mag[i]) max_mag[i] = fabs(q[gidx[i]]);
             if (r > max_rel[i]) max_rel[i] = r;
             if (r > worst) worst = r;
             if (csv) fprintf(csv, ",%.17g,%.17g,%.17g", qk[i], q[gidx[i]], qk[i] - q[gidx[i]]);
@@ -211,8 +214,17 @@ int main(int argc, char **argv) {
         if (gidx[i] < 0) continue;
         printf("bridge.max_abs_difference.%s: %.6e\n", GSSK_GetNodeID(inst, (size_t)i), max_abs[i]);
         printf("bridge.max_rel_difference.%s: %.17g\n", GSSK_GetNodeID(inst, (size_t)i), max_rel[i]);
+        /* Scaled by the node's own size over the run: a store that is
+         * exactly 0 on one side and 1e-9 on the other is a relative
+         * difference of 1, and a scaled one of nearly nothing. */
+        {
+            const double sc = max_mag[i] > 0.0 ? max_abs[i] / max_mag[i] : max_abs[i];
+            printf("bridge.max_scaled_difference.%s: %.17g\n", GSSK_GetNodeID(inst, (size_t)i), sc);
+            if (sc > worst_scaled) worst_scaled = sc;
+        }
     }
     printf("bridge.max_rel_difference: %.17g\n", worst);
+    printf("bridge.max_scaled_difference: %.17g\n", worst_scaled);
     /* E3: both trajectories are classical. */
     printf("label.bridge_difference: classical\n");
     printf("  (the kernel's integration error against the exact exponential, not incipient drift:\n"
@@ -224,7 +236,7 @@ done:
     if (rc != EXIT_SUCCESS && csv_path && csv) remove(csv_path);
     if (inst) GSSK_Free(inst);
     if (loaded) gia_model_free(&gm);
-    free(gidx); free(max_abs); free(max_rel); free(q);
+    free(gidx); free(max_abs); free(max_rel); free(max_mag); free(q);
     if (kjson) free(kjson);
     if (mop) cJSON_Delete(mop);
     if (root) cJSON_Delete(root);
