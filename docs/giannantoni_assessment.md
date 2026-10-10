@@ -494,6 +494,39 @@ Not done, and worth being explicit about:
   against a real integrator rather than against a closed form. Nothing in the
   current design prevents it; it simply is not built.
 
+### The kernel's generativity index G(t): what it is, and what it is not
+
+The kernel (`gssk.h`, Phase 9) computes a scalar each step:
+
+    G(t) = (new candidate motifs this step) × (their mean complexity) / dt
+
+How the pieces are defined:
+
+- **Motifs** are connected subgraphs of 2 or 3 active nodes, identified by their node types and
+  directed adjacency, up to relabelling.
+- **Candidates.** A motif becomes a candidate once it has appeared at least 3 times per step
+  (`GSSK_MOTIF_MIN_COUNT`) for 10 consecutive steps (`GSSK_MOTIF_MIN_STEPS`).
+- **Complexity** is a motif's edges divided by its nodes.
+
+G(t) is zero except on the step a motif first becomes a candidate.
+
+**Theoretical grounding: none in the sources.** The header cited "Giannantoni 2023 §4" and said the
+scan implements "Giannantoni's generativity principle". It does not.
+
+- [23] §4 ("Informatics Advances of the Description Adopted") defines no metric at all. It argues
+  that MOP-based models have explicit solutions, and so need fewer computations.
+- Where the sources do speak of a system's *Specific Generativity* ([23] §2–3), it is ordinal: an
+  Ordinality `q = {k, (m n)}` of a self-organising process. It is not a count of recurring subgraphs.
+- G(t) depends only on graph structure and the step size. It never reads the state, so the flows
+  and storages of a run cannot change it.
+
+G(t) is therefore this project's own structural statistic: a recurrence detector for the archetype
+proposal API (`GSSK_ProposeArchetype`). It is useful for that, and it is not a measure of
+Giannantoni's generativity. The header comment now says so.
+
+The Giannantoni engine's own generative step is a different thing, and is source-grounded: ADR 0021
+§2, Maximum Em-Power, `[02 Eq 5.3]`. Nothing in that engine reads G(t).
+
 ---
 
 ## 7. Bottom-line answers to your questions

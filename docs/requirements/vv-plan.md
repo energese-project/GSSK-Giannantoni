@@ -179,8 +179,11 @@ Columns: ID · Verifies · Level · Oracle / procedure · Mutation that must fai
 | T-OUT-01 | IF-OUT-001, IF-OUT-002 | System | Header columns exactly as specified; every value finite | Keep `_idc` | `tests/mop_cli.sh` |
 | T-OUT-02 | FR-OUT-001, FR-OUT-003, IF-OUT-003 | System | One `label.` line per column; one `harmony.` line per construction | Omit a label | `tests/mop_cli.sh` |
 | T-OUT-03 | FR-OUT-002, IF-CLI-001 | System | Each refusal exits 2 with the source on stderr; load error exits 1 | Exit 0 | `tests/mop_cli.sh` |
+| T-OUT-04 | FR-OUT-004 | System | Committed goldens: exit 0 and a row per model, with the allowlisted model reported as skipped and decay's sparkline falling █→▁. A golden moved by 1e-3: exit 1, `decay_model` differs, deviation 1.0e-03. Moved by 5e-7: matches, deviation 5.0e-07. A golden deleted: exit 1, named | Perturb a copy of `tests/expected/` by a known amount | `tests/sim_report.sh` |
 | T-BRG-01 | FR-BRG-001 | System | `decay_model` (h = 0.025, n = 40): the reported difference equals the closed form's, for Euler `Q0(1−h)ⁿ`, RK4 `Q0 Rⁿ` and expm `Q0 e^{−1}`; a partial projection is refused, exit 2 | Compare on a shifted grid; compare a partial projection | `tests/bridge_cli.sh` |
+| T-BRG-02 | FR-BRG-002 | System | `docs/results/level1_survey.md` equals a fresh `scripts/level1_survey.py` run; a sine-forced source agrees to 1e-6 under RK4; square and step forcing are refused by name, exit 2 | Regenerate and diff; bridge the sine and forced-source fixtures | `scripts/level1_survey.py`, `tests/bridge_cli.sh` |
 | T-KER-01 | FR-KER-001 | System | `"incipient"` output byte-identical to `"expm"`, one notice | — | kernel regression |
+| T-KER-02 | FR-KER-002 | System | Hand-computed values on a four-point series for step, linear, hold and cycle. Tank integrals equal to the trapezoid and rectangle sums (rk4 and euler); an edge-rate table. A 1000-point bisection check; thirteen malformed tables rejected, on all three parsers. The round-trip reproduces values and trajectory; the projection refuses a table by name | ASan build, leak detection on | `tests/test_forcing.c`, `tests/test_giannantoni.c` [29b] |
 
 ### 7.8 Non-functional
 

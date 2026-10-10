@@ -152,7 +152,7 @@ export interface GSSKModule {
    * Phase H — Forcing functions.
    *
    * Waveform kinds: 0 none, 1 step, 2 impulse, 3 ramp, 4 sawtooth, 5 square,
-   * 6 sine, 7 exponential, 8 jitter.
+   * 6 sine, 7 exponential, 8 jitter, 9 table.
    *
    * Flat scalars by design — no GSSK_Forcing struct crosses the boundary, for
    * the same reason the flat carrier getters exist.

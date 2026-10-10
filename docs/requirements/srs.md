@@ -354,6 +354,16 @@ from FR-HAR-002.
 - **Source:** PLAN R7
 - **Verification:** T-OUT-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-harmony-detector
 
+### FR-OUT-004 — Simulation results, readable in CI
+Each CI run shall publish, on its job summary page and in GitHub-flavoured markdown, a report of
+the simulation regression tests. For every model in `examples/` it gives the verdict against the
+golden trajectory, decided by the gate's own comparator, and the largest deviation. For every node
+it gives the start, minimum, maximum and end, with a sparkline. A model that fails, does not run
+or has no golden file shall be reported as such, and the report shall then exit non-zero. The
+report shall still be written when `make test` fails.
+- **Source:** maintainer request (2026-10-10); ADR 0018 rule 1
+- **Verification:** T-OUT-04 · **Priority:** Should · **Status:** implemented · **Task:** sim-report
+
 ### 2.8 GSSK kernel
 
 ### FR-KER-001 — The kernel's method label
@@ -362,6 +372,21 @@ deprecated alias that produces byte-identical output and prints one notice that 
 exponential.
 - **Source:** PLAN R15
 - **Verification:** T-KER-01 · **Priority:** Should · **Status:** implemented · **Task:** kernel-method-label
+
+### FR-KER-002 — A source driven by observed data
+The GSSK kernel shall accept forcing `waveform: "table"` on a node's value or an edge's rate. It
+takes `times` (strictly increasing, in absolute model time), `values` (the same length),
+`interpolation` (`linear` by default, or `step`, closed on the right) and `extrapolation` (`hold`
+by default, or `cycle`, with period `times[last] − times[0]`), as Schema v5 §7 specifies. It shall
+reject the following, naming the reason, at `GSSK_Init`, `GSSK_AddNode` and `GSSK_AddEdge`:
+- a malformed table
+- `t_on` on a table
+- a table key on any other waveform
+
+It shall serialise a table so that it reloads to the same values. The Giannantoni projection shall
+refuse it by name.
+- **Source:** TODO.md §7.1; ADR 0006 (addendum); Schema v5 §7
+- **Verification:** T-KER-02 · **Priority:** Should · **Status:** implemented · **Task:** h8c-data-driven-forcing
 
 ### 2.9 Between the engines
 
@@ -374,6 +399,17 @@ coverage report, a model the projection carries only in part: the dropped pathwa
 equations of the nodes they touched, so a difference would measure them, not integration error.
 - **Source:** TODO.md §10.5 (the bridge); ADR 0011; PLAN E3
 - **Verification:** T-BRG-01 · **Priority:** Could · **Status:** implemented · **Task:** engine-bridge
+
+### FR-BRG-002 — The Level 1 claim, measured
+For every model in `examples/` the repository shall publish, generated rather than written by
+hand, whether the projection carries it whole, whether it is in exponential form (every edge
+logic linear, reversible or constant, and no edge forcing), and for each kernel method (RK4,
+Euler, expm) the bridge's largest difference scaled by the node's largest magnitude. The build
+shall fail when the published table no longer matches a fresh run. A kernel forcing the
+projection can translate exactly (sine, ramp, exponential, an unbinding clamp) shall be carried;
+one it cannot shall be refused by name, never dropped silently.
+- **Source:** TODO.md §12 (Level 1 claim); ADR 0011; PLAN E3
+- **Verification:** T-BRG-02 · **Priority:** Could · **Status:** implemented · **Task:** level1-survey
 
 ---
 

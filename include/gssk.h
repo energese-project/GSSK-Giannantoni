@@ -1011,6 +1011,14 @@ GSSK_Status GSSK_CalibrateGradient(GSSK_Instance *inst,
  *   EXPONENTIAL  t <  t_on -> v0
  *                t >= t_on -> v0 * exp(rate * tau)
  *   JITTER       mean + amplitude * (2u - 1), u in [0,1) from the instance RNG
+ *   TABLE        a data series: `times` (strictly increasing, ABSOLUTE model
+ *                time, so `t_on` is refused) and `values`, the same length.
+ *                interpolation "linear" (default) joins the knots; "step"
+ *                holds the value of the last knot at or before t (READ/DATA).
+ *                extrapolation "hold" (default) keeps the end values outside
+ *                [times[0], times[n-1]]; "cycle" repeats with period
+ *                times[n-1] - times[0], so the last knot is the start of the
+ *                next pass and its value is reached only as a limit.
  *
  * PHASE CONVENTION, stated because an ambiguous one is how two
  * implementations diverge: `phase` is a TIME offset in the same units as t.
@@ -1031,7 +1039,8 @@ typedef enum {
   GSSK_FORCING_SQUARE,
   GSSK_FORCING_SINE,
   GSSK_FORCING_EXPONENTIAL,
-  GSSK_FORCING_JITTER
+  GSSK_FORCING_JITTER,
+  GSSK_FORCING_TABLE       /**< Observed data: `times`/`values` (h8c). */
 } GSSK_ForcingKind;
 
 /**
@@ -1405,7 +1414,10 @@ double GSSK_NextRandomUniform(GSSK_Instance *inst, double min, double max);
  * connected subgraph motifs (2–3 nodes) defined by node-type composition
  * and directed connectivity.  Motifs that appear ≥ GSSK_MOTIF_MIN_COUNT
  * times per step for ≥ GSSK_MOTIF_MIN_STEPS consecutive steps become
- * archetype candidates, implementing Giannantoni's generativity principle.
+ * archetype candidates. This is a structural recurrence detector for the
+ * archetype-proposal API; it is not Giannantoni's generativity, which is
+ * ordinal ([23] §2-3). See docs/giannantoni_assessment.md, "The kernel's
+ * generativity index G(t)".
  * ========================================================================= */
 
 /**
@@ -1464,7 +1476,9 @@ GSSK_Status GSSK_ProposeArchetype(GSSK_Instance *inst, size_t motif_idx,
 
 /**
  * @brief Scalar generativity index G(t): new candidate motifs this step ×
- *        mean complexity / dt.  Inspired by Giannantoni 2023 §4.
+ *        mean complexity / dt.  A structural statistic of this kernel: no
+ *        source defines it ([23] §4 contains no metric), and it reads no
+ *        state, only the graph and dt.
  *        Zero when no new candidates emerged in the last step.
  */
 double GSSK_GetGenerativityIndex(GSSK_Instance *inst);

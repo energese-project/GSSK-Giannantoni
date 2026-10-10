@@ -1,0 +1,41 @@
+{
+  "metadata": {
+    "schema_version": 4,
+    "name": "tabulated-source",
+    "description": "h8c: a source driven by a data series rather than a formula, the role READ/DATA plays in Odum's BASIC listings. Twelve monthly insolation values drive a producer, and the series repeats every year. The values are illustrative, chosen to show the mechanism, and are not measurements."
+  },
+
+  "_why_a_table": "A sine is a model of the seasons; a table is the seasons as recorded. Odum's published simulations read their driving data from DATA statements once per pass, which is `interpolation: step`. Observed series that are better joined than held use `linear`.",
+
+  "_how_cycle_counts": "extrapolation 'cycle' repeats the series with period times[last] - times[0] = 12 months. The last knot is the START of the next pass, so a year of monthly data is thirteen times, 0..12. Under 'step' the thirteenth value is never read; it is there to close the period.",
+
+  "carriers": [
+    { "id": "energy", "unit": "kcal/m2/day", "conserved": true }
+  ],
+
+  "nodes": [
+    { "id": "sun", "type": "source", "value": 1.0, "carrier": "energy",
+      "forcing": {
+        "waveform": "table",
+        "times":  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        "values": [310, 280, 230, 170, 120, 95, 100, 135, 185, 240, 285, 315, 310],
+        "interpolation": "step",
+        "extrapolation": "cycle"
+      },
+      "_note": "Time is in months. times are ABSOLUTE model time, so a table takes no t_on." },
+
+    { "id": "producer", "type": "storage", "value": 100.0, "carrier": "energy" },
+
+    { "id": "respiration", "type": "sink", "value": 0.0, "carrier": "energy" }
+  ],
+
+  "edges": [
+    { "id": "photosynthesis", "origin": "sun", "target": "producer",
+      "carrier": "energy", "logic": "linear", "params": { "k": 0.1 } },
+
+    { "id": "maintenance", "origin": "producer", "target": "respiration",
+      "carrier": "energy", "logic": "linear", "params": { "k": 0.3 } }
+  ],
+
+  "config": { "t_start": 0, "t_end": 36, "dt": 0.25, "method": "rk4" }
+}
