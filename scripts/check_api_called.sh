@@ -17,12 +17,12 @@ set -eu
 LC_ALL=C; export LC_ALL
 cd "$(dirname "$0")/.."
 
-API_HEADERS=${API_HEADERS:-"include/gia_status.h include/idc.h include/relational.h include/mop.h"}
+API_HEADERS=${API_HEADERS:-"include/gia_status.h include/idc.h include/relational.h include/mop.h include/mop_seed.h"}
 # engine.h predates the baseline and is not NFR-API-001's; only the functions IF-API-005 adds to it
 # are checked, and each only once it is declared.
 API_ENGINE=${API_ENGINE:-include/engine.h}
 API_ENGINE_FUNCS=${API_ENGINE_FUNCS:-"gia_ordinality_record gia_at_maximum_ordinality gia_closure gia_solution_drift gia_drift_projection gia_emergy_source_term gia_emergy_check_limits gia_emergy_global_balance gia_emergy_balance_solve gia_oform_scalar gia_oform_binary gia_oform_duet gia_oform_duet_binary gia_circle_product gia_circle_reduce"}
-API_SOURCES=${API_SOURCES:-"src/idc.c src/relational.c src/mop.c src/harmony.c"}
+API_SOURCES=${API_SOURCES:-"src/idc.c src/relational.c src/mop.c src/mop_seed.c src/harmony.c"}
 API_TESTS=${API_TESTS:-"tests/test_giannantoni.c tests/test_mop.c tests/test_mop_emergence.c tests/test_mop_threads.c"}
 
 fail=0

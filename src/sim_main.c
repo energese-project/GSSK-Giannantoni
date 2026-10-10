@@ -1,6 +1,10 @@
 /* sim_main.c — CLI for the Giannantoni generative simulator.
  *
  *   giannantoni_sim [model.json] [--csv PATH] [--out PATH] [--steps N] [--print]
+ *                   [--mop-out PATH]
+ *
+ * Exit status (IF-CLI-001): 0 on success, 1 on a load or validation error, 2
+ * when the kernel refuses to compute (FR-OUT-002), with the reason on stderr.
  *
  * The model path defaults to examples/giannantoni/input.json. One run does
  * both modes:
@@ -13,6 +17,7 @@
  */
 
 #include "engine.h"
+#include "mop_seed.h"
 
 #include <complex.h>
 #include <math.h>
@@ -119,6 +124,67 @@ static double complex reference_couple(const gia_model *m) {
     return w * (cos(g) + I * sin(g));
 }
 
+/* IF-CLI-001: a refusal -- the kernel will not compute what is asked, and
+ * says why -- exits 2; anything else that stops the run exits 1. */
+#define EXIT_REFUSED 2
+
+static int is_refusal(gia_status st) {
+    return st == GIA_E_DOMAIN || st == GIA_E_UNSUPPORTED || st == GIA_E_RANGE ||
+           st == GIA_E_CONVERGENCE || st == GIA_E_LIMIT;
+}
+
+/* FR-OUT-002: the feature, then the reason the library gave, which names its
+ * source. Returns the exit status. */
+static int report_failure(const char *feature, gia_status st, const char *why) {
+    fprintf(stderr, "giannantoni_sim: %s %s: %s (%s)\n", feature,
+            is_refusal(st) ? "refused" : "failed", why ? why : "no reason given",
+            gia_status_str(st));
+    return is_refusal(st) ? EXIT_REFUSED : EXIT_FAILURE;
+}
+
+static int component_total(const gia_model *m) {
+    int i, n = 0;
+    for (i = 0; i < m->n_nodes; i++) if (gia_node_is_component(m, i)) n++;
+    return n;
+}
+
+/* The seed's `mop` block (IF-JSON-001): what it asks for, and the parts that
+ * are evaluated at t_end. Returns 0, or the exit status of a refusal. */
+static int report_mop(const gia_model *m, const gia_mop_seed *s) {
+    gia_status  st;
+    const char *why = NULL;
+
+    printf("\n%s\n", RULE);
+    printf(" MOP -- THE FUNDAMENTAL EQUATIONS (IF-JSON-001)\n");
+    printf("%s\n", RULE);
+    printf("  cardinality k     %d/%d\n", s->k.num, s->k.den);
+    printf("  reference couple  %s -> %s\n", m->nodes[s->ref[0]].id, m->nodes[s->ref[1]].id);
+    if (s->form == GIA_MOP_BETA_NETWORK)
+        printf("  beta              from the network (FR-MOP-008)\n");
+    else
+        printf("  related couples   %d  (First Equation, [23 Eq 5.4.2])\n", s->n_couples);
+    if (s->has_second) {
+        gia_second sec;
+        st = gia_mop_second(s->alpha12_0, s->c1, s->c2, component_total(m), m->t_end, &sec,
+                            NULL, &why);
+        if (st != GIA_OK) return report_failure("second_equation (FR-MOP-005)", st, why);
+        printf("  second equation   A(t_end) = %.10g%+.10gi  ([23 Eq 6.3])\n",
+               creal(sec.A), cimag(sec.A));
+    }
+    if (s->has_eqs) {
+        /* The EQS needs the reference couple's relational coordinates, which
+         * the seed does not supply; the parameters are checked here, so X11
+         * is refused at load rather than silently carried. */
+        const rel_t probe = {1.0, 0.0, 0.0};
+        double      out[3];
+        st = gia_eqs(&s->eqs, probe, 1, out, &why);
+        if (st != GIA_OK) return report_failure("eqs (FR-MOP-006)", st, why);
+        printf("  eqs               parameters accepted (N = %d); the coordinates need\n"
+               "                    the reference couple's {Sigma0, Phi0, Theta0}\n", s->eqs.N);
+    }
+    return 0;
+}
+
 static void report_model(gia_model *m) {
     double ordinality;
     int    i;
@@ -183,7 +249,7 @@ static void report_model(gia_model *m) {
  * PLAN.md §2 is the evidence for each assignment. tests/mop_cli.sh checks the
  * lines against the CSV header the same run writes, so a column cannot be
  * added here or in gia_write_trajectories without the other. */
-static void report_labels(const gia_model *m) {
+static void report_labels(const gia_model *m, const gia_mop_seed *mop) {
     int i;
 
     printf("\n%s\n", RULE);
@@ -212,6 +278,13 @@ static void report_labels(const gia_model *m) {
     printf("label.generative_step: illustrative\n");
     /* FR-IDC-011: exactly zero for a constant flow matrix, refused otherwise. */
     printf("label.solution_drift: implemented\n");
+    if (mop->present) {
+        /* ADR 0019: the First Equation solved from [23 Eq 5.5.6], not the
+         * printed Eq 5.5.7-5.5.8 (X1); written by --mop-out. */
+        printf("label.mop_alpha: implemented\n");
+        /* [23 §8 ii]: the printed solution takes lambda null, an assumption. */
+        if (mop->has_second) printf("label.second_equation: assumed\n");
+    }
 }
 
 int main(int argc, char **argv) {
@@ -221,6 +294,7 @@ int main(int argc, char **argv) {
     bool        project    = false;
     const char *out_path   = DEFAULT_OUT;
     const char *seed_path  = NULL;
+    const char *mop_path   = NULL;
     int         steps      = DEFAULT_STEPS;
     int         i, rc      = EXIT_FAILURE;
 
@@ -233,9 +307,11 @@ int main(int argc, char **argv) {
     gia_model    model;
     gia_harmony  harmony;
     gia_mode     mode;
+    gia_mop_seed mop;
 
     memset(&model,   0, sizeof(model));
     memset(&harmony, 0, sizeof(harmony));
+    memset(&mop,     0, sizeof(mop));
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--csv") && i + 1 < argc) {
@@ -246,13 +322,15 @@ int main(int argc, char **argv) {
             steps = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--seed") && i + 1 < argc) {
             seed_path = argv[++i];
+        } else if (!strcmp(argv[i], "--mop-out") && i + 1 < argc) {
+            mop_path = argv[++i];
         } else if (!strcmp(argv[i], "--project")) {
             project = true;
         } else if (!strcmp(argv[i], "--print")) {
             show_table = true;
         } else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
             printf("usage: %s [model.json] [--csv PATH] [--out PATH] "
-                   "[--steps N] [--print] [--seed PATH]\n", argv[0]);
+                   "[--steps N] [--print] [--seed PATH] [--mop-out PATH]\n", argv[0]);
             printf("  model.json defaults to %s\n", DEFAULT_MODEL);
             printf("  --print  also render the trajectories on stdout\n");
             printf("  --project  read the file as a GSSK-schema model, report\n");
@@ -260,6 +338,10 @@ int main(int argc, char **argv) {
             printf("           run the projection\n");
             printf("  --seed   where to write the re-serialised seed for\n");
             printf("           diffing (default: <out> with .seed before .json)\n");
+            printf("  --mop-out  write the First Equation's couples (the seed's\n");
+            printf("           mop block) as CSV\n");
+            printf("  exit status: 0 success, 1 load or validation error,\n");
+            printf("           2 refused (the reason is on stderr)\n");
             return EXIT_SUCCESS;
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "unknown option: %s\n", argv[i]);
@@ -305,7 +387,33 @@ int main(int argc, char **argv) {
 
     if (!gia_model_load(&model, root)) goto done;
 
+    {
+        char        detail[256];
+        const char *why = NULL;
+        gia_status  st  = gia_mop_seed_load(&model, &mop, detail, sizeof detail, &why);
+        if (st != GIA_OK) {
+            fprintf(stderr, "%s: %s\n", model_path, detail[0] ? detail : (why ? why : "mop"));
+            goto done;
+        }
+    }
+    if (mop_path && !mop.present) {
+        fprintf(stderr, "--mop-out: %s has no mop block (IF-JSON-001)\n", model_path);
+        goto done;
+    }
+
     report_model(&model);
+
+    if (mop.present) {
+        int refused = report_mop(&model, &mop);
+        if (refused) { rc = refused; goto done; }
+    }
+    if (mop_path) {
+        const char *why = NULL;
+        gia_status  st  = gia_mop_write_csv(&model, &mop, mop_path, steps, &why);
+        if (st != GIA_OK) { rc = report_failure("--mop-out", st, why); goto done; }
+        printf("  wrote %s  (%d couples, %d steps to t = %g)\n", mop_path, mop.n_couples,
+               steps, model.t_end);
+    }
 
     /* ---- Mode 1: functional. Numbers move, the graph does not. ---- */
     printf("\n%s\n", RULE);
@@ -362,12 +470,13 @@ int main(int argc, char **argv) {
     mode = gia_validate_mode(root, out);
     gia_report_mode(mode, root, out);
 
-    report_labels(&model);
+    report_labels(&model, &mop);
 
     rc = EXIT_SUCCESS;
 
 done:
     gia_harmony_free(&harmony);
+    gia_mop_seed_free(&mop);
     gia_model_free(&model);
     if (printed)  free(printed);
     if (seed_txt) free(seed_txt);

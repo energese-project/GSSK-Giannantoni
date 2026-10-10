@@ -97,6 +97,35 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
 - **`e^B` is computed in closed form.** `B = A·M` with `M = [[1, −1], [−1, 1]]` and `M² = 2M`, so
   `e^B = I + (e^{2A} − 1)/2 · M` exactly. Overflow of `e^{2A}` is `GIA_E_RANGE` (NFR-NUM-003).
 
+### `mop-seed-cli`
+
+- **`k` is required.** IF-JSON-001's grammar marks `reference`, `second_equation` and `eqs` optional,
+  and does not mark `k` optional. A block without `k` is a load error, rather than one that silently
+  takes a default.
+- **A key given twice is a load error.** cJSON keeps both members, and a lookup returns the first
+  one. So without this check, `{"k": 1, "k": 2}` would load as `k = 1` and nobody would be told.
+- **The loader adds a `detail` buffer to the `why` convention.** IF-API-001's `why` is a static
+  string, so it cannot name the offending key. `gia_mop_seed_load` therefore also takes
+  `char *detail, size_t cap`, owned by the caller, for the JSON path (`mop.beta[2].samples[1]`).
+  `why` stays static.
+- **Exit status 2 covers every refusal, not only `GIA_E_UNSUPPORTED` and `GIA_E_DOMAIN`.**
+  `GIA_E_RANGE`, `GIA_E_CONVERGENCE` and `GIA_E_LIMIT` are also the kernel declining to compute
+  (NFR-NUM-003: never a non-finite value). They are not load or validation errors, and exiting 1
+  for them would misreport them as such.
+- **IF-OUT-002 stays `planned`.** The CSV has `time` and the couple columns. Its last column, `R_H`,
+  is the harmony residual of FR-HAR-001, which lands with `mop-harmony-detector`. That task adds the
+  column and flips IF-OUT-002.
+- **`eqs` is checked, not evaluated.** [23 Eq 7.1–7.3] need the reference couple's relational
+  coordinates `{Σ₀, Φ₀, Θ₀}`. The seed does not supply them, and the First Equation's complex `α₁₂`
+  does not determine them. The CLI checks the parameters through `gia_eqs`, so an `ε₂ ≠ ε₃` seed is
+  refused (X11, exit 2), and says that no coordinates are computed.
+- **`"beta": "network"` loads and is refused at solve time** (`GIA_E_UNSUPPORTED`, naming
+  FR-MOP-008) until `mop-network-beta` lands. The grammar accepts it, so treating it as a load error
+  would be wrong.
+- **T-PERF-01's benchmark lives in `tests/bench_mop.c`**, not `bench/`. `check-trace` looks for
+  `Verifies:` tags only under `tests/` and `scripts/`. It measures CPU time, so that another job on
+  a loaded runner cannot fail the bound. It is not in CI: NFR-PERF-001 is a Could.
+
 ---
 
 ## [Revision 3] — 2026-10-09

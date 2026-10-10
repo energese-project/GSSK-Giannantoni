@@ -16,6 +16,7 @@
 #include "gia_status.h"
 #include "idc.h"
 #include "mop.h"
+#include "mop_seed.h"
 #include "relational.h"
 
 #include <complex.h>
@@ -1838,6 +1839,324 @@ static void test_mop_second(void) {
        gia_mop_second(400.0, 1.0, 1.0, 2, 1.0, &s, NULL, &why) == GIA_E_RANGE);
 }
 
+/* ------------------------------------------------------------------ *
+ * The seed's `mop` block and the MOP CSV (IF-JSON-001, IF-OUT-002)
+ * ------------------------------------------------------------------ */
+
+/* Three components a, b, c (storages), a source and a sink: the sink and the
+ * source are habitat, not components (ADR 0021). %s is the `mop` member, with
+ * its leading comma, or "". */
+static const char *MOP_SEED_FMT =
+    "{\"system_name\":\"mop\",\"nodes\":["
+    " {\"id\":\"src\",\"type\":\"source\",\"initial_value\":1.0},"
+    " {\"id\":\"c\",\"type\":\"storage\",\"current_level\":1.0},"
+    " {\"id\":\"a\",\"type\":\"storage\",\"current_level\":1.0},"
+    " {\"id\":\"b\",\"type\":\"storage\",\"current_level\":1.0},"
+    " {\"id\":\"out\",\"type\":\"sink\"}],"
+    "\"edges\":["
+    " {\"source\":\"src\",\"target\":\"a\",\"weight\":0.1},"
+    " {\"source\":\"a\",\"target\":\"b\",\"weight\":0.1},"
+    " {\"source\":\"b\",\"target\":\"c\",\"weight\":0.1},"
+    " {\"source\":\"c\",\"target\":\"out\",\"weight\":0.1}],"
+    "\"simulation_params\":{\"t_val\":1.5,\"derivative_order\":2,\"generative_mode\":false}%s}";
+
+/* Loads the base seed with `mop` member text `mop` ("" for none) and parses
+ * the block. Returns the loader's status; -1 if the model itself failed. */
+static int mop_seed_try(const char *mop, gia_model *m, cJSON **root, gia_mop_seed *s,
+                        char *detail, size_t cap) {
+    char        buf[8192];
+    const char *why = NULL;
+    snprintf(buf, sizeof buf, MOP_SEED_FMT, mop);
+    memset(s, 0, sizeof(*s));
+    if (!load_seed(buf, m, root)) return -1;
+    return (int)gia_mop_seed_load(m, s, detail, cap, &why);
+}
+
+static void mop_seed_done(gia_model *m, cJSON *root, gia_mop_seed *s) {
+    gia_mop_seed_free(s);
+    gia_model_free(m);
+    cJSON_Delete(root);
+}
+
+static int node_is(const gia_model *m, int idx, const char *id) {
+    return idx >= 0 && idx < m->n_nodes && strcmp(m->nodes[idx].id, id) == 0;
+}
+
+/* Verifies: IF-JSON-001 (T-IN-01)
+ * Source: icd.md IF-JSON-001 (the block's grammar); [23 Eq 5.4.2] for the
+ * value check. Oracle: the parsed values are the literals of the seed text,
+ * and the affine couple a->b, beta = 1 + 0.25 t, k = 1, reaches the solver:
+ * alpha(1) = int_0^1 (1 + 0.25 s) ds = 1.125, by hand. */
+static void test_mop_seed_valid(void) {
+    gia_model    m;
+    cJSON       *root;
+    gia_mop_seed s;
+    char         det[128];
+    double complex al;
+    const char  *why = NULL;
+    int          st;
+
+    printf("\n[T-IN-01] valid mop blocks load, and their values reach the solver\n");
+    st = mop_seed_try("", &m, &root, &s, det, sizeof det);
+    ok("no mop block: GIA_OK, present = 0", st == GIA_OK && !s.present);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":["
+                      "{\"from\":\"a\",\"to\":\"c\",\"samples\":[[0,1,0],[1,2,0.5],[2,3,0]]},"
+                      "{\"from\":\"a\",\"to\":\"b\",\"a\":1.0,\"b\":0.25,\"p\":1.0}]}",
+                      &m, &root, &s, det, sizeof det);
+    ok("couples: affine and samples load", st == GIA_OK && s.present && s.n_couples == 2);
+    if (st == GIA_OK && s.n_couples == 2) {
+        const gia_mop_couple_spec *ab = &s.couples[0], *ac = &s.couples[1];
+        ok("k = 1 reads as 1/1; form is couples", s.k.num == 1 && s.k.den == 1 &&
+           s.form == GIA_MOP_BETA_COUPLES);
+        ok("couples sorted by (from, to) id: a__b before a__c",
+           node_is(&m, ab->from, "a") && node_is(&m, ab->to, "b") &&
+           node_is(&m, ac->from, "a") && node_is(&m, ac->to, "c"));
+        ok("affine: a = 1, b = 0.25, p = 1", ab->beta.kind == GIA_BETA_AFFINE &&
+           ab->beta.a == 1.0 && ab->beta.b == 0.25 && ab->beta.p == 1.0);
+        ok("samples: n = 3, [t, re, im] in order", ac->beta.kind == GIA_BETA_SAMPLES &&
+           ac->beta.n == 3 && ac->beta.t[1] == 1.0 && ac->beta.v[1] == 2.0 + 0.5 * I &&
+           ac->beta.t[2] == 2.0 && ac->beta.v[2] == 3.0);
+        ok("default reference: the first two components by id, a and b",
+           node_is(&m, s.ref[0], "a") && node_is(&m, s.ref[1], "b"));
+        ok("the affine couple reaches the solver: alpha(1) = 1.125",
+           gia_mop_couple(&ab->beta, s.k, 1.0, &al, &why) == GIA_OK &&
+           near_c(al, 1.125, TOL_CLOSED));
+        ok("the sampled couple solves at t_end", gia_mop_couple(&ac->beta, s.k, 1.5, &al, &why) == GIA_OK);
+        ok("no second_equation, no eqs", !s.has_second && !s.has_eqs);
+    }
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    st = mop_seed_try(",\"mop\":{\"k\":{\"num\":2,\"den\":4},\"reference\":[\"c\",\"a\"],"
+                      "\"beta\":[{\"from\":\"b\",\"to\":\"a\",\"a\":[1.0,0.5],\"b\":[0,-0.25],\"p\":2}],"
+                      "\"second_equation\":{\"alpha12_0\":[0.3,0.1],\"c1\":1.0,\"c2\":0.5},"
+                      "\"eqs\":{\"psi1\":[1,2,3],\"psi2\":0.5,\"epsilon\":[0.1,0.2,0.2],\"A\":2}}",
+                      &m, &root, &s, det, sizeof det);
+    ok("fraction k, complex a and b, reference, second_equation, eqs: load", st == GIA_OK);
+    if (st == GIA_OK) {
+        ok("k = {2, 4} is reduced to 1/2", s.k.num == 1 && s.k.den == 2);
+        ok("complex a = [1, 0.5], b = [0, -0.25]", s.n_couples == 1 &&
+           s.couples[0].beta.a == 1.0 + 0.5 * I && s.couples[0].beta.b == -0.25 * I &&
+           s.couples[0].beta.p == 2.0);
+        ok("reference [c, a]", node_is(&m, s.ref[0], "c") && node_is(&m, s.ref[1], "a"));
+        ok("second_equation: alpha12_0 = 0.3 + 0.1i, c1 = 1, c2 = 0.5",
+           s.has_second && s.alpha12_0 == 0.3 + 0.1 * I && s.c1 == 1.0 && s.c2 == 0.5);
+        ok("eqs: psi1, psi2, epsilon, A, and N = 3 components",
+           s.has_eqs && s.eqs.psi1[0] == 1 && s.eqs.psi1[1] == 2 && s.eqs.psi1[2] == 3 &&
+           s.eqs.psi2 == 0.5 && s.eqs.eps[0] == 0.1 && s.eqs.eps[1] == 0.2 &&
+           s.eqs.eps[2] == 0.2 && s.eqs.A == 2 && s.eqs.N == 3);
+    }
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    st = mop_seed_try(",\"mop\":{\"k\":2,\"beta\":\"network\"}", &m, &root, &s, det, sizeof det);
+    ok("\"beta\": \"network\" loads as the network form, no couples",
+       st == GIA_OK && s.form == GIA_MOP_BETA_NETWORK && s.n_couples == 0 && s.k.num == 2);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+}
+
+/* Verifies: IF-JSON-001, NFR-ROB-001 (T-IN-02)
+ * Source: icd.md IF-JSON-001; AGENTS.md (strict parsing). Oracle: each case
+ * below is a load error by the grammar -- GIA_E_ARG, a non-empty detail, and
+ * a zeroed seed with nothing allocated (ASan checks the last under
+ * test-mop-asan). The catalogue mutation "ignore unknown keys" fails the
+ * first three cases. */
+static void test_mop_seed_errors(void) {
+    static const struct { const char *what, *mop; } bad[] = {
+        {"unknown key in the block",         ",\"mop\":{\"k\":1,\"beta\":[],\"kk\":1}"},
+        {"unknown key in a couple",          ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0,\"p\":1,\"weight\":1}]}"},
+        {"unknown key in second_equation",   ",\"mop\":{\"k\":1,\"beta\":[],\"second_equation\":{\"alpha12_0\":1,\"c1\":1,\"c2\":0,\"lambda\":0}}"},
+        {"unknown key in eqs",               ",\"mop\":{\"k\":1,\"beta\":[],\"eqs\":{\"psi1\":[1,1,1],\"psi2\":1,\"epsilon\":[0,0,0],\"A\":1,\"B\":1}}"},
+        {"unknown key in k",                 ",\"mop\":{\"k\":{\"num\":1,\"den\":1,\"x\":0},\"beta\":[]}"},
+        {"mop is not an object",             ",\"mop\":[1]"},
+        {"k is a string",                    ",\"mop\":{\"k\":\"1\",\"beta\":[]}"},
+        {"k = 0",                            ",\"mop\":{\"k\":0,\"beta\":[]}"},
+        {"k = 1.5 (fractions are {num, den})", ",\"mop\":{\"k\":1.5,\"beta\":[]}"},
+        {"k without den",                    ",\"mop\":{\"k\":{\"num\":1},\"beta\":[]}"},
+        {"k with den = 0",                   ",\"mop\":{\"k\":{\"num\":1,\"den\":0},\"beta\":[]}"},
+        {"k missing",                        ",\"mop\":{\"beta\":[]}"},
+        {"beta missing",                     ",\"mop\":{\"k\":1}"},
+        {"beta a string other than network", ",\"mop\":{\"k\":1,\"beta\":\"graph\"}"},
+        {"beta an object",                   ",\"mop\":{\"k\":1,\"beta\":{}}"},
+        {"a couple that is not an object",   ",\"mop\":{\"k\":1,\"beta\":[1]}"},
+        {"unknown component",                ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"z\",\"a\":1,\"b\":0,\"p\":1}]}"},
+        {"a source is habitat, not a component", ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"src\",\"to\":\"a\",\"a\":1,\"b\":0,\"p\":1}]}"},
+        {"from == to",                       ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"a\",\"a\":1,\"b\":0,\"p\":1}]}"},
+        {"duplicate couple",                 ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0,\"p\":1},{\"from\":\"a\",\"to\":\"b\",\"a\":2,\"b\":0,\"p\":1}]}"},
+        {"from is a number",                 ",\"mop\":{\"k\":1,\"beta\":[{\"from\":1,\"to\":\"b\",\"a\":1,\"b\":0,\"p\":1}]}"},
+        {"affine without p",                 ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0}]}"},
+        {"a as [re] (one element)",          ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":[1],\"b\":0,\"p\":1}]}"},
+        {"a as a string",                    ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":\"1\",\"b\":0,\"p\":1}]}"},
+        {"affine and samples together",      ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0,\"p\":1,\"samples\":[[0,1,0],[1,1,0]]}]}"},
+        {"neither affine nor samples",       ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\"}]}"},
+        {"samples not increasing",           ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"samples\":[[0,1,0],[1,1,0],[1,2,0]]}]}"},
+        {"samples not starting at t = 0",    ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"samples\":[[0.5,1,0],[1,1,0]]}]}"},
+        {"a sample that is not [t, re, im]", ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"samples\":[[0,1],[1,1,0]]}]}"},
+        {"a single sample",                  ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"samples\":[[0,1,0]]}]}"},
+        {"a non-finite value (1e400)",       ",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1e400,\"b\":0,\"p\":1}]}"},
+        {"reference of one id",              ",\"mop\":{\"k\":1,\"reference\":[\"a\"],\"beta\":[]}"},
+        {"reference naming the sink",        ",\"mop\":{\"k\":1,\"reference\":[\"a\",\"out\"],\"beta\":[]}"},
+        {"reference [a, a]",                 ",\"mop\":{\"k\":1,\"reference\":[\"a\",\"a\"],\"beta\":[]}"},
+        {"second_equation without c2",       ",\"mop\":{\"k\":1,\"beta\":[],\"second_equation\":{\"alpha12_0\":1,\"c1\":1}}"},
+        {"eqs psi1 of two",                  ",\"mop\":{\"k\":1,\"beta\":[],\"eqs\":{\"psi1\":[1,1],\"psi2\":1,\"epsilon\":[0,0,0],\"A\":1}}"},
+        {"eqs without A",                    ",\"mop\":{\"k\":1,\"beta\":[],\"eqs\":{\"psi1\":[1,1,1],\"psi2\":1,\"epsilon\":[0,0,0]}}"},
+    };
+    size_t i;
+    int    all = 1, detail = 1, zeroed = 1;
+
+    printf("\n[T-IN-02] malformed mop blocks are load errors\n");
+    for (i = 0; i < sizeof bad / sizeof bad[0]; i++) {
+        gia_model    m;
+        cJSON       *root;
+        gia_mop_seed s;
+        char         det[128] = "";
+        int          st = mop_seed_try(bad[i].mop, &m, &root, &s, det, sizeof det);
+        if (st != GIA_E_ARG) { all = 0; printf("    not a load error (%d): %s\n", st, bad[i].what); }
+        if (st == GIA_E_ARG && det[0] == '\0') { detail = 0; printf("    no detail: %s\n", bad[i].what); }
+        if (s.present || s.couples || s.n_couples) zeroed = 0;
+        if (st >= 0) mop_seed_done(&m, root, &s);
+    }
+    ok("every malformed case: GIA_E_ARG", all);
+    ok("every load error names its JSON path in detail", detail);
+    ok("on a load error the seed is zeroed, nothing allocated", zeroed);
+    {
+        gia_model    m;
+        cJSON       *root;
+        gia_mop_seed s;
+        int st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":[],\"kk\":1}", &m, &root, &s, NULL, 0);
+        ok("detail may be NULL", st == GIA_E_ARG);
+        if (st >= 0) mop_seed_done(&m, root, &s);
+    }
+}
+
+/* Reads a whole file; NULL if it cannot. */
+static char *slurp(const char *path) {
+    FILE  *f = fopen(path, "rb");
+    long   n;
+    char  *b;
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 0) { fclose(f); return NULL; }
+    rewind(f);
+    b = (char *)malloc((size_t)n + 1);
+    if (b && fread(b, 1, (size_t)n, f) != (size_t)n) { free(b); b = NULL; }
+    if (b) b[n] = '\0';
+    fclose(f);
+    return b;
+}
+
+/* Verifies: NFR-ROB-001 (T-ROB-01)
+ * Source: AGENTS.md §Fail-Safe. Oracle: the committed corpus tests/mop_fuzz/
+ * lists every case in INDEX; a case named ok_* loads, every other case is
+ * GIA_E_ARG, and none crashes (under test-mop-asan, none leaks or reads out of
+ * bounds). A seed the model loader itself rejects counts as an error. */
+static void test_mop_fuzz_corpus(void) {
+    char  *index = slurp("tests/mop_fuzz/INDEX");
+    char  *line, *save = NULL;
+    int    n = 0, right = 1;
+
+    printf("\n[T-ROB-01] the committed mop fuzz corpus\n");
+    ok("tests/mop_fuzz/INDEX is readable", index != NULL);
+    if (!index) return;
+    for (line = strtok_r(index, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+        char         path[512];
+        char        *text;
+        cJSON       *root;
+        gia_model    m;
+        gia_mop_seed s;
+        char         det[128];
+        const char  *why = NULL;
+        int          st, want_ok = strncmp(line, "ok_", 3) == 0;
+
+        if (line[0] == '\0' || line[0] == '#') continue;
+        snprintf(path, sizeof path, "tests/mop_fuzz/%s", line);
+        text = slurp(path);
+        if (!text) { right = 0; printf("    unreadable: %s\n", line); continue; }
+        n++;
+        memset(&s, 0, sizeof s);
+        root = cJSON_Parse(text);
+        if (!root || !(memset(&m, 0, sizeof m), gia_model_load(&m, root))) st = GIA_E_ARG;
+        else {
+            st = (int)gia_mop_seed_load(&m, &s, det, sizeof det, &why);
+            gia_mop_seed_free(&s);
+            gia_model_free(&m);
+        }
+        if (root) cJSON_Delete(root);
+        free(text);
+        if (want_ok ? st != GIA_OK : st != GIA_E_ARG) {
+            right = 0;
+            printf("    %s: status %d\n", line, st);
+        }
+    }
+    free(index);
+    printf("    %d cases\n", n);
+    ok("at least 30 cases", n >= 30);
+    ok("each ok_* case loads, each other case is GIA_E_ARG, none crashes", right);
+}
+
+/* Verifies: IF-OUT-002 (T-OUT-01)
+ * Source: icd.md IF-OUT-002. Oracle: the header is the interface's, by hand;
+ * the row at t = t_end holds gia_mop_couple's value for each couple (the
+ * solver itself is verified by T-MOP-01..06); a refusal writes no file. */
+static void test_mop_csv(void) {
+    const char  *path = "bin/test_mop_csv.csv";
+    gia_model    m;
+    cJSON       *root;
+    gia_mop_seed s;
+    char         det[128], *text;
+    const char  *why = NULL;
+    int          st;
+
+    printf("\n[T-OUT-01] the MOP CSV\n");
+    remove(path);
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":["
+                      "{\"from\":\"b\",\"to\":\"a\",\"a\":2,\"b\":0,\"p\":1},"
+                      "{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":0.25,\"p\":1}]}",
+                      &m, &root, &s, det, sizeof det);
+    ok("writes", st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_OK);
+    text = slurp(path);
+    ok("header: time, then a__b, b__a (re, im) in id order",
+       text && strncmp(text, "time,a__b_re,a__b_im,b__a_re,b__a_im\n", 37) == 0);
+    {
+        int rows = 0, last = 1;
+        if (text) {
+            char *p = text, *lastrow = NULL;
+            for (; *p; p++) if (*p == '\n') { rows++; if (p[1]) lastrow = p + 1; }
+            if (lastrow) {
+                double v[5];
+                double complex ab, ba;
+                int got = sscanf(lastrow, "%lf,%lf,%lf,%lf,%lf", &v[0], &v[1], &v[2], &v[3], &v[4]);
+                last = got == 5 && near_c(v[0], 1.5, TOL_CLOSED) &&
+                       gia_mop_couple(&s.couples[0].beta, s.k, 1.5, &ab, &why) == GIA_OK &&
+                       gia_mop_couple(&s.couples[1].beta, s.k, 1.5, &ba, &why) == GIA_OK &&
+                       near_c(v[1] + v[2] * I, ab, 1e-9) && near_c(v[3] + v[4] * I, ba, 1e-9) &&
+                       near_c(ab, 1.5 + 0.125 * 2.25, TOL_CLOSED) && near_c(ba, 3.0, TOL_CLOSED);
+            } else last = 0;
+        }
+        ok("1 + steps rows, t = 0 .. t_end", rows == 5);
+        ok("row t_end: alpha_ab = 1.78125, alpha_ba = 3 (by hand)", text && last);
+    }
+    free(text);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    remove(path);
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":[{\"from\":\"a\",\"to\":\"b\",\"a\":1,\"b\":-1,\"p\":1}]}",
+                      &m, &root, &s, det, sizeof det);
+    why = NULL;
+    ok("a + b t = 0 at t = 1 < t_end: GIA_E_DOMAIN, with a reason, no file",
+       st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_E_DOMAIN && why &&
+       (text = slurp(path)) == NULL);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+
+    st = mop_seed_try(",\"mop\":{\"k\":1,\"beta\":\"network\"}", &m, &root, &s, det, sizeof det);
+    why = NULL;
+    ok("network beta: GIA_E_UNSUPPORTED naming FR-MOP-008, no file",
+       st == GIA_OK && gia_mop_write_csv(&m, &s, path, 3, &why) == GIA_E_UNSUPPORTED && why &&
+       strstr(why, "FR-MOP-008") && (text = slurp(path)) == NULL);
+    ok("a seed without a mop block, or NULL: GIA_E_ARG",
+       gia_mop_write_csv(&m, NULL, path, 3, &why) == GIA_E_ARG);
+    if (st >= 0) mop_seed_done(&m, root, &s);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -1879,6 +2198,10 @@ int main(void) {
     test_mop_eqs();
     test_val_eqs_brackets();
     test_mop_second();
+    test_mop_seed_valid();
+    test_mop_seed_errors();
+    test_mop_fuzz_corpus();
+    test_mop_csv();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

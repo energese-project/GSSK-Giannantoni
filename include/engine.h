@@ -755,6 +755,10 @@ int gia_mark_cycles(gia_model *m);
 /* Number of components -- nodes that are not modules. */
 int gia_component_count(const gia_model *m);
 
+/* ADR 0021: node i is a component -- neither a module nor habitat (a source,
+ * a sink or a constant). False for an index out of range. */
+bool gia_node_is_component(const gia_model *m, int i);
+
 /* Fraction of components on a closed pathway, in [0, 1]. Calls
  * gia_mark_cycles(). */
 double gia_ordinality(gia_model *m);

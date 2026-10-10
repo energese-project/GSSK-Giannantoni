@@ -215,8 +215,10 @@ errors; so are type mismatches (`AGENTS.md`: strict parsing).
 ```
 `from`/`to` must name components (not modules or boundary nodes); a couple may appear once; the time
 grid is the seed's existing one.
+The parser is `gia_mop_seed_load` in `include/mop_seed.h`: a load error is `GIA_E_ARG`, with the JSON
+path of the offending value in a caller-owned `detail` buffer.
 - **Source:** srs §2.3
-- **Verification:** T-IN-01, T-IN-02 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-IN-01, T-IN-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation
 
 ## 4. Outputs
 
@@ -248,4 +250,4 @@ Existing options unchanged (`--csv`, `--out`, `--steps`, `--seed`, `--project`, 
 added `--mop-out PATH`. Exit status 0 on success, 1 on a load or validation error, 2 on a refusal
 (`GIA_E_UNSUPPORTED`/`GIA_E_DOMAIN`), with the reason on stderr (FR-OUT-002).
 - **Source:** `src/sim_main.c`; srs FR-OUT-002
-- **Verification:** T-OUT-03 · **Priority:** Must · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-OUT-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-first-equation

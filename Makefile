@@ -123,7 +123,7 @@ MODEL ?= examples/giannantoni/input.json
 # them, because a prerequisite list is expanded when its rule is read.
 GIA_UNIT_SRCS = $(SRC_DIR)/engine.c $(SRC_DIR)/validation.c \
                 $(SRC_DIR)/projection.c $(SRC_DIR)/idc.c $(SRC_DIR)/mop.c \
-                $(SRC_DIR)/relational.c
+                $(SRC_DIR)/relational.c $(SRC_DIR)/mop_seed.c
 GIA_OBJS = $(patsubst $(SRC_DIR)/%.c,$(LIB_DIR)/%.o,$(GIA_UNIT_SRCS))
 
 # Simulation objects. sim_main.o carries the entry point, kept out of
@@ -188,6 +188,16 @@ $(TARGET_BENCH_GIA): bench/bench_giannantoni.c $(LIB_DIR)/engine.o $(TARGET_LIB)
 
 bench-giannantoni: directories $(TARGET_BENCH_GIA)
 	@./$(TARGET_BENCH_GIA)
+
+# NFR-PERF-001 (T-PERF-01): the First Equation, N = 64, 1,000 times, < 2 s CPU.
+TARGET_BENCH_MOP = $(BIN_DIR)/bench_mop
+
+$(TARGET_BENCH_MOP): $(TEST_DIR)/bench_mop.c $(GIA_OBJS) $(TARGET_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+.PHONY: bench-mop
+bench-mop: directories $(TARGET_BENCH_MOP)
+	@./$(TARGET_BENCH_MOP)
 
 # Engine unit tests: drift theorem, duet branches, harmony invariants,
 # ordinality and the generative step.
@@ -767,7 +777,7 @@ coverage-check: coverage-report coverage-gia
 # validation.c and projection.c are reported but not gated. A unit listed here
 # whose source does not exist yet is skipped, so W2-W8 join the gate by landing.
 GIA_COV_MIN    = 90
-GIA_COV_UNITS  = engine idc mop relational harmony
+GIA_COV_UNITS  = engine idc mop relational mop_seed harmony
 GIA_COV_EXTRA  = validation projection
 GIA_COV_DIR    = coverage/gia
 GCOV          ?= gcov

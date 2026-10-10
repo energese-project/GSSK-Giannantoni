@@ -2938,6 +2938,10 @@ static bool is_component(const gia_node *nd) {
            nd->kind != GIA_NODE_SINK && nd->kind != GIA_NODE_CONSTANT;
 }
 
+bool gia_node_is_component(const gia_model *m, int i) {
+    return m && i >= 0 && i < m->n_nodes && is_component(&m->nodes[i]);
+}
+
 /* F at time s along the engine's own solution (numerics.md N7: Q at t +- h
  * comes from the engine, not a re-integration). */
 static bool flow_at(const gia_model *m, double s, double *q, double *f) {

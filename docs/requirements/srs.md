@@ -346,7 +346,7 @@ The run report shall list every output column and quantity with one label from `
 Every refusal shall name the feature and the source reason (equation or PLAN §6 row), on stderr for
 the CLI and through the `why` out-parameter for the library.
 - **Source:** PLAN §6
-- **Verification:** T-OUT-03 · **Priority:** Must · **Status:** planned · **Task:** mop-claims-remediation
+- **Verification:** T-OUT-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-claims-remediation
 
 ### FR-OUT-003 — Harmony verdicts reported verbatim
 The report shall carry one line per construction, `harmony.<construction>: <verdict>`, with the verdict
@@ -444,7 +444,7 @@ masks beyond 64 components.)
 The `mop` block parser shall reject malformed input with an error and never crash; it shall be fuzzed
 with a committed corpus.
 - **Source:** `AGENTS.md` §Fail-Safe ("JSON parsing must be strict")
-- **Verification:** T-ROB-01, T-IN-02 · **Priority:** Should · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-ROB-01, T-IN-02 · **Priority:** Should · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-POR-001 — Builds clean everywhere
 The Giannantoni units shall compile without warnings under `-std=c99 -Wall -Wextra -Werror` with GCC,
@@ -456,7 +456,7 @@ Linux clang and Apple clang.
 The kernel shall solve the First Equation for N = 64 (4,032 couples) at 1,000 output times, affine-power
 β, in under 2 s on a CI runner; N ≤ 64 is the supported limit (NFR-LIM-001 above it).
 - **Source:** `src/engine.c` 64-wide masks; BR-011
-- **Verification:** T-PERF-01 · **Priority:** Could · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-PERF-01 · **Priority:** Could · **Status:** implemented · **Task:** mop-first-equation
 
 ### NFR-SEP-001 — Two engines stay separate
 No Giannantoni unit shall include `gssk.h`.

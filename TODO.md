@@ -824,7 +824,7 @@ One item per PLAN §7 task. An item is checked when its tests pass and its requi
 - [x] W2 `idc-nonlinear-14-10` — [02 Eq 14.10.1] (FR-IDC-009)
 - [x] W2 `idc-drift-coupled` — solution drift and output-projection drift (FR-IDC-011, 014)
 - [x] W3 `emergy-source-terms`, `emergy-ordinal-forms`
-- [ ] W4 `mop-first-equation`
+- [x] W4 `mop-first-equation`, `mop-seed-cli` — the First Equation, the seed's `mop` block, `--mop-out`, exit codes (the MOP CSV's `R_H` column follows with W8 `mop-harmony-detector`)
 - [x] W5 `mop-relational-algebra`, `mop-eqs`
 - [x] W6 `mop-second-equation`
 - [ ] W7 `mop-ordinality`, `mop-generative-empower`

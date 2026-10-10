@@ -20,8 +20,8 @@ set -eu
 LC_ALL=C; export LC_ALL
 cd "$(dirname "$0")/.."
 
-UNITS="engine validation projection idc mop relational harmony"
-HEADERS="include/engine.h include/idc.h include/mop.h include/relational.h include/gia_status.h"
+UNITS="engine validation projection idc mop relational mop_seed harmony"
+HEADERS="include/engine.h include/idc.h include/mop.h include/mop_seed.h include/relational.h include/gia_status.h"
 LIB=${LIB_DIR:-lib}
 
 tmpf=$(mktemp "${TMPDIR:-/tmp}/check_symbols.XXXXXX")

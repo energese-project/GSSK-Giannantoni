@@ -133,6 +133,51 @@ for model in examples/giannantoni/input.json examples/giannantoni/closed_loop.js
     ok "$name: two runs are byte-identical (report, CSV, graph)" "$st"
 done
 
+# ---------------------------------------------------------------------------
+# Verifies: FR-OUT-002, IF-CLI-001 (T-OUT-03)
+#
+# icd.md IF-CLI-001: exit 0 on success, 1 on a load or validation error, 2 on a
+# refusal, with the reason on stderr. FR-OUT-002: the reason names the feature and
+# its source. The seeds are the T-ROB-01 corpus's; the expected status and the
+# source each refusal must name are the interface's, by hand.
+# ---------------------------------------------------------------------------
+mop_run() {  # mop_run <corpus case> : $tmp/mop.{out,err,csv}, status in $tmp/mop.rc
+    rm -f "$tmp/mop.csv"
+    set +e
+    "$SIM" "tests/mop_fuzz/$1.json" --steps 3 --csv "$tmp/mopt.csv" --out "$tmp/mop.json" \
+        --mop-out "$tmp/mop.csv" >"$tmp/mop.out" 2>"$tmp/mop.err"
+    echo $? > "$tmp/mop.rc"
+    set -e
+}
+for spec in "ok_affine:0:" "ok_full:0:" \
+            "ok_refused_domain:2:FR-MOP-002" "ok_network:2:FR-MOP-008" \
+            "ok_refused_second:2:FR-MOP-005" "ok_refused_eqs_x11:2:X11" \
+            "bad_k_negative:1:mop.k" "bad_couple_module_free_sink:1:mop.beta[0]" \
+            "bad_truncated_json:1:" "ok_none:1:--mop-out"; do
+    case_=${spec%%:*}; rest=${spec#*:}; want=${rest%%:*}; names=${rest#*:}
+    mop_run "$case_"
+    st=0; [ "$(cat "$tmp/mop.rc")" -eq "$want" ] || { echo "    exit $(cat "$tmp/mop.rc"), want $want" >&2; st=1; }
+    if [ "$want" -ne 0 ]; then
+        [ -s "$tmp/mop.err" ] || { echo "    nothing on stderr" >&2; st=1; }
+        [ -z "$names" ] || grep -qF -- "$names" "$tmp/mop.err" || { echo "    stderr does not name $names:" >&2; cat "$tmp/mop.err" >&2; st=1; }
+        [ ! -e "$tmp/mop.csv" ] || { echo "    a MOP CSV was written" >&2; st=1; }
+    fi
+    ok "$case_: exits $want${names:+, stderr names $names}" "$st"
+done
+# A refusal says "refused"; a load error does not.
+mop_run ok_refused_domain; st=0; grep -q 'refused' "$tmp/mop.err" || st=1
+mop_run bad_k_negative;    grep -q 'refused' "$tmp/mop.err" && st=1
+ok "a refusal says refused on stderr; a load error does not" "$st"
+
+# IF-OUT-002 through the CLI: the header, and the run report's label.
+mop_run ok_full
+st=0
+[ "$(head -n 1 "$tmp/mop.csv")" = "time,a__b_re,a__b_im" ] || { head -n 1 "$tmp/mop.csv" >&2; st=1; }
+[ "$(wc -l < "$tmp/mop.csv" | tr -d ' ')" -eq 5 ] || st=1
+grep -qx 'label.mop_alpha: implemented' "$tmp/mop.out" || st=1
+grep -qx 'label.second_equation: assumed' "$tmp/mop.out" || st=1
+ok "--mop-out: IF-OUT-002's header, 1 + steps rows, labelled" "$st"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "ALL PASS"; else echo "FAILURES PRESENT"; fi
 echo "failures: $failures"

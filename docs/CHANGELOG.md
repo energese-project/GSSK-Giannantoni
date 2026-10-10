@@ -56,6 +56,18 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The seed's `mop` block, `--mop-out`, and exit codes** (IF-JSON-001, IF-CLI-001, FR-OUT-002,
+  NFR-ROB-001).
+  - `gia_mop_seed_load` parses the block strictly. Each of these is a load error naming its JSON path:
+    an unknown or repeated key, a wrong type, a non-component id, a duplicate couple, and samples
+    that do not start at 0 or do not increase.
+  - `giannantoni_sim --mop-out PATH` writes `time` and each couple's `_re`/`_im`, in
+    `(from, to)` id order.
+  - The CLI exits 1 on a load error and 2 on a refusal. A refusal's reason, naming its source, goes
+    to stderr.
+  - `tests/mop_fuzz/` is a committed corpus of 47 hostile and valid seeds (T-ROB-01).
+  - `make bench-mop` times N = 64 at 1,000 output times against NFR-PERF-001's 2 s bound.
+
 - **The Second Fundamental Equation's printed solution** (FR-MOP-005, [23 Eq 6.1–6.3]).
   `gia_mop_second` evaluates `A(t) = α₁₂(0)·w + ln(c₁ + c₂t)`, the specular
   `B = [[A, −A], [−A, A]]`, and the Matrioska row `r₁ⱼ = (e^B)₁₁ w^{j−2}`, with `e^B` in closed form.
