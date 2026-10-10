@@ -97,14 +97,14 @@ typedef struct { double i, j, k; } rel_t;          /* x_i·i ⊕ x_j·j ⊕ x_k�
 
 rel_t      rel_mul(rel_t x, rel_t y);                                     /* FR-REL-001 */
 rel_t      rel_mul3(rel_t x, rel_t y, rel_t z);    /* (x∘y)∘z, never x∘(y∘z)   FR-REL-004 */
-rel_t      rel_exp(rel_t x);                                              /* FR-REL-002 */
+gia_status rel_exp(rel_t x, rel_t *out, const char **why);                /* FR-REL-002 */
 gia_status rel_root(int N, int l, rel_t *out, const char **why);          /* FR-REL-003 */
 gia_status rel_root_pow(int N, int l, int m, rel_t *out, const char **why);  /* by angle */
 rel_t      rel_mul_pow(rel_t x, int m);            /* by repeated ∘, left to right */
 ```
-Pure functions; no allocation.
+Pure functions; no allocation. `rel_exp` returns a status because `eᵃ` overflows (NFR-NUM-003).
 - **Source:** srs §2.4
-- **Verification:** T-API-02 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-API-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### IF-API-004 — `mop.h`
 ```c
@@ -124,6 +124,8 @@ gia_status gia_mop_solve(int N, const gia_beta *beta /* N*N, diagonal ignored */
                          gia_rational k, double t, gia_matrioska *out,
                          const char **why);                                 /* FR-MOP-003 */
 void       gia_matrioska_free(gia_matrioska *m);
+gia_status gia_mop_couple_rel(const gia_beta beta[3], gia_rational k, double t,
+                              rel_t *alpha, const char **why);              /* FR-MOP-007 */
 
 typedef double complex (*gia_quad_fn)(double t, void *ctx);
 gia_status gia_quad_gk15(gia_quad_fn g, void *ctx, double lo, double hi, double tol,

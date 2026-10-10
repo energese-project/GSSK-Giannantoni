@@ -76,6 +76,14 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   CSV and the CLI exit codes (IF-JSON-001, IF-OUT-002, IF-CLI-001, FR-OUT-002, NFR-ROB-001) follow in
   `mop-seed-cli`, which splits from this task to keep each PR reviewable.
 
+### `mop-relational-algebra`
+
+- **`rel_exp` returns a `gia_status`.** It returned an `rel_t`. But `eᵃ` overflows, and
+  NFR-NUM-003 forbids returning infinity, so the function needs a status to report the overflow.
+- **IF-API-004 gains `gia_mop_couple_rel`** for FR-MOP-007. The requirement is "solve the First
+  Equation componentwise on relational elements for k = 1, refuse k > 1", and no interface carried
+  it.
+
 ---
 
 ## [Revision 3] — 2026-10-09

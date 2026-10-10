@@ -22,6 +22,7 @@
 #include <complex.h>
 
 #include "gia_status.h"
+#include "relational.h"
 
 /* The cardinality k as a reduced fraction num/den, den >= 1. */
 typedef struct { int num, den; } gia_rational;
@@ -80,5 +81,14 @@ typedef double complex (*gia_quad_fn)(double t, void *ctx);
 gia_status gia_quad_gk15(gia_quad_fn g, void *ctx, double lo, double hi, double tol,
                          int max_depth, double complex *integral, double *err,
                          const char **why);
+
+/* FR-MOP-007 — a relational-valued couple, beta = beta_i i (+) beta_j j (+)
+ * beta_k k with each component a real boundary condition. For k = 1 the
+ * incipient derivative of order one is the ordinary one, (alpha'/alpha) alpha
+ * = alpha', so the equation separates and is solved componentwise. For k > 1
+ * the sources define neither division nor non-integer powers in the
+ * relational algebra (PLAN §6), and this refuses: GIA_E_UNSUPPORTED. */
+gia_status gia_mop_couple_rel(const gia_beta beta[3], gia_rational k, double t,
+                              rel_t *alpha, const char **why);
 
 #endif /* GIA_MOP_H */

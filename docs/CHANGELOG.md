@@ -56,6 +56,12 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The Relational Space algebra, `rel_*`, and relational-valued couples** (PLAN.md W5 `mop-relational-algebra`, FR-REL-001…004, FR-MOP-007; ADR 0020).
+  - **Product.** `rel_mul` is the product table of [23 Eq 5.1.3–5.1.5] as printed, which is commutative and non-associative. `rel_mul3` evaluates left to right, so `(j∘j)∘k = −k` while `j∘(j∘k) = k`.
+  - **Exponential.** `rel_exp` is the De Moivre form [23 Eq 5.1.2], never a power series.
+  - **Roots and powers.** `rel_root` and `rel_root_pow` build the ordinal roots and raise them by multiplying the angle, so that `r^{N−1} = 1`. `rel_mul_pow` is the table power, where the same cube is `(0.540721, 0, −0.665721)` (erratum X10).
+  - **Relational couples.** `gia_mop_couple_rel` solves the First Equation componentwise on relational elements for k = 1. It refuses k > 1, because the sources define no division or non-integer power in this algebra.
+
 - **The MOP's First Fundamental Equation, `gia_mop_*`** (PLAN.md W4 `mop-first-equation`, FR-MOP-001…004, NFR-NUM-001…006). New `include/mop.h` and `src/mop.c` solve `(d̃/dt)^k α = β` per couple, with `α(0) = 0`. The solution is the one derived from [23 Eq 5.5.6], `α = {(1/k)∫β^{1/k}}^k`; the printed [23 Eq 5.5.7–5.5.8] leave residuals of 1.25 and −0.625 (erratum X1, ADR 0019).
   - **Affine-power β:** numerics N1's unified form. It holds 1e-12 relative error down to `bt/a = 1e-11`, where the naive closed form loses 5.9e-5, and is continuous through `b = 0`.
   - **Sampled β:** adaptive Gauss–Kronrod 7–15 on a phase continued across the negative real axis.

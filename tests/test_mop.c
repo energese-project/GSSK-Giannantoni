@@ -16,6 +16,7 @@
 #include "gia_status.h"
 #include "idc.h"
 #include "mop.h"
+#include "relational.h"
 
 #include <complex.h>
 #include <float.h>
@@ -1578,6 +1579,123 @@ static void test_num_no_clamp(void) {
                                                near_c(al, 1.0 - 4.0 * I, TOL_CLOSED));
 }
 
+/* ------------------------------------------------------------------ *
+ * 7.4 Relational algebra
+ * ------------------------------------------------------------------ */
+
+static const rel_t RI = { 1, 0, 0 }, RJ = { 0, 1, 0 }, RK = { 0, 0, 1 };
+
+static int rel_eq(rel_t a, rel_t b, double tol) {
+    return fabs(a.i - b.i) <= tol && fabs(a.j - b.j) <= tol && fabs(a.k - b.k) <= tol;
+}
+static rel_t R(double i, double j, double k) { rel_t r; r.i = i; r.j = j; r.k = k; return r; }
+
+/* Source: [23 Eq 5.1.3-5.1.5] (page image p. 3183); PLAN R2. */
+/* Verifies: FR-REL-001 (T-REL-01) */
+static void test_rel_table(void) {
+    rel_t u[3] = { RI, RJ, RK };
+    /* The printed table, row x column. */
+    rel_t want[3][3] = { { RI, RJ, RK }, { RJ, { -1, 0, 0 }, RK }, { RK, RK, { -1, 0, 0 } } };
+    int   a, b, all = 1, bilinear;
+    printf("\n[T-REL-01] the relational product, as printed\n");
+    for (a = 0; a < 3; a++)
+        for (b = 0; b < 3; b++)
+            if (!rel_eq(rel_mul(u[a], u[b]), want[a][b], 0.0)) all = 0;
+    ok("all nine products of [23 Eq 5.1.3-5.1.5]", all);
+    /* Bilinear: (2i - j + 3k) o (0.5i + 4j - k), expanded by hand from the
+     * table: i:  2*0.5 - (-1)(4)(-1)... */
+    {
+        rel_t x = R(2, -1, 3), y = R(0.5, 4, -1), p = rel_mul(x, y);
+        /* i: x_i y_i - x_j y_j - x_k y_k = 1 + 4 + 3 = 8
+         * j: x_i y_j + x_j y_i = 8 - 0.5 = 7.5
+         * k: x_i y_k + x_j y_k + x_k y_i + x_k y_j = -2 + 1 + 1.5 + 12 = 12.5 */
+        bilinear = rel_eq(p, R(8, 7.5, 12.5), 1e-15);
+    }
+    ok("bilinear: (2i - j + 3k) o (0.5i + 4j - k) = 8i + 7.5j + 12.5k by hand", bilinear);
+    ok("commutative: x o y = y o x",
+       rel_eq(rel_mul(R(2, -1, 3), R(0.5, 4, -1)), rel_mul(R(0.5, 4, -1), R(2, -1, 3)), 0.0));
+}
+
+/* Source: [23 Eq 5.1.3-5.1.5]; PLAN R2. */
+/* Verifies: FR-REL-004 (T-REL-02) */
+static void test_rel_left_to_right(void) {
+    printf("\n[T-REL-02] no reassociation\n");
+    ok("rel_mul3(j, j, k) = (j o j) o k = -k", rel_eq(rel_mul3(RJ, RJ, RK), R(0, 0, -1), 0.0));
+    ok("j o (j o k) = +k: the order is observable", rel_eq(rel_mul(RJ, rel_mul(RJ, RK)), RK, 0.0));
+}
+
+/* Source: [23 Eq 5.1.2]; PLAN R2; numerics N8. */
+/* Verifies: FR-REL-002 (T-REL-03) */
+static void test_rel_exp(void) {
+    rel_t       e;
+    const char *why = NULL;
+    double      a = 0.3, b = 1.2, c = -0.5, rho = sqrt(b * b + c * c), ea = exp(a);
+    int         cont = 1, k;
+    printf("\n[T-REL-03] the De Moivre exponential\n");
+    ok("Exp{a i + b j + c k} = e^a [cos rho, b sin rho/rho, c sin rho/rho]",
+       rel_exp(R(a, b, c), &e, &why) == GIA_OK &&
+       rel_eq(e, R(ea * cos(rho), ea * b * sin(rho) / rho, ea * c * sin(rho) / rho), 1e-15));
+    ok("rho = 0: e^a", rel_exp(R(a, 0, 0), &e, &why) == GIA_OK && rel_eq(e, R(ea, 0, 0), 0.0));
+    for (k = 3; k <= 9; k++) {
+        double r = pow(10.0, -k);
+        if (rel_exp(R(a, r, 0), &e, &why) != GIA_OK ||
+            !rel_eq(e, R(ea * cos(r), ea * r * (1.0 - r * r / 6.0), 0), 1e-15)) cont = 0;
+    }
+    ok("rho = 1e-3 .. 1e-9: continuous into the limit, series sin rho/rho", cont);
+    /* Not a power series: Exp(j pi/2) = j, whereas sum (j pi/2)^n/n! under the
+     * non-associative table depends on the bracketing. */
+    ok("Exp(j pi/2) = j", rel_exp(R(0, M_PI / 2.0, 0), &e, &why) == GIA_OK &&
+                          rel_eq(e, RJ, 1e-15));
+    ok("e^a past DBL_MAX: GIA_E_RANGE", rel_exp(R(800, 0, 0), &e, &why) == GIA_E_RANGE);
+}
+
+/* Source: [23 Eq A2.5-A2.6]; PLAN R3, X10; probes/ordinal_root_power.py. */
+/* Verifies: FR-REL-003 (T-REL-04) */
+static void test_rel_roots(void) {
+    rel_t       r, p;
+    const char *why = NULL;
+    int         N, l, unity = 1;
+    printf("\n[T-REL-04] ordinal roots: angle powers, and the table power apart\n");
+    for (N = 3; N <= 7; N++)
+        for (l = 1; l < N; l++)
+            if (rel_root_pow(N, l, N - 1, &p, &why) != GIA_OK || !rel_eq(p, RI, 1e-12)) unity = 0;
+    ok("rel_root_pow(N, l, N - 1) = 1 for N = 3..7, every l", unity);
+    ok("rel_root(4, 1) = (cos 2pi/3, sin(2pi/3)/sqrt2, sin(2pi/3)/sqrt2)",
+       rel_root(4, 1, &r, &why) == GIA_OK &&
+       rel_eq(r, R(cos(2 * M_PI / 3), sin(2 * M_PI / 3) / sqrt(2.0), sin(2 * M_PI / 3) / sqrt(2.0)), 1e-15));
+    p = rel_mul_pow(r, 3);
+    printf("    table cube of r(4,1): (%.6f, %.6f, %.6f)\n", p.i, p.j, p.k);
+    ok("X10: rel_mul_pow(r(4,1), 3) = (0.540721, 0, -0.665721), not 1",
+       rel_eq(p, R(0.540721, 0, -0.665721), 1e-6));
+    ok("rel_mul_pow(x, 0) = i; rel_root_pow(N, l, 0) = i",
+       rel_eq(rel_mul_pow(r, 0), RI, 0.0) && rel_root_pow(4, 1, 0, &p, &why) == GIA_OK &&
+       rel_eq(p, RI, 1e-15));
+    ok("N < 2, l outside 0..N-1, m < 0: GIA_E_ARG",
+       rel_root(1, 0, &r, &why) == GIA_E_ARG && rel_root(4, 4, &r, &why) == GIA_E_ARG &&
+       rel_root_pow(4, 1, -1, &p, &why) == GIA_E_ARG);
+}
+
+/* Source: PLAN §6 (no division or non-integer power in the relational
+ * algebra). k = 1: alpha = int beta componentwise, by hand. */
+/* Verifies: FR-MOP-007 (T-MOP-09) */
+static void test_mop_relational_couple(void) {
+    gia_beta     be[3];
+    gia_rational k1 = { 1, 1 }, k2 = { 2, 1 };
+    rel_t        al = { 99, 99, 99 };
+    const char  *why = NULL;
+    printf("\n[T-MOP-09] relational-valued couples\n");
+    be[0] = affine(2.0, 0.5, 1.0);      /* int_0^t (2 + s/2) = 2t + t^2/4  */
+    be[1] = affine(-1.0, 0.0, 1.0);     /* -t                               */
+    be[2] = affine(1.0, 1.0, 2.0);      /* int (1+s)^2 = ((1+t)^3 - 1)/3   */
+    ok("k = 1: componentwise, by hand at t = 2",
+       gia_mop_couple_rel(be, k1, 2.0, &al, &why) == GIA_OK &&
+       rel_eq(al, R(5.0, -2.0, 26.0 / 3.0), 1e-12));
+    al = R(99, 99, 99); why = NULL;
+    ok("k = 2: GIA_E_UNSUPPORTED, outputs untouched, reason given",
+       gia_mop_couple_rel(be, k2, 2.0, &al, &why) == GIA_E_UNSUPPORTED &&
+       rel_eq(al, R(99, 99, 99), 0.0) && why != NULL);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -1611,6 +1729,11 @@ int main(void) {
     test_num_overflow();
     test_num_quadrature();
     test_num_no_clamp();
+    test_rel_table();
+    test_rel_left_to_right();
+    test_rel_exp();
+    test_rel_roots();
+    test_mop_relational_couple();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

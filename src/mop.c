@@ -116,7 +116,9 @@ static gia_status couple_affine(const gia_beta *be, gia_rational k, double t,
         E = cexpm1_(q * clog1p_(x)) / (q * x);
     }
     /* S = a^{p/k} t / k E(x), a^{p/k} principal. */
-    if (real && creal(a) > 0.0)
+    /* Real a with a positive base or an integer exponent: the real pow, so
+     * a real negative beta keeps an exactly real alpha. */
+    if (real && (creal(a) > 0.0 || p / kr == floor(p / kr)))
         S = pow(creal(a), p / kr) * t / kr * E;
     else
         S = cexp((p / kr) * clog(a)) * t / kr * E;
@@ -317,4 +319,25 @@ void gia_matrioska_free(gia_matrioska *m) {
     if (!m) return;
     free(m->a); free(m->related);
     m->a = NULL; m->related = NULL; m->N = 0;
+}
+
+/* FR-MOP-007. */
+gia_status gia_mop_couple_rel(const gia_beta beta[3], gia_rational k, double t,
+                              rel_t *alpha, const char **why) {
+    double complex c[3];
+    int            n;
+    gia_status     st;
+    if (!beta || !alpha) return fail(GIA_E_ARG, "gia_mop_couple_rel: NULL argument", why);
+    if (!(k.num == 1 && k.den == 1))
+        return fail(GIA_E_UNSUPPORTED, "a relational-valued First Equation is defined only for "
+                    "k = 1: the sources define no division or non-integer power in the "
+                    "relational algebra (FR-MOP-007, PLAN §6)", why);
+    for (n = 0; n < 3; n++) {
+        if ((st = gia_mop_couple(&beta[n], k, t, &c[n], why)) != GIA_OK) return st;
+        if (cimag(c[n]) != 0.0)
+            return fail(GIA_E_DOMAIN, "gia_mop_couple_rel: each component's boundary condition "
+                        "must be real", why);
+    }
+    alpha->i = creal(c[0]); alpha->j = creal(c[1]); alpha->k = creal(c[2]);
+    return GIA_OK;
 }

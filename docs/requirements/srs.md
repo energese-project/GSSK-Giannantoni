@@ -222,7 +222,7 @@ brackets evaluated as the relational product of the De Moivre root `B_l + C_l j 
 For k = 1 the kernel shall solve the First Equation componentwise on relational elements; for k > 1 it
 shall refuse, because the sources define no division or power in the relational algebra.
 - **Source:** PLAN §6
-- **Verification:** T-MOP-09 · **Priority:** Should · **Status:** planned · **Task:** mop-first-equation
+- **Verification:** T-MOP-09 · **Priority:** Should · **Status:** implemented · **Task:** mop-first-equation
 
 ### FR-MOP-008 — Boundary conditions from the network
 On request, the kernel shall set `e^{α_ij(t)}` to the empower carried from component i to component j
@@ -238,26 +238,26 @@ The kernel shall implement the bilinear product of relational elements with the 
 [23 Eq 5.1.3–5.1.5]: `i∘i = 1, i∘j = j, i∘k = k, j∘i = j, j∘j = −1, j∘k = k, k∘i = k, k∘j = k,
 k∘k = −1`.
 - **Source:** [23 Eq 5.1.3–5.1.5]; PLAN R2
-- **Verification:** T-REL-01, VAL-02 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-REL-01, VAL-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### FR-REL-002 — The De Moivre exponential
 The kernel shall define `Exp{a·i ⊕ b·j ⊕ c·k} = eᵃ [cos ρ + (b·j + c·k) sin ρ / ρ]` with `ρ = √(b²+c²)`,
 and the limit `eᵃ` at `ρ = 0`; it shall not use a power series.
 - **Source:** [23 Eq 5.1.2]; PLAN R2
-- **Verification:** T-REL-03 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-REL-03 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### FR-REL-003 — Ordinal roots and their powers
 The kernel shall construct the canonical ordinal root `r_{N,l}` (ε = 0, `√2·ψ = 2πl/(N−1)`) and raise
 a root to an integer power by multiplying its angle, so that `r_{N,l}^{N−1} = 1`. It shall expose the
 table-product power separately and shall not substitute one for the other.
 - **Source:** [23 Eq A2.5–A2.6]; PLAN R3, X10
-- **Verification:** T-REL-04 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-REL-04 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### FR-REL-004 — No reassociation
 Products of three or more relational elements shall be evaluated left to right in the order written;
 the kernel shall not reassociate them.
 - **Source:** [23 Eq 5.1.3–5.1.5] (non-associative); PLAN R2
-- **Verification:** T-REL-02 · **Priority:** Must · **Status:** planned · **Task:** mop-relational-algebra
+- **Verification:** T-REL-02 · **Priority:** Must · **Status:** implemented · **Task:** mop-relational-algebra
 
 ### 2.5 Ordinality and the generative step
 
