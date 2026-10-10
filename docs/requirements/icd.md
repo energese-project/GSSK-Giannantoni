@@ -68,9 +68,9 @@ gia_status gia_binary_eval(const gia_binary_sol *sol, double t,
                            double complex f[2], double complex fhalf[2],
                            const char **why);
 
-gia_status gia_riccati_solve(gia_cfn Q, gia_cfn R, gia_cfn P, void *ctx,
-                             double complex f0, double t_max,
-                             gia_lde2_sol **sol, const char **why);              /* FR-IDC-008 */
+gia_status gia_riccati_solve(gia_cfn Q, gia_cfn R, gia_cfn dR, gia_cfn P, void *ctx,
+                             double complex f0, double t_max, gia_lde2_sol **sol,
+                             double *t_fail, const char **why);                  /* FR-IDC-008 */
 gia_status gia_riccati_eval(const gia_lde2_sol *sol, double t,
                             double complex *f, double complex *trad_residual,
                             const char **why);

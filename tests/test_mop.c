@@ -493,6 +493,147 @@ static void test_binary_linear_in_ics(void) {
     ok("binary: solve(ic1 + ic2) = solve(ic1) + solve(ic2), 17 times", all);
 }
 
+/* Riccati coefficients. ctx points at {Q, R, P} for the constant cases. */
+static double complex rc_Q(double t, void *c)  { (void)t; return ((const double *)c)[0]; }
+static double complex rc_R(double t, void *c)  { (void)t; return ((const double *)c)[1]; }
+static double complex rc_dR(double t, void *c) { (void)t; (void)c; return 0.0; }
+static double complex rc_P(double t, void *c)  { (void)t; return ((const double *)c)[2]; }
+static double complex rv_Q(double t, void *c)  { (void)c; return t; }
+static double complex rv_R(double t, void *c)  { (void)c; return 1.0 + t; }
+static double complex rv_dR(double t, void *c) { (void)c; (void)t; return 1.0; }
+static double complex rv_P(double t, void *c)  { (void)c; (void)t; return 1.0; }
+
+/* By hand, for constant Q, R, P: the LDE y'' + Q y' - P R y = 0 has roots
+ * r1, r2 of r^2 + Q r - P R = 0; y = c1 e^{r1 t} + c2 e^{r2 t} with
+ * c1 + c2 = 1 and c1 r1 + c2 r2 = R f0; f = y'/(R y). */
+static double ric_closed(const double *qrp, double f0, double t) {
+    double Q = qrp[0], R = qrp[1], P = qrp[2];
+    double d = sqrt(Q * Q + 4.0 * P * R), r1 = (-Q + d) / 2.0, r2 = (-Q - d) / 2.0;
+    double c2 = (r1 - R * f0) / (r1 - r2), c1 = 1.0 - c2;
+    double y = c1 * exp(r1 * t) + c2 * exp(r2 * t);
+    double dy = c1 * r1 * exp(r1 * t) + c2 * r2 * exp(r2 * t);
+    return dy / (R * y);
+}
+
+/* The printed [06 Eq 3.17] substitution, y = f'/(f R), applied to the true f,
+ * fed to [06 Eq 3.18]: R y'' - (R' - Q R) y' - P R^2 y, by central
+ * differences (h = 1e-4, as in probes/riccati_substitution.py). */
+static double printed_317_residual(const double *qrp, double f0, double t) {
+    const double h = 1e-4, Q = qrp[0], R = qrp[1], P = qrp[2];
+    double y[3];
+    int k;
+    for (k = 0; k < 3; k++) {
+        double tt = t + (double)(k - 1) * h, f = ric_closed(qrp, f0, tt);
+        y[k] = (P - Q * f - R * f * f) / (f * R);      /* f' from the ODE */
+    }
+    return fabs(R * (y[2] - 2.0 * y[1] + y[0]) / (h * h) + Q * R * (y[2] - y[0]) / (2.0 * h)
+                - P * R * R * y[1]);
+}
+
+/* Source: [06 Eq 3.16-3.18]; PLAN R11, X2; numerics.md N5.
+ *
+ * Constant coefficients, two cases: Q = R = 1, P = 2 (the probe's), and
+ * Q = 0.5, R = 2, P = 1.5 (R != 1, so dropping R from f = y'/(R y) shows).
+ * Oracle: the closed form above, and the Riccati residual of eval's f with
+ * f' by central difference. X2: the printed substitution leaves an Eq 3.18
+ * residual > 100x tolerance. Variable coefficients Q = t, R = 1 + t, P = 1:
+ * the residual eval reports equals the central-difference residual of its
+ * own f (it is reported, not assumed zero). */
+/* Verifies: FR-IDC-008 (T-IDC-07) */
+static void test_riccati(void) {
+    static const double cases[2][3] = { { 1.0, 1.0, 2.0 }, { 0.5, 2.0, 1.5 } };
+    const double f0 = 0.5;
+    gia_lde2_sol  *sol = NULL;
+    const char    *why = NULL;
+    double complex f, res, fp, fm;
+    int            k, i, all, res_ok, rep_ok;
+    double         worst_printed = 0.0;
+
+    printf("\n[T-IDC-07] Riccati by linearisation\n");
+    for (k = 0; k < 2; k++) {
+        double *qrp = (double *)cases[k];
+        char    label[96];
+        all = res_ok = rep_ok = 1;
+        if (gia_riccati_solve(rc_Q, rc_R, rc_dR, rc_P, qrp, f0, 2.0, &sol, NULL, &why) != GIA_OK) {
+            ok("constant Q, R, P solves", 0);
+            for (i = 1; i <= 15; i++)
+                if (printed_317_residual(qrp, f0, 0.125 * (double)i) > worst_printed)
+                    worst_printed = printed_317_residual(qrp, f0, 0.125 * (double)i);
+            continue;
+        }
+        for (i = 1; i <= 15; i++) {
+            double t = 0.125 * (double)i, h = 1e-5;
+            if (gia_riccati_eval(sol, t, &f, &res, &why) != GIA_OK ||
+                gia_riccati_eval(sol, t + h, &fp, NULL, &why) != GIA_OK ||
+                gia_riccati_eval(sol, t - h, &fm, NULL, &why) != GIA_OK) { all = res_ok = 0; continue; }
+            if (!near_c(f, ric_closed(qrp, f0, t), TOL_CLOSED)) all = 0;
+            {
+                double complex d = (fp - fm) / (2.0 * h);
+                double complex r = d + qrp[0] * f + qrp[1] * f * f - qrp[2];
+                if (!(cabs(r) <= TOL_RESIDUAL * (1.0 + cabs(d)))) res_ok = 0;
+            }
+            if (!(cabs(res) <= TOL_RESIDUAL)) rep_ok = 0;
+        }
+        /* X2 is a fact about the printed formula, independent of the solver. */
+        for (i = 1; i <= 15; i++)
+            if (printed_317_residual(qrp, f0, 0.125 * (double)i) > worst_printed)
+                worst_printed = printed_317_residual(qrp, f0, 0.125 * (double)i);
+        snprintf(label, sizeof label, "Q=%g R=%g P=%g: f = y'/(R y) by hand, 15 times, 1e-12",
+                 qrp[0], qrp[1], qrp[2]);
+        ok(label, all);
+        snprintf(label, sizeof label, "Q=%g R=%g P=%g: Riccati residual of f <= 1e-6", qrp[0],
+                 qrp[1], qrp[2]);
+        ok(label, res_ok);
+        ok("  and the residual eval reports is <= 1e-6", rep_ok);
+        ok("  f(0) = f0", gia_riccati_eval(sol, 0.0, &f, NULL, &why) == GIA_OK &&
+                          near_c(f, f0, TOL_CLOSED));
+        gia_lde2_free(sol); sol = NULL;
+    }
+    printf("    (printed [06 Eq 3.17]: worst Eq 3.18 residual %.4g)\n", worst_printed);
+    ok("X2: the printed y = f'/(f R) leaves an Eq 3.18 residual > 100x tol",
+       worst_printed > 100.0 * TOL_RESIDUAL);
+
+    /* Variable coefficients. */
+    rep_ok = gia_riccati_solve(rv_Q, rv_R, rv_dR, rv_P, NULL, 0.25, 1.0, &sol, NULL, &why) == GIA_OK;
+    for (i = 1; rep_ok && i <= 7; i++) {
+        double t = 0.125 * (double)i, h = 1e-5;
+        double complex d;
+        if (gia_riccati_eval(sol, t, &f, &res, &why) != GIA_OK ||
+            gia_riccati_eval(sol, t + h, &fp, NULL, &why) != GIA_OK ||
+            gia_riccati_eval(sol, t - h, &fm, NULL, &why) != GIA_OK) { rep_ok = 0; break; }
+        d = (fp - fm) / (2.0 * h);
+        if (!near_c(res, d + t * f + (1.0 + t) * f * f - 1.0, TOL_RESIDUAL)) rep_ok = 0;
+    }
+    ok("Q = t, R = 1+t, P = 1: reported residual = residual of its own f", rep_ok);
+    gia_lde2_free(sol); sol = NULL;
+
+    ok("R(0) = 0 is refused", gia_riccati_solve(rc_Q, rc_dR, rc_dR, rc_P, (void *)cases[0], 1.0,
+                                                1.0, &sol, NULL, &why) == GIA_E_DOMAIN && !sol);
+}
+
+/* Source: PLAN §6; [06 Eq 3.22] (X3), [06 Eq 3.25-3.27], [06 §4 (i)]. */
+/* Verifies: FR-IDC-013 (T-IDC-13) */
+static void test_idc_refusals(void) {
+    static const struct { const char *name, *cite; } r[] = {
+        { "riccati_duet", "3.22" }, { "abel_net", "3.25" }, { "solution_drift", "FR-IDC-011" } };
+    const char *why;
+    size_t      i;
+    int         all = 1;
+
+    printf("\n[T-IDC-13] refusals name their source\n");
+    for (i = 0; i < sizeof r / sizeof r[0]; i++) {
+        why = NULL;
+        if (gia_idc_refuse(r[i].name, &why) != GIA_E_UNSUPPORTED || !why ||
+            !strstr(why, r[i].cite)) {
+            printf("    %s: %s\n", r[i].name, why ? why : "(no reason)");
+            all = 0;
+        }
+    }
+    ok("riccati_duet, abel_net, solution_drift: GIA_E_UNSUPPORTED + source", all);
+    ok("an unknown feature is GIA_E_ARG", gia_idc_refuse("teleportation", &why) == GIA_E_ARG &&
+                                          gia_idc_refuse(NULL, &why) == GIA_E_ARG);
+}
+
 int main(void) {
     printf("=== Giannantoni kernel: verification and validation ===\n");
     test_status_contract();
@@ -502,6 +643,8 @@ int main(void) {
     test_lde2_linear_in_ics();
     test_binary();
     test_binary_linear_in_ics();
+    test_riccati();
+    test_idc_refusals();
 
     printf("\n%s\nfailures: %d\n", failures == 0 ? "ALL PASS" : "FAILURES PRESENT",
            failures);

@@ -37,6 +37,13 @@ revision: the plan's decisions stand. Each one corrects the baseline where it co
   moderate `t`, and NFR-NUM-003 forbids returning infinity, so the function needs a way to say
   `GIA_E_RANGE`.
 
+### `idc-riccati`
+
+- **`gia_riccati_solve` takes `R'` and `t_fail`.** numerics.md N5 says "R' is supplied by the caller
+  (a coefficient function), not differenced". The signature in icd.md had no parameter through which
+  to supply it. `t_fail` is there for the same reason as in `gia_lde2_solve`: the solve runs through
+  the LDE solver, so a root collision must report its time the same way.
+
 ---
 
 ## [Revision 3] — 2026-10-09

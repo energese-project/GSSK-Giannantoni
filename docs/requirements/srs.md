@@ -87,7 +87,7 @@ Given `Q(t), R(t), P(t)` with `R ≠ 0` and `f(0) = f₀`, the kernel shall solv
 incipient LDE (FR-IDC-006) with `y(0) = 1`, `ỹ'(0) = R(0) f₀`, and shall report the traditional
 Riccati residual of the result. The printed substitution of [06 Eq 3.17] shall not be used.
 - **Source:** [06 Eq 3.16–3.18]; PLAN R11, X2
-- **Verification:** T-IDC-07 · **Priority:** Should · **Status:** planned · **Task:** idc-riccati
+- **Verification:** T-IDC-07 · **Priority:** Should · **Status:** implemented · **Task:** idc-riccati
 
 ### FR-IDC-009 — The nonlinear equation of [02 Eq 14.10.1]
 For constants `A, B`, the kernel shall return the two roots of `4u² + A u + B = 0` as the solutions
@@ -117,7 +117,7 @@ The solutions of FR-IDC-006 and FR-IDC-007 shall be linear in their initial cond
 The kernel shall refuse: the direct Riccati duet form [06 Eq 3.22] (X3); Abel's n-et [06 Eq 3.25–3.27];
 solution drift on a network with a non-constant flow matrix (FR-IDC-011).
 - **Source:** PLAN §6
-- **Verification:** T-IDC-13 · **Priority:** Must · **Status:** planned · **Task:** idc-riccati
+- **Verification:** T-IDC-13 · **Priority:** Must · **Status:** implemented · **Task:** idc-riccati
 
 ### FR-IDC-014 — Output-projection drift on network trajectories
 For each component with `Q_i(t) ≠ 0`, the kernel shall report the second-order output-projection drift
