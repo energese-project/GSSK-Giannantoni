@@ -194,6 +194,14 @@ jobs:
       - name: Giannantoni CLI system tests
         run: make test-mop-cli
 
+      # NFR-REE-001: two models on two threads give what each gives alone.
+      - name: Giannantoni reentrancy
+        run: make test-mop-threads
+
+      # No writable data, no exit/abort, no gssk.h in the Giannantoni units.
+      - name: Giannantoni structural checks
+        run: make check-symbols
+
       # Requirements traceability (docs/requirements/). Fails on an untraced
       # requirement, an orphan Verifies: tag, or an `implemented` claim no
       # test backs — the ways a green build can avoid being built to spec.
@@ -259,6 +267,12 @@ jobs:
         env:
           CC: clang
         run: make test-asan
+
+      # NFR-MEM-001 (T-MEM-01): the Giannantoni suites under ASan + LSan +
+      # UBSan with every finding fatal. Here and not in the build matrix
+      # because LeakSanitizer does not run on macOS.
+      - name: Giannantoni ASan + LSan + UBSan
+        run: make test-mop-asan
 
       - name: Coverage — build
         run: make coverage-build

@@ -2825,12 +2825,30 @@ static void add_emergent_leg(cJSON *edges, const char *from, const char *to,
     cJSON_AddItemToArray(edges, ne);
 }
 
-/* qsort context: node ids, so the emitted legs are in id order and the output
- * is a function of the model rather than of how its file was ordered. */
-static const gia_model *sort_model;
+/* Sort node indices by id, so the emitted legs are in id order and the output
+ * is a function of the model rather than of how its file was ordered.
+ *
+ * qsort's comparator takes no context, so the id travels with the index in
+ * each element rather than through a file-scope pointer to the model: that
+ * pointer was shared state, and two models generating on two threads could
+ * sort by each other's ids (NFR-REE-001; numerics.md §3). */
+typedef struct { const char *id; int idx; } id_key;
+
 static int by_id(const void *x, const void *y) {
-    return strcmp(sort_model->nodes[*(const int *)x].id,
-                  sort_model->nodes[*(const int *)y].id);
+    return strcmp(((const id_key *)x)->id, ((const id_key *)y)->id);
+}
+
+static bool sort_by_id(const gia_model *m, int *ids, int n) {
+    id_key *keys;
+    int     i;
+    if (n < 2) return true;
+    keys = (id_key *)malloc((size_t)n * sizeof(id_key));
+    if (!keys) return false;
+    for (i = 0; i < n; i++) { keys[i].id = m->nodes[ids[i]].id; keys[i].idx = ids[i]; }
+    qsort(keys, (size_t)n, sizeof(id_key), by_id);
+    for (i = 0; i < n; i++) ids[i] = keys[i].idx;
+    free(keys);
+    return true;
 }
 
 /* ADR 0015. Below maximum ordinality the step grows one component, the
@@ -2915,8 +2933,7 @@ cJSON *gia_generate(const gia_model *m) {
         goto done;
     }
 
-    sort_model = m;
-    qsort(open_ids, (size_t)n_open, sizeof(int), by_id);
+    if (!sort_by_id(m, open_ids, n_open)) goto done;
     for (i = 0; i < n_open; i++) {
         int o = open_ids[i];
         need_in[o]  = !path_exists(m, hub, o);          /* E -> o   */

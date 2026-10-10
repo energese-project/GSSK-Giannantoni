@@ -40,6 +40,14 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **Reentrancy, memory and separation checks for the Giannantoni units** (PLAN.md W1 `guard-reentrancy`). Four checks, all in CI:
+  - `make test-mop-threads` runs two models on two threads and requires each to match its solo run (T-REE-01).
+  - `make check-symbols` (`scripts/check_symbols.sh`) fails on a writable data symbol, decided by section rather than by `nm` letter so `const` tables pass. It also fails on a call to `exit`, `abort` or `assert`, and on any `#include "gssk.h"` (T-REE-02, T-ERR-01, INS-SEP-01).
+  - `make test-mop-asan` runs the Giannantoni suites under ASan, LSan and UBSan, with every finding fatal (T-MEM-01). It runs in the Linux quality gate, because LeakSanitizer does not run on macOS.
+  - `tests/mop_cli.sh` checks that two runs give byte-identical output (T-DET-01).
+
+  NFR-REE-001, NFR-MEM-001, NFR-ERR-001, NFR-SEP-001 and NFR-DET-001 are now `implemented`. `make test-mop-threads-tsan` runs the thread test under ThreadSanitizer where the toolchain has its runtime.
+
 - **ADR 0018: the test protocol for Giannantoni work** ([docs/adr/0018](adr/0018-giannantoni-test-protocol.md)). Records PLAN.md's guardrails G1–G7 as a binding decision, together with three rules that close the remaining loopholes from PLAN §1: no golden files for the Giannantoni units; a coverage gate; no stubs in the planned API; the errata protocol (a probe, a PLAN §5 row, and a test that the printed form fails); definitions that cite sources; no clamping of signed or complex coordinates; TDD evidence in every code PR; refusals bounded by PLAN §6; a suite counts only if CI runs it; and a tautology is named as one. No behaviour changes.
 
 - **A requirements baseline for the Giannantoni kernel, with traceability enforced in CI** ([docs/requirements/](requirements/README.md)). It holds stakeholder requirements, an SRS, an interface control document, a numerical design and a V&V plan: 88 requirements, each traced to a source equation, and an 81-entry test catalogue giving each test's oracle and the mutation that must fail it. `make check-trace` runs in CI and fails on an untraced requirement, an orphan `Verifies:` tag, or a requirement marked `implemented` that no test backs; ten existing tests are tagged. Writing the requirements found two new errata in the sources ([06 Eq 3.7], [23 Eq A2.6]), a numerically unstable closed form near t = 0, and two engine defects now tracked as requirements: file-scope mutable state in the generative step (`src/engine.c:2830`) and silent truncation past 64 inflows. `PLAN.md` moves to revision 3, with the reasoning in `PLANLOG.md`. No engine behaviour changes.
@@ -69,6 +77,8 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
 
 ### Fixed
+
+- **The generative step is reentrant** (PLAN.md W1 `guard-reentrancy`, NFR-REE-001). `gia_generate` sorted its open components through a file-scope `static const gia_model *sort_model` read by the `qsort` comparator, so two models generating on two threads could sort by each other's ids. ThreadSanitizer reported the race at `src/engine.c:2918`. Each sort element now carries its id. Two other writable statics, found by the new structural check in a `-O0` build, are now `const`: `RULE` in `src/validation.c` and `prim` in `src/projection.c`. Output is unchanged.
 
 - **`make test-linux` and `make test-linux-clang` run what CI runs.** Each spelled out its own suite list, and both had drifted: gcc was missing `test-limit-logic`, `test-reversible`, `test-node-type-enum`, `test-edge-flows`, `test-giannantoni`, `check-version` and `test-schema`; clang ran only `test` and `test-advanced`. They now share one list, `CI_TESTS`, so `make ci-local` is evidence of what it claims.
 

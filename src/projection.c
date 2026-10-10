@@ -49,7 +49,7 @@ static double nfield(const cJSON *o, const char *k, double dflt) {
  * not expanded here (ADR 0010), and a user archetype is a composite by another
  * name. */
 static bool node_type_carried(const char *t, const char **why) {
-    static const char *prim[] = { "storage", "source", "sink", "constant",
+    static const char *const prim[] = { "storage", "source", "sink", "constant",
                                   "interaction", "gain", "loop_limited",
                                   "exchange", "switch" };
     size_t i;

@@ -201,6 +201,54 @@ test-giannantoni: directories $(TARGET_TEST_GIA)
 test-mop-cli: directories $(TARGET_SIM)
 	@sh $(TEST_DIR)/mop_cli.sh
 
+# Reentrancy, memory and structure of the Giannantoni units (NFR-REE-001,
+# NFR-MEM-001, NFR-ERR-001, NFR-SEP-001; vv-plan.md §7.8).
+#
+#   test-mop-threads       two models on two threads == each run alone (T-REE-01)
+#   test-mop-threads-tsan  the same under ThreadSanitizer; needs a toolchain
+#                          with the TSan runtime, so it is local, not in CI
+#   test-mop-asan          the Giannantoni test binaries under ASan + LSan +
+#                          UBSan, any finding fatal (T-MEM-01); Linux only,
+#                          since LeakSanitizer is not available on macOS
+#   check-symbols          no writable data, no exit/abort, no gssk.h
+#                          (T-REE-02, T-ERR-01, INS-SEP-01)
+GIA_OBJS = $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o $(LIB_DIR)/projection.o
+GIA_SRCS = $(SRC_DIR)/engine.c $(SRC_DIR)/validation.c $(SRC_DIR)/projection.c \
+           $(SRC_DIR)/cJSON.c
+TARGET_TEST_THREADS = $(BIN_DIR)/test_mop_threads
+SAN_FLAGS = -std=c99 -Iinclude -g -O1 -fno-omit-frame-pointer
+
+$(TARGET_TEST_THREADS): $(TEST_DIR)/test_mop_threads.c $(GIA_OBJS) $(TARGET_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lpthread
+
+.PHONY: test-mop-threads
+test-mop-threads: directories $(TARGET_TEST_THREADS)
+	@./$(TARGET_TEST_THREADS)
+
+.PHONY: test-mop-threads-tsan
+test-mop-threads-tsan: directories
+	$(CC) $(SAN_FLAGS) -fsanitize=thread $(TEST_DIR)/test_mop_threads.c \
+	    $(GIA_SRCS) -o $(BIN_DIR)/test_mop_threads_tsan $(LDFLAGS) -lpthread
+	@TSAN_OPTIONS=halt_on_error=1 ./$(BIN_DIR)/test_mop_threads_tsan
+
+.PHONY: test-mop-asan
+test-mop-asan: directories
+	$(CC) $(SAN_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all \
+	    $(TEST_DIR)/test_giannantoni.c $(GIA_SRCS) \
+	    -o $(BIN_DIR)/test_giannantoni_asan $(LDFLAGS)
+	$(CC) $(SAN_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all \
+	    $(TEST_DIR)/test_mop_threads.c $(GIA_SRCS) \
+	    -o $(BIN_DIR)/test_mop_threads_asan $(LDFLAGS) -lpthread
+	@ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ./$(BIN_DIR)/test_giannantoni_asan > /dev/null 2>&1 \
+	    || { echo "test-mop-asan: test_giannantoni FAILED under ASan/LSan/UBSan"; \
+	         ASAN_OPTIONS=detect_leaks=1 ./$(BIN_DIR)/test_giannantoni_asan 2>&1 | grep -E 'ERROR|SUMMARY|runtime error|FAIL' | head -20; exit 1; }
+	@ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ./$(BIN_DIR)/test_mop_threads_asan
+	@echo "test-mop-asan: no ASan, LSan or UBSan finding"
+
+.PHONY: check-symbols
+check-symbols: all
+	@sh scripts/check_symbols.sh
+
 # Requirements traceability (docs/requirements/README.md): every requirement
 # is verified by a catalogued entry, every `implemented` claim is backed by a
 # `Verifies:` tag in tests/ or scripts/, and no tag names something that does
@@ -939,7 +987,8 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop-cli test-guard-no-skip check-trace check-version test-schema
+           test-gnp-loop test-giannantoni test-mop-cli test-mop-threads check-symbols \
+           test-guard-no-skip check-trace check-version test-schema
 
 # Full native build + CI's suites under real GCC with -Werror.
 test-linux: container-image-linux
