@@ -240,6 +240,17 @@ $(TARGET_TEST_EMERGENCE): $(TEST_DIR)/test_mop_emergence.c $(LIB_DIR)/mop.o $(LI
 test-mop-emergence: directories $(TARGET_TEST_EMERGENCE)
 	@./$(TARGET_TEST_EMERGENCE)
 
+# VAL-08 (BR-010): every erratum in PLAN.md §5 has a test assertion naming it.
+.PHONY: check-errata
+check-errata:
+	@sh scripts/check_errata.sh
+
+# DEM-POR-01 (NFR-DET-002, NFR-POR-001): every CI_TESTS suite has a deploy.yml
+# step, on all three toolchains, with -Werror.
+.PHONY: check-ci-matrix
+check-ci-matrix:
+	@sh scripts/check_ci_matrix.sh
+
 # FR-KER-001 (T-KER-01, ADR 0022): "expm" and its deprecated alias "incipient".
 .PHONY: test-kernel-method
 test-kernel-method: directories $(TARGET_CLI) $(BIN_DIR)/dump_serialized
@@ -1102,7 +1113,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-mop-threads check-symbols \
+           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-mop-threads check-symbols check-errata check-ci-matrix \
            test-guard-no-skip test-coverage-gate check-api-called \
            test-api-called check-trace check-version test-schema
 

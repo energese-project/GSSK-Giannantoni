@@ -200,7 +200,7 @@ Columns: ID · Verifies · Level · Oracle / procedure · Mutation that must fai
 | T-COV-01 | NFR-COV-001 | Structural | Coverage gate ≥ 90% on the Giannantoni units; garbage input fails | Remove a test | `make coverage-check` |
 | T-TRC-01 | NFR-TRC-001 | Structural | `make check-trace` passes; planting an orphan tag or an untraced requirement fails it | — | `scripts/check_trace.sh` |
 | INS-SEP-01 | NFR-SEP-001 | Structural | No `#include "gssk.h"` in the Giannantoni units | Add the include | `scripts/check_symbols.sh` |
-| DEM-POR-01 | NFR-POR-001, NFR-DET-002, BR-011 | Demonstration | The whole catalogue passes on macOS clang, Linux clang, Linux GCC in CI with `-Werror` | — | `deploy.yml` matrix |
+| DEM-POR-01 | NFR-POR-001, NFR-DET-002, BR-011 | Demonstration | The whole catalogue passes on macOS clang, Linux clang, Linux GCC in CI with `-Werror` | Drop a suite's CI step | `deploy.yml` matrix; `scripts/check_ci_matrix.sh` (every `CI_TESTS` suite has a step) |
 
 ### 7.9 Validation
 
@@ -213,8 +213,8 @@ Columns: ID · Verifies · Level · Oracle / procedure · Mutation that must fai
 | VAL-05 | BR-001, BR-008, FR-IDC-006 | Validation | [10 App. Eq 28–34] worked example | — | `test_mop.c` |
 | VAL-06 | BR-001, BR-008, FR-IDC-005 | Validation | [06 Eq 3.9] `±√α e^{αt}` | — | `test_duet` (exists) |
 | VAL-07 | BR-007 | Validation | The three source-determined verdicts (PLAN R7): First Equation transported, Second Equation and EQS imposed | — | `test_mop_emergence.c` |
-| VAL-08 | BR-010 | Validation | Every erratum X1–X12 has a test that the printed form fails its oracle | — | `test_mop.c` |
-| VAL-09 | BR-009 | Inspection | README and docs claim nothing beyond `implemented` requirements; PLAN §6 exclusions are documented | — | Review checklist |
+| VAL-08 | BR-010 | Validation | Every erratum X1–X12 has a test that the printed form fails its oracle | Rename an erratum's assertion | `test_mop.c`, `test_mop_emergence.c`; `scripts/check_errata.sh` |
+| VAL-09 | BR-009 | Inspection | README and docs claim nothing beyond `implemented` requirements; PLAN §6 exclusions are documented | — | Review checklist; last run recorded in PLANLOG.md (`requirements-status`) |
 
 ## 8. Entry and exit criteria
 

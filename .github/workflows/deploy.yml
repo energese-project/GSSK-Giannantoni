@@ -199,6 +199,17 @@ jobs:
       - name: Giannantoni CLI system tests
         run: make test-mop-cli
 
+      # FR-HAR-003 (T-HAR-01..07, VAL-07): the harmony detector, linked from
+      # mop.o and relational.o alone, so a solver that called the constructor
+      # would not link.
+      - name: Giannantoni harmony detector (without harmony.o)
+        run: make test-mop-emergence
+
+      # FR-KER-001 (T-KER-01, ADR 0022): "incipient" is byte-identical to
+      # "expm" and prints one notice.
+      - name: Kernel method label
+        run: make test-kernel-method
+
       # NFR-REE-001: two models on two threads give what each gives alone.
       - name: Giannantoni reentrancy
         run: make test-mop-threads
@@ -216,6 +227,20 @@ jobs:
       # test backs — the ways a green build can avoid being built to spec.
       - name: Requirements traceability
         run: make check-trace
+
+      # VAL-08 (BR-010): every erratum in PLAN.md §5 has a test naming it.
+      - name: Every erratum has a test
+        run: make check-errata
+
+      # DEM-POR-01: this matrix covers three toolchains with -Werror, and runs
+      # every suite in the Makefile's CI_TESTS.
+      - name: CI runs the whole catalogue
+        run: make check-ci-matrix
+
+      # NFR-COV-001: the coverage gate's own self-test -- garbage, an empty
+      # report and 89% must all fail it.
+      - name: Coverage gate self-test
+        run: make test-coverage-gate
 
   # ────────────────────────────────────────────────────────────
   # Quality gate — all Linux-only checks as serial steps.

@@ -638,7 +638,7 @@ static void test_idc_refusals(void) {
             all = 0;
         }
     }
-    ok("riccati_duet, abel_net, solution_drift: GIA_E_UNSUPPORTED + source", all);
+    ok("X3: riccati_duet ([06 Eq 3.22]), abel_net, solution_drift: GIA_E_UNSUPPORTED + source", all);
     ok("an unknown feature is GIA_E_ARG", gia_idc_refuse("teleportation", &why) == GIA_E_ARG &&
                                           gia_idc_refuse(NULL, &why) == GIA_E_ARG);
 }
@@ -1253,7 +1253,7 @@ static double first_eq_residual(const gia_beta *be, gia_rational k, double t) {
  * k in {1, 2, 3} x p in {0, 1/2, 1, 2} x b in {0, 0.25, 1}, with a real
  * (a = 1.3) and complex (a = 1 + 0.5i, b scaled by 1 - 0.4i), at t = 0.5, 1, 2;
  * plus k = 1/2 with real positive a, b. */
-/* Verifies: FR-MOP-001, NFR-NUM-001 (T-MOP-01) */
+/* Verifies: FR-MOP-001, NFR-NUM-001, BR-004 (T-MOP-01) */
 static void test_mop_first_residual(void) {
     static const double ps[] = { 0.0, 0.5, 1.0, 2.0 }, bs[] = { 0.0, 0.25, 1.0 };
     static const double ts[] = { 0.5, 1.0, 2.0 };
@@ -1316,8 +1316,8 @@ static void test_mop_x1(void) {
     printf("\n[T-MOP-02] X1: the printed [23 Eq 5.5.7-5.5.8] do not solve Eq 5.5.2\n");
     printf("    printed 5.5.7: %.6g   printed 5.5.8: %.6g   derived: %.3g\n", r7, r8,
            first_eq_residual(&be, k2, 1.0));
-    ok("printed 5.5.7 residual = 1.25 (> 100x tol)", fabs(r7 - 1.25) < 1e-4 && fabs(r7) > 100 * TOL_RESIDUAL);
-    ok("printed 5.5.8 residual = -0.625 (> 100x tol)", fabs(r8 + 0.625) < 1e-4 && fabs(r8) > 100 * TOL_RESIDUAL);
+    ok("X1: printed 5.5.7 residual = 1.25 (> 100x tol)", fabs(r7 - 1.25) < 1e-4 && fabs(r7) > 100 * TOL_RESIDUAL);
+    ok("X1: printed 5.5.8 residual = -0.625 (> 100x tol)", fabs(r8 + 0.625) < 1e-4 && fabs(r8) > 100 * TOL_RESIDUAL);
     ok("the derived solution's residual is <= 1e-6", first_eq_residual(&be, k2, 1.0) <= TOL_RESIDUAL);
 }
 
@@ -2291,8 +2291,11 @@ static void test_ord_record(void) {
              ORD_SRC "," ORD_S("s") "," ORD_S("a") "," ORD_S("b") "," ORD_SINK,
              ORD_E("src", "s") "," ORD_E("s", "a") "," ORD_E("s", "b") "," ORD_E("a", "out"),
              3, 0, 0, 0, 3, 0);
-    /* p -> a, p -> b, both replicate: (a, b) is 1/2. */
-    ord_case("one co-production",
+    /* p -> a, p -> b, both replicate: (a, b) is 1/2. X6: [23 Eq 4.1.1]'s text
+     * ("m Co-productions and n Interactions") would give a co-production the
+     * interaction's power; [22 Eq 6-8] give it the root, 1/2 -- so the couple
+     * must count in nhalf and not in n2 (checked here and named below). */
+    ord_case("X6: one co-production is 1/2, not an interaction",
              ORD_S("p") "," ORD_S("a") "," ORD_S("b"),
              ORD_EP("p", "a") "," ORD_EP("p", "b"),
              3, 0, 0, 1, 2, 0);
@@ -2353,7 +2356,7 @@ static void test_ord_record(void) {
     }
 }
 
-/* Verifies: FR-ORD-003, FR-ORD-004 (T-ORD-02)
+/* Verifies: FR-ORD-003, FR-ORD-004, BR-006 (T-ORD-02)
  * Source: [22 §12.1, Eq 11.1]; ADR 0021 decision 1. Oracle: two disjoint
  * 2-cycles put every component on a closed pathway (closure 1, by hand) yet
  * relate no couple across them, so they are not at maximum -- the catalogue
@@ -2590,7 +2593,7 @@ static cJSON *gen_quiet(const gia_model *m) {
 
 static unsigned gen_lcg(unsigned *s) { *s = *s * 1664525u + 1013904223u; return *s >> 8; }
 
-/* Verifies: FR-ORD-005, FR-ORD-004 (T-ORD-04)
+/* Verifies: FR-ORD-005, FR-ORD-004, BR-006 (T-ORD-04)
  * Source: [02 Eq 5.3], [22 Eq 2, §12.1]; ADR 0021 §2. Oracle: for every graph
  * of a fixed enumeration -- all 2^2 graphs on 2 components, all 2^6 on 3, and
  * 40 each on 4 and 5 from vv-plan.md §6's LCG -- the pathways gia_generate
@@ -2768,7 +2771,7 @@ static int net_idx(const gia_model *m, const char *id) {
     return -1;
 }
 
-/* Verifies: FR-MOP-008 (T-MOP-10)
+/* Verifies: FR-MOP-008, BR-004 (T-MOP-10)
  * Source: PLAN R8; [23 Eq 5.5.2] with k = 1. Oracle: e^{alpha_ij} equals the
  * emergy the pass's empower puts on the pathway i -> j (net_oracle above, to
  * 1e-12); couples with no pathway are unrelated; beta = alpha' is checked by

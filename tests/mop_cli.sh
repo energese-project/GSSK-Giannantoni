@@ -34,7 +34,7 @@ run() {  # run <name> <model> : writes $tmp/<name>.{out,err,csv,json}, status in
 echo "=== giannantoni_sim system tests ==="
 
 # ---------------------------------------------------------------------------
-# Verifies: FR-OUT-001 (T-OUT-02)
+# Verifies: FR-OUT-001, BR-009 (T-OUT-02)
 #
 # Every output column, and every reported quantity, carries exactly one label from
 # the closed set of FR-OUT-001. The labels are read from the report and matched
@@ -154,7 +154,7 @@ for spec in "input:{2, 0, 0, 0, 1}:no:0.000" "closed_loop:{3, 3, 0, 0, 0}:yes:1.
 done
 
 # ---------------------------------------------------------------------------
-# Verifies: FR-OUT-002, IF-CLI-001 (T-OUT-03)
+# Verifies: FR-OUT-002, IF-CLI-001, BR-009 (T-OUT-03)
 #
 # icd.md IF-CLI-001: exit 0 on success, 1 on a load or validation error, 2 on a
 # refusal, with the reason on stderr. FR-OUT-002: the reason names the feature and
