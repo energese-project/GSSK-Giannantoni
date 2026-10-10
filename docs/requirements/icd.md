@@ -39,7 +39,7 @@ Every new function returns `gia_status` and takes `const char **why` last. On an
 `"[06 Eq 3.22] is not derivable from Eq 3.19 (PLAN X3)"`; outputs are left unmodified. On `GIA_OK`,
 `*why` is not written. No function prints, exits or aborts (NFR-ERR-001).
 - **Source:** srs NFR-ERR-001, FR-OUT-002
-- **Verification:** T-API-01, T-ERR-01 · **Priority:** Must · **Status:** planned · **Task:** idc-general-f
+- **Verification:** T-API-01, T-ERR-01 · **Priority:** Must · **Status:** implemented · **Task:** idc-general-f
 
 ### IF-API-002 — `idc.h`
 ```c
@@ -51,22 +51,26 @@ gia_status gia_idc_of(double complex f, double complex df, int n,
 typedef struct gia_lde2_sol gia_lde2_sol;                                      /* opaque     */
 gia_status gia_lde2_solve(gia_cfn a1, gia_cfn a0, void *ctx,
                           double complex f0, double complex f1, double t_max,
-                          gia_lde2_sol **sol, const char **why);                /* FR-IDC-006 */
+                          gia_lde2_sol **sol, double *t_fail /* may be NULL */,
+                          const char **why);                                    /* FR-IDC-006 */
 gia_status gia_lde2_eval(const gia_lde2_sol *sol, double t,
                          double complex *f, double complex *trad_residual,
                          const char **why);
+gia_status gia_lde2_terms(const gia_lde2_sol *sol, double t, double complex c[2],
+                          double complex r[2], double complex E[2], const char **why);
 void       gia_lde2_free(gia_lde2_sol *sol);
 
 typedef struct { double complex u[2]; double complex c[2][2]; } gia_binary_sol;
 gia_status gia_binary_solve(double complex A, double complex B,
                             const double complex f0[2], const double complex fhalf0[2],
                             gia_binary_sol *sol, const char **why);              /* FR-IDC-007 */
-void       gia_binary_eval(const gia_binary_sol *sol, double t,
-                           double complex f[2], double complex fhalf[2]);
+gia_status gia_binary_eval(const gia_binary_sol *sol, double t,
+                           double complex f[2], double complex fhalf[2],
+                           const char **why);
 
-gia_status gia_riccati_solve(gia_cfn Q, gia_cfn R, gia_cfn P, void *ctx,
-                             double complex f0, double t_max,
-                             gia_lde2_sol **sol, const char **why);              /* FR-IDC-008 */
+gia_status gia_riccati_solve(gia_cfn Q, gia_cfn R, gia_cfn dR, gia_cfn P, void *ctx,
+                             double complex f0, double t_max, gia_lde2_sol **sol,
+                             double *t_fail, const char **why);                  /* FR-IDC-008 */
 gia_status gia_riccati_eval(const gia_lde2_sol *sol, double t,
                             double complex *f, double complex *trad_residual,
                             const char **why);
@@ -77,6 +81,10 @@ gia_status gia_idc_taylor(double f0, double df0, double dt, int n,
                           double *out, const char **why);                        /* FR-IDC-010 */
 gia_status gia_idc_refuse(const char *feature, const char **why);                /* FR-IDC-013 */
 ```
+`t_fail` is written only on `GIA_E_CONVERGENCE`, with the time at which the roots collide: it is
+the diagnosis that a static `why` cannot carry, and the one exception to "outputs are left
+unmodified". `gia_lde2_terms` returns the solution's terms (constants, roots at t, and
+`E = e^{∫₀ᵗ r}`) so that a test can form the termwise residual itself (vv-plan.md §2 rule 2).
 Ownership: `gia_lde2_sol` is allocated by `*_solve` and freed by `gia_lde2_free`; it holds the
 caller's function pointers and `ctx` without copying, so `ctx` must outlive it. `t` must lie in
 `[0, t_max]`, else `GIA_E_ARG`.

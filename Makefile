@@ -119,10 +119,15 @@ $(TARGET_COMPARE): $(TEST_DIR)/csv_compare.c
 # Default seed graph if MODEL is not passed explicitly
 MODEL ?= examples/giannantoni/input.json
 
+# The Giannantoni library units. Defined here, ahead of every rule that uses
+# them, because a prerequisite list is expanded when its rule is read.
+GIA_UNIT_SRCS = $(SRC_DIR)/engine.c $(SRC_DIR)/validation.c \
+                $(SRC_DIR)/projection.c $(SRC_DIR)/idc.c
+GIA_OBJS = $(patsubst $(SRC_DIR)/%.c,$(LIB_DIR)/%.o,$(GIA_UNIT_SRCS))
+
 # Simulation objects. sim_main.o carries the entry point, kept out of
 # engine.o so tests can link the engine without one.
-SIM_OBJS = $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o \
-           $(LIB_DIR)/projection.o $(LIB_DIR)/sim_main.o
+SIM_OBJS = $(GIA_OBJS) $(LIB_DIR)/sim_main.o
 
 # engine.o, validation.o and sim_main.o are built by the $(LIB_DIR)/%.o
 # pattern rule above; they need no rules of their own.
@@ -187,13 +192,24 @@ bench-giannantoni: directories $(TARGET_BENCH_GIA)
 # ordinality and the generative step.
 TARGET_TEST_GIA = $(BIN_DIR)/test_giannantoni
 
-$(TARGET_TEST_GIA): $(TEST_DIR)/test_giannantoni.c $(LIB_DIR)/engine.o \
-                    $(LIB_DIR)/validation.o $(LIB_DIR)/projection.o $(TARGET_LIB)
+$(TARGET_TEST_GIA): $(TEST_DIR)/test_giannantoni.c $(GIA_OBJS) $(TARGET_LIB)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 test-giannantoni: directories $(TARGET_TEST_GIA)
 	@echo "=== Giannantoni engine tests ==="
 	@./$(TARGET_TEST_GIA)
+
+# The Giannantoni kernel's V&V suite: docs/requirements/vv-plan.md §7, every
+# test tagged with the requirements it verifies, every oracle an equation or a
+# printed number (ADR 0018).
+TARGET_TEST_MOP = $(BIN_DIR)/test_mop
+
+$(TARGET_TEST_MOP): $(TEST_DIR)/test_mop.c $(GIA_OBJS) $(TARGET_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+.PHONY: test-mop
+test-mop: directories $(TARGET_TEST_MOP)
+	@./$(TARGET_TEST_MOP)
 
 # System tests of bin/giannantoni_sim (docs/requirements/vv-plan.md §1): the
 # run report, the CSV and the exit status, checked against docs/requirements/icd.md.
@@ -212,9 +228,7 @@ test-mop-cli: directories $(TARGET_SIM)
 #                          since LeakSanitizer is not available on macOS
 #   check-symbols          no writable data, no exit/abort, no gssk.h
 #                          (T-REE-02, T-ERR-01, INS-SEP-01)
-GIA_OBJS = $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o $(LIB_DIR)/projection.o
-GIA_SRCS = $(SRC_DIR)/engine.c $(SRC_DIR)/validation.c $(SRC_DIR)/projection.c \
-           $(SRC_DIR)/cJSON.c
+GIA_SRCS = $(GIA_UNIT_SRCS) $(SRC_DIR)/cJSON.c
 TARGET_TEST_THREADS = $(BIN_DIR)/test_mop_threads
 SAN_FLAGS = -std=c99 -Iinclude -g -O1 -fno-omit-frame-pointer
 
@@ -243,11 +257,26 @@ test-mop-asan: directories
 	    || { echo "test-mop-asan: test_giannantoni FAILED under ASan/LSan/UBSan"; \
 	         ASAN_OPTIONS=detect_leaks=1 ./$(BIN_DIR)/test_giannantoni_asan 2>&1 | grep -E 'ERROR|SUMMARY|runtime error|FAIL' | head -20; exit 1; }
 	@ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ./$(BIN_DIR)/test_mop_threads_asan
+	$(CC) $(SAN_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all \
+	    $(TEST_DIR)/test_mop.c $(GIA_SRCS) -o $(BIN_DIR)/test_mop_asan $(LDFLAGS)
+	@ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ./$(BIN_DIR)/test_mop_asan > /dev/null 2>&1 \
+	    || { echo "test-mop-asan: test_mop FAILED under ASan/LSan/UBSan"; \
+	         ASAN_OPTIONS=detect_leaks=1 ./$(BIN_DIR)/test_mop_asan 2>&1 | grep -E 'ERROR|SUMMARY|runtime error|FAIL' | head -20; exit 1; }
 	@echo "test-mop-asan: no ASan, LSan or UBSan finding"
 
 .PHONY: check-symbols
 check-symbols: all
 	@sh scripts/check_symbols.sh
+
+# NFR-API-001 (ADR 0018 rule 3): every function idc.h, relational.h and mop.h
+# declare (and IF-API-005's engine.h additions) is called by a test, and no
+# unit carries a not-implemented stub. The self-test runs the check against
+# icd.md's own API blocks.
+.PHONY: check-api-called test-api-called
+check-api-called:
+	@sh scripts/check_api_called.sh
+test-api-called:
+	@sh $(TEST_DIR)/api_called_selftest.sh
 
 # Requirements traceability (docs/requirements/README.md): every requirement
 # is verified by a catalogued entry, every `implemented` claim is backed by a
@@ -721,12 +750,65 @@ coverage-report: coverage-build
 	     --ignore-errors mismatch,unused
 	genhtml coverage/lcov.info --output-directory coverage/html --quiet
 
-coverage-check: coverage-report
-	@line_pct=$$(lcov --summary coverage/lcov.info 2>&1 | grep 'lines' | grep -oP '[0-9]+\.[0-9]+(?=%)' | head -1); \
-	echo "Line coverage: $${line_pct}% (gate: $(COVERAGE_MIN_LINE)%)"; \
-	if [ -n "$$line_pct" ] && [ $$(echo "$$line_pct < $(COVERAGE_MIN_LINE)" | bc -l) -eq 1 ]; then \
+# The kernel gate. It used to parse with `grep -oP` (absent from macOS grep)
+# and print OK whenever it parsed nothing (PLAN.md §1 B3); an unreadable
+# summary now fails. The Giannantoni gate is coverage-gia, below.
+coverage-check: coverage-report coverage-gia
+	@line_pct=$$(lcov --summary coverage/lcov.info 2>&1 | awk '/lines/ { for (i = 1; i <= NF; i++) if ($$i ~ /^[0-9]+(\.[0-9]+)?%$$/) { sub(/%/, "", $$i); print $$i; exit } }'); \
+	if [ -z "$$line_pct" ]; then echo "FAIL: cannot read a line percentage from lcov --summary"; exit 1; fi; \
+	echo "Kernel line coverage: $${line_pct}% (gate: $(COVERAGE_MIN_LINE)%)"; \
+	if awk -v p="$$line_pct" -v m="$(COVERAGE_MIN_LINE)" 'BEGIN { exit !(p < m) }'; then \
 		echo "FAIL: line coverage below $(COVERAGE_MIN_LINE)%"; exit 1; \
 	else echo "OK"; fi
+
+# Giannantoni units (NFR-COV-001, ADR 0018 rule 2): >= 90% of lines, measured
+# with gcov over every Giannantoni suite. The units are those srs.md names;
+# validation.c and projection.c are reported but not gated. A unit listed here
+# whose source does not exist yet is skipped, so W2-W8 join the gate by landing.
+GIA_COV_MIN    = 90
+GIA_COV_UNITS  = engine idc mop relational harmony
+GIA_COV_EXTRA  = validation projection
+GIA_COV_DIR    = coverage/gia
+GCOV          ?= gcov
+GIA_COV_FLAGS  = -std=c99 -Iinclude -O0 -g --coverage
+
+.PHONY: coverage-gia
+coverage-gia: directories
+	@rm -rf $(GIA_COV_DIR) && mkdir -p $(GIA_COV_DIR)
+	@for u in $(GIA_COV_UNITS) $(GIA_COV_EXTRA); do \
+		[ -f $(SRC_DIR)/$$u.c ] || continue; \
+		gcc $(GIA_COV_FLAGS) -c $(SRC_DIR)/$$u.c -o $(GIA_COV_DIR)/$$u.o || exit 1; \
+	done
+	@gcc -std=c99 -Iinclude -O0 -c $(SRC_DIR)/cJSON.c -o $(GIA_COV_DIR)/cJSON.o
+	@objs=$$(ls $(GIA_COV_DIR)/*.o); \
+	for t in $(GIA_COV_TESTS); do \
+		gcc $(GIA_COV_FLAGS) $(TEST_DIR)/$$t.c $$objs -o $(GIA_COV_DIR)/$$t $(LDFLAGS) -lpthread || exit 1; \
+		./$(GIA_COV_DIR)/$$t > $(GIA_COV_DIR)/$$t.log 2>&1 || { echo "coverage-gia: $$t failed"; tail -20 $(GIA_COV_DIR)/$$t.log; exit 1; }; \
+	done; \
+	gcc $(GIA_COV_FLAGS) $(SRC_DIR)/sim_main.c $$objs -o $(GIA_COV_DIR)/giannantoni_sim $(LDFLAGS) || exit 1; \
+	SIM=$(GIA_COV_DIR)/giannantoni_sim sh $(TEST_DIR)/mop_cli.sh > $(GIA_COV_DIR)/mop_cli.log 2>&1 \
+		|| { echo "coverage-gia: mop_cli.sh failed"; tail -20 $(GIA_COV_DIR)/mop_cli.log; exit 1; }
+	@: > $(GIA_COV_DIR)/gated.txt; : > $(GIA_COV_DIR)/extra.txt
+	@for u in $(GIA_COV_UNITS); do \
+		[ -f $(SRC_DIR)/$$u.c ] || continue; \
+		$(GCOV) -n -o $(GIA_COV_DIR) $(SRC_DIR)/$$u.c 2>/dev/null | awk -v f="$(SRC_DIR)/$$u.c" 'index($$0, "File \047" f "\047") == 1 { p = 1; print; next } p { print; exit }' >> $(GIA_COV_DIR)/gated.txt; \
+	done
+	@for u in $(GIA_COV_EXTRA); do \
+		$(GCOV) -n -o $(GIA_COV_DIR) $(SRC_DIR)/$$u.c 2>/dev/null | awk -v f="$(SRC_DIR)/$$u.c" 'index($$0, "File \047" f "\047") == 1 { p = 1; print; next } p { print; exit }' >> $(GIA_COV_DIR)/extra.txt; \
+	done
+	@echo "Giannantoni units outside the gate (reported only):"
+	@awk '/^File /{ f = $$2 } /^Lines/{ print "  " f " " $$0 }' $(GIA_COV_DIR)/extra.txt
+	@echo "Giannantoni units, gated:"
+	@sh scripts/coverage_gate.sh $(GIA_COV_MIN) $(GIA_COV_DIR)/gated.txt
+
+# Every Giannantoni test binary built from tests/<name>.c. A W2-W8 suite joins
+# coverage by being listed here.
+GIA_COV_TESTS = test_giannantoni test_mop_threads test_mop
+
+# The gate's own self-test: garbage, an empty report and 89% must all fail.
+.PHONY: test-coverage-gate
+test-coverage-gate:
+	@sh $(TEST_DIR)/coverage_gate_selftest.sh
 
 # ──────────────────────────────────────────────────────────────
 # Valgrind memory-error check (Linux only)
@@ -987,8 +1069,9 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop-cli test-mop-threads check-symbols \
-           test-guard-no-skip check-trace check-version test-schema
+           test-gnp-loop test-giannantoni test-mop test-mop-cli test-mop-threads check-symbols \
+           test-guard-no-skip test-coverage-gate check-api-called \
+           test-api-called check-trace check-version test-schema
 
 # Full native build + CI's suites under real GCC with -Werror.
 test-linux: container-image-linux

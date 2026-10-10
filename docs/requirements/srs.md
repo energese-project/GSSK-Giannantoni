@@ -42,7 +42,7 @@ For `φ(t)` a real polynomial of degree ≤ 8 and integer `0 ≤ n ≤ 8`, the k
 Given `f(t) ≠ 0` and `f'(t)` in ℂ and integer `n ≥ 0`, the kernel shall compute `(f'/f)ⁿ · f`. For
 `f(t) = 0` it shall refuse (`GIA_E_DOMAIN`).
 - **Source:** [02 Eq 14.9.5], [23 Eq 5.5.2]
-- **Verification:** T-IDC-03 · **Priority:** Must · **Status:** planned · **Task:** idc-general-f
+- **Verification:** T-IDC-03 · **Priority:** Must · **Status:** implemented · **Task:** idc-general-f
 
 ### FR-IDC-003 — Traditional derivative of an exponential
 For the same φ and n as FR-IDC-001, the kernel shall compute the traditional derivative as
@@ -71,7 +71,7 @@ whole interval (a double root α̃), the solution set is the one family `c·e^{�
 solve it when `f₁ = α̃(0) f₀` and refuse otherwise. It shall not use [06 Eq 3.7], which solves the
 equation under no reading (X12). Where the roots collide at an isolated time, it shall refuse.
 - **Source:** [06 Eq 3.3–3.6], [09 Eq 3, 7], [10 Eq 8.1, 10.1]; PLAN R13, X12
-- **Verification:** T-IDC-04, T-IDC-05, VAL-05 · **Priority:** Must · **Status:** planned · **Task:** idc-lde2
+- **Verification:** T-IDC-04, T-IDC-05, VAL-05 · **Priority:** Must · **Status:** implemented · **Task:** idc-lde2
 
 ### FR-IDC-007 — The binary function
 Given constants `A, B` and the four initial conditions `f_σ(0)`, `f_σ^{(½)}(0)` for `σ ∈ {1, 2}`, the
@@ -79,7 +79,7 @@ kernel shall solve `f' + A f^{(½)} + B f = 0` as `f_σ = c_σ1 e^{u₁²t} + c_
 the roots of `u² + A u + B = 0`, half-derivative `Σ c_σi uᵢ e^{uᵢ²t}`, and constants from
 `[[1, 1], [u₁, u₂]] c_σ = (f_σ(0), f_σ^{(½)}(0))`. For `u₁ = u₂` it shall refuse (no source defines it).
 - **Source:** [02 Eq 14.7.1–14.7.7], [06 Eq 3.10–3.15]; PLAN R9, X7
-- **Verification:** T-IDC-06 · **Priority:** Must · **Status:** planned · **Task:** idc-binary
+- **Verification:** T-IDC-06 · **Priority:** Must · **Status:** implemented · **Task:** idc-binary
 
 ### FR-IDC-008 — Riccati equation by linearisation
 Given `Q(t), R(t), P(t)` with `R ≠ 0` and `f(0) = f₀`, the kernel shall solve
@@ -87,19 +87,19 @@ Given `Q(t), R(t), P(t)` with `R ≠ 0` and `f(0) = f₀`, the kernel shall solv
 incipient LDE (FR-IDC-006) with `y(0) = 1`, `ỹ'(0) = R(0) f₀`, and shall report the traditional
 Riccati residual of the result. The printed substitution of [06 Eq 3.17] shall not be used.
 - **Source:** [06 Eq 3.16–3.18]; PLAN R11, X2
-- **Verification:** T-IDC-07 · **Priority:** Should · **Status:** planned · **Task:** idc-riccati
+- **Verification:** T-IDC-07 · **Priority:** Should · **Status:** implemented · **Task:** idc-riccati
 
 ### FR-IDC-009 — The nonlinear equation of [02 Eq 14.10.1]
 For constants `A, B`, the kernel shall return the two roots of `4u² + A u + B = 0` as the solutions
 `F = e^{ut}` of `F·(d̃²/dt²)F² + A F²·(d̃/dt)F + B F³ = 0`.
 - **Source:** [02 Eq 14.10.1–14.10.2]; X8
-- **Verification:** T-IDC-08 · **Priority:** Could · **Status:** planned · **Task:** idc-nonlinear-14-10
+- **Verification:** T-IDC-08 · **Priority:** Could · **Status:** implemented · **Task:** idc-nonlinear-14-10
 
 ### FR-IDC-010 — Incipient Taylor projection
 Given `f(t₀) ≠ 0`, `f'(t₀)`, a horizon Δ and an order `n ≥ 0`, the kernel shall compute
 `f*(t₀+Δ) = f(t₀) Σ_{k=0}^{n} (aΔ)ᵏ/k!` with `a = f'(t₀)/f(t₀)`.
 - **Source:** [09 Eq 10, 16–22], [10 Eq 13]; PLAN R10
-- **Verification:** T-IDC-09, VAL-01 · **Priority:** Must · **Status:** planned · **Task:** idc-taylor
+- **Verification:** T-IDC-09, VAL-01 · **Priority:** Must · **Status:** implemented · **Task:** idc-taylor
 
 ### FR-IDC-011 — Solution drift on network trajectories
 For a network whose flow matrix is constant, the kernel shall report solution drift as exactly zero
@@ -111,13 +111,13 @@ not report a solution drift: the sources define none for coupled nonlinear syste
 ### FR-IDC-012 — Linearity in initial conditions
 The solutions of FR-IDC-006 and FR-IDC-007 shall be linear in their initial conditions.
 - **Source:** [06b §Scientific challenges ii]
-- **Verification:** T-IDC-10 · **Priority:** Should · **Status:** planned · **Task:** idc-lde2
+- **Verification:** T-IDC-10 · **Priority:** Should · **Status:** implemented · **Task:** idc-lde2
 
 ### FR-IDC-013 — Refuse what the sources do not define
 The kernel shall refuse: the direct Riccati duet form [06 Eq 3.22] (X3); Abel's n-et [06 Eq 3.25–3.27];
 solution drift on a network with a non-constant flow matrix (FR-IDC-011).
 - **Source:** PLAN §6
-- **Verification:** T-IDC-13 · **Priority:** Must · **Status:** planned · **Task:** idc-riccati
+- **Verification:** T-IDC-13 · **Priority:** Must · **Status:** implemented · **Task:** idc-riccati
 
 ### FR-IDC-014 — Output-projection drift on network trajectories
 For each component with `Q_i(t) ≠ 0`, the kernel shall report the second-order output-projection drift
@@ -471,10 +471,10 @@ No Giannantoni unit shall include `gssk.h`.
 ### NFR-COV-001 — Coverage of the Giannantoni units
 Line coverage of the Giannantoni units shall be ≥ 90%, measured in CI; an unparsable figure shall fail.
 - **Source:** PLAN §1 B3, G2
-- **Verification:** T-COV-01 · **Priority:** Must · **Status:** planned · **Task:** guard-coverage-giannantoni
+- **Verification:** T-COV-01 · **Priority:** Must · **Status:** implemented · **Task:** guard-coverage-giannantoni
 
 ### NFR-API-001 — No untested or stubbed API
 Every function declared in `idc.h`, `mop.h` and `relational.h` shall be called by a test, and none
 shall return a not-implemented code.
 - **Source:** PLAN §1 B4, G3
-- **Verification:** T-API-02 · **Priority:** Must · **Status:** planned · **Task:** guard-api-called
+- **Verification:** T-API-02 · **Priority:** Must · **Status:** implemented · **Task:** guard-api-called

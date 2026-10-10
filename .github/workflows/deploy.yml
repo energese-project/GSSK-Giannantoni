@@ -191,6 +191,11 @@ jobs:
       - name: Giannantoni generative engine tests
         run: make test-giannantoni
 
+      # The Giannantoni kernel's V&V suite (docs/requirements/vv-plan.md §7):
+      # every oracle an equation, a closed form or a printed number.
+      - name: Giannantoni V&V suite
+        run: make test-mop
+
       - name: Giannantoni CLI system tests
         run: make test-mop-cli
 
@@ -201,6 +206,10 @@ jobs:
       # No writable data, no exit/abort, no gssk.h in the Giannantoni units.
       - name: Giannantoni structural checks
         run: make check-symbols
+
+      # NFR-API-001: no declared Giannantoni function goes untested or stubbed.
+      - name: Giannantoni API is called by tests
+        run: make check-api-called test-api-called
 
       # Requirements traceability (docs/requirements/). Fails on an untraced
       # requirement, an orphan Verifies: tag, or an `implemented` claim no
@@ -283,7 +292,9 @@ jobs:
           echo "## Coverage summary" >> $GITHUB_STEP_SUMMARY
           lcov --summary coverage/lcov.info >> $GITHUB_STEP_SUMMARY 2>&1 || true
 
-      - name: Coverage — enforce ≥ 85% line
+      # The kernel gate is 35% (the badge used to claim 85%); the Giannantoni
+      # units' gate is 90% and fails on an unreadable report (NFR-COV-001).
+      - name: Coverage — kernel ≥ 35%, Giannantoni units ≥ 90%
         run: make coverage-check
 
       - name: Coverage — upload HTML report

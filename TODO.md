@@ -1,6 +1,6 @@
 # GSK Production Roadmap
 
-> General Systems Kernel. A domain-specific simulation engine for Odum-style energy systems and General Systems Theory, with first-class support for emergy/transformity accounting, runtime topology mutation,  incipient-calculus integration, and replayable execution.
+> General Systems Kernel. A domain-specific simulation engine for Odum-style energy systems and General Systems Theory, with first-class support for emergy/transformity accounting, runtime topology mutation, matrix-exponential integration, and replayable execution.
 
 ---
 
@@ -11,7 +11,9 @@ for systems-dynamics and ecological-economic modelling specifically** — not a
 general-purpose ODE library. The wedge is:
 
 1. JSON schema with emergy/transformity semantics built in.
-2. Incipient-calculus solver as baseline, not as fast-path.
+2. A classical solver as baseline (the matrix exponential, which the kernel has long called
+   "incipient" though it is not Giannantoni's incipient calculus; PLAN.md §2 E2, R15). The incipient
+   calculus itself is the Giannantoni engine's to build ([PLAN.md](PLAN.md) W2).
 3. Topology that can mutate at runtime, with full replay.
 4. Deployable from one C99 core to native, WASM, Swift, Python, JS.
 5. Honest scholarship in the docs.
@@ -19,9 +21,11 @@ general-purpose ODE library. The wedge is:
 ## Non-Goals (defend these against feature creep)
 
 - [ ] Maintain explicit non-goals list in `docs/NON_GOALS.md`:
-  - No stiff-solver zoo (BDF, Rosenbrock, SDIRK). If a problem is stiff in
-    IDC-eligible form, the matrix exponential already handles it; if it is
-    stiff *and* not IDC-eligible, that is a modelling problem.
+  - No stiff-solver zoo (BDF, Rosenbrock, SDIRK). If a problem is stiff and
+    linear with constant coefficients, the matrix exponential already handles
+    it; if it is stiff *and* not of that form, that is a modelling problem.
+    (This used to say "IDC-eligible", equating the incipient calculus with the
+    matrix exponential. They are different things: PLAN.md §1 B5.)
   - No DAE / index-reduction support.
   - No symbolic Jacobian engine.
   - No automatic differentiation framework. Adjoint sensitivity is hand-coded
@@ -75,6 +79,11 @@ general-purpose ODE library. The wedge is:
 ---
 
 ## Phase 1 — IDC as Baseline (No Silent Fallback)
+
+> **What "IDC" means in this phase.** Throughout Phase 1, "IDC" names the kernel's Padé matrix
+> exponential and its flow-matrix machinery. That is a classical (TDC) method. It is not Giannantoni's
+> incipient calculus, which is PLAN.md W2's to build in the Giannantoni engine. The checked items below
+> are correct as classical numerics (PLAN.md §2 E2; R15 renames the method `"expm"`).
 
 ### 1.1 Riccati Exact Duet (interaction edges)
 - [x] Derive duet-of-exponentials closed form for `F = k·Q_origin·Q_control`
@@ -796,6 +805,29 @@ general-purpose ODE library. The wedge is:
       one directory down and out of both regression globs.
 
 ---
+
+### 10.7 IDC and the MOP from the sources ([PLAN.md](PLAN.md), [docs/requirements/](docs/requirements/README.md))
+
+One item per PLAN §7 task. An item is checked when its tests pass and its requirements are
+`implemented` (`make check-trace`); "done" still means merged to `main`.
+
+- [x] W0 `mop-claims-remediation` — claims withdrawn; every output labelled (FR-OUT-001)
+- [x] W1 ADR 0018, `guard-no-skip`, `guard-reentrancy`, `guard-coverage-giannantoni`,
+      `guard-api-called`, `guard-agents-wording`
+- [x] ADRs 0019 (MOP equations), 0020 (relational algebra), 0021 (ordinality), 0022 (method label)
+- [x] W2 `idc-general-f` — `gia_idc_of`, (f'/f)^n f (FR-IDC-002); `gia_status` (IF-API-001)
+- [x] W2 `idc-lde2` — second-order incipient LDE, variable coefficients (FR-IDC-006, 012)
+- [x] W2 `idc-binary` — the binary function (FR-IDC-007)
+- [x] W2 `idc-riccati` — Riccati by linearisation; refusals (FR-IDC-008, 013)
+- [x] W2 `idc-taylor` — incipient Taylor projection, [09] validation (FR-IDC-010, VAL-01)
+- [x] W2 `idc-nonlinear-14-10` — [02 Eq 14.10.1] (FR-IDC-009)
+- [ ] W2 `idc-drift-coupled` — solution drift and output-projection drift (FR-IDC-011, 014)
+- [ ] W3 `emergy-source-terms`, `emergy-ordinal-forms`
+- [ ] W4 `mop-first-equation`
+- [ ] W5 `mop-relational-algebra`, `mop-eqs`
+- [ ] W6 `mop-second-equation`
+- [ ] W7 `mop-ordinality`, `mop-generative-empower`
+- [ ] W8 `mop-harmony-detector`, `mop-network-beta`, `kernel-method-label`
 
 ## Continuous Concerns
 

@@ -28,6 +28,16 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **`AGENTS.md` and `TODO.md` no longer equate the incipient calculus with the matrix exponential** (PLAN.md W1 `guard-agents-wording`, B5 and B6). The changes:
+  - The Overview now describes both engines. It no longer says "Euler or RK4" for a repository with four integrators, and it labels the kernel's `"incipient"` method as classical.
+  - A new "Giannantoni work: the protocol" section summarises ADR 0018's G1–G7.
+  - The clamp `Q < 0 → 0` is scoped to the kernel, since the Giannantoni units never clamp signed or complex coordinates.
+  - The `(void)`-stub allowance no longer covers the Giannantoni API.
+  - `make test-update` is marked kernel-only.
+  - In TODO.md, the Vision, the Non-Goals and the Phase 1 heading stop calling the matrix exponential IDC.
+
+- **A coverage gate on the Giannantoni units, and a kernel gate that can fail** (PLAN.md W1 `guard-coverage-giannantoni`, NFR-COV-001). `make coverage-gia` builds the Giannantoni units with `--coverage`, runs every Giannantoni suite and the CLI system tests, and requires ≥ 90% of lines in `engine.c` (and in `idc.c`, `mop.c`, `relational.c` and `harmony.c` once they exist). `validation.c` and `projection.c` are reported but not gated. The gate is `scripts/coverage_gate.sh`. Its parse is POSIX `awk`, and an unreadable or empty report **fails**: the old kernel gate printed `OK` whenever its `grep -oP` matched nothing, which on macOS was always (PLAN §1 B3). The kernel gate now uses the same portable parse and also fails on an unreadable summary. `make coverage-check` runs both gates. The README badge claimed a 35% gate was ≥ 85%; it now shows both real gates. `make test-coverage-gate` self-tests the gate in CI.
+
 - **`make test` fails on a model with no golden file** (PLAN.md W1 `guard-no-skip`, ADR 0018 rule 1). It used to print `SKIPPED` and exit 0, so a new model "passed" by having no expected output (PLAN §1 B1). A model may now skip only if `tests/skip_allowlist.txt` names it with a reason after `#`. An entry without a reason, or an entry for a model that does have a golden file, also fails, so the list cannot grow silently. `invalid_model` is the one entry: the kernel deliberately refuses it. `make test-guard-no-skip` (`tests/guard_no_skip.sh`, in CI) checks that the guard itself still bites: a golden file removed from a copy of `tests/expected` must turn `make test` red.
 
 - **The Giannantoni engine no longer claims to implement IDC or the MOP, and labels every output** (PLAN.md W0, `mop-claims-remediation`). The README, `include/engine.h`, the `src/gssk.c` header and `docs/giannantoni_assessment.md` said or implied that the repository implements Giannantoni's Incipient Differential Calculus and Maximum Ordinality Principle; the trajectories are the classical matrix exponential, the harmony matrix is assumed, ordinality is a proxy and the generative step is a heuristic (PLAN §2, E1–E8). The assessment now opens with a status-of-record table, TODO §10.3 is marked as testing a constructor, and `giannantoni_sim` prints one `label.<output>: implemented|classical|assumed|proxy|illustrative` line per CSV column and per reported quantity (FR-OUT-001). `make test-mop-cli` (`tests/mop_cli.sh`, in CI) checks the labels against the header the same run writes. No numbers change.
@@ -39,6 +49,51 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **The Guix toolchain pack is no longer attached to releases.** At ~450 MB it is produced on demand instead (`guix.yml`, run by hand with `pack-toolchain`). Releases still ship the Guix-built `gssk.wasm`, its hashes and the recipe.
 
 ### Added
+
+- **The nonlinear equation of [02 Eq 14.10.1], `gia_nl1410_roots`** (PLAN.md W2 `idc-nonlinear-14-10`, FR-IDC-009). Substituting `F = e^{ut}` reduces `F·(d̃²/dt²)F² + A F²·(d̃/dt)F + B F³ = 0` to `4u² + Au + B = 0`. The solutions are its two roots, not the "triplet" [02 Eq 14.10.2] prints (erratum X8). The test forms the equation's incipient residual with `gia_idc_of` for each root, and checks that no third candidate solves it.
+
+- **The incipient Taylor projection, `gia_idc_taylor`, validated against Giannantoni & Zoli 2009** (PLAN.md W2 `idc-taylor`, FR-IDC-010, VAL-01). `f*(t₀+Δ) = f(t₀) Σ_{k≤n} (aΔ)ᵏ/k!` with `a = f'/f` [09 Eq 10], evaluated by Horner. With n = 2 it reproduces [09]'s published 16.4, 3.01, 178.0, 172.06 and the 15–17 cm range. The tests also pin errata X4 (Eq 19 at τ₀ = 2 gives 156.0, not the printed 154.3) and X5 (the minimum scenario's net increase is 2.6125, not 1.91).
+
+- **The Riccati equation by linearisation, and named refusals** (PLAN.md W2 `idc-riccati`, FR-IDC-008 and FR-IDC-013).
+  - `gia_riccati_solve` and `gia_riccati_eval` solve `f' + Qf + Rf² = P` with the substitution `f = y'/(R y)`, taking y from the incipient LDE solver ([06 Eq 3.16–3.18], PLAN R11). They report the traditional Riccati residual of the result.
+  - The printed substitution of [06 Eq 3.17] is inverted. A test shows that it leaves an Eq 3.18 residual of 18.3 against a tolerance of 1e-6 (erratum X2).
+  - `gia_idc_refuse` refuses the Riccati duet [06 Eq 3.22], Abel's n-et and network solution drift, each with the reason the sources give (PLAN §6).
+
+- **The binary function, `gia_binary_*`** (PLAN.md W2 `idc-binary`, FR-IDC-007). It solves `f' + A f^(½) + B f = 0` on both branches [02 Eq 14.7.1–14.7.7] from the single characteristic `u² + Au + B = 0` (PLAN R9; the printed per-branch exponents are erratum X7). The constants come from the four initial conditions. A double root is refused, because no source defines that case. Tests check both branches by hand for A = 1, B = −2. They also check the defining residual with `f'` by central difference, a complex case, linearity in the initial conditions (FR-IDC-012, now `implemented`), and an overflow returning `GIA_E_RANGE`.
+
+- **The second-order incipient LDE with variable coefficients, `gia_lde2_*`** (PLAN.md W2 `idc-lde2`, FR-IDC-006). It solves `f̃'' + a₁(t) f̃' + a₀(t) f = 0` as `Σ cᵢ exp(∫₀ᵗ rᵢ)`, with `rᵢ(t)` the roots of the incipient characteristic [06 Eq 3.3–3.6], labelled by continuity in t.
+  - **Method** (numerics N3): the stable root form, plus an adaptive Gauss–Legendre sweep that accepts a step only when its integral agrees with two half-steps to 1e-12 and no root moves more than half the root separation.
+  - **Double root:** a root that is double throughout gives the single family `c·e^{∫r}`. Initial conditions inconsistent with that family are refused, and [06 Eq 3.7] is not used (erratum X12).
+  - **Coincident or colliding roots:** roots that coincide at t = 0 only are refused, because the initial conditions cannot fix both constants. Roots that collide later are refused with the collision time.
+
+  Tests check the solution by hand for `a₀ = −(1+t)²`, `−(1+sin t)²` and complex `−(1+it)²`. They also check the termwise incipient residual (0), the traditional residual (`c₊e^{φ} − c₋e^{−φ}`, not 0), the worked example of [10 App. Eq 28–34] (VAL-05), and linearity in the initial conditions. The baseline's T-IDC-04 (i) is amended, because its roots coincided at t = 0 where N3 itself refuses (PLANLOG).
+
+- **The incipient derivative of a general function, `gia_idc_of`** (PLAN.md W2 `idc-general-f`, FR-IDC-002). New units:
+  - `include/gia_status.h` carries the Giannantoni status codes and the `why` contract (IF-API-001).
+  - `include/idc.h` and `src/idc.c` hold the single-variable incipient calculus. `gia_idc_of` computes `(f'/f)^n f` [02 Eq 14.9.5] over ℂ, with integer powers by multiplication. It refuses `f = 0` as outside the domain and an overflow as out of range, and never returns a non-finite value.
+
+  The new V&V suite `make test-mop` (`tests/test_mop.c`, in CI) checks `f = 1 + t²` against `(2t/(1+t²))ⁿ(1+t²)` for n = 0…8 at 1e-12 (T-IDC-03), and the status contract (T-API-01). `idc.c` joins the coverage gate, the symbol checks, the API check and the sanitizer run.
+
+- **ADR 0022: the kernel's matrix-exponential method is named `expm`** ([docs/adr/0022](adr/0022-kernel-method-expm.md)). `"method": "incipient"` runs a Padé matrix exponential, not Giannantoni's incipient calculus (PLAN.md §2 E2). Under ADR 0011 the kernel is the classical engine. `"expm"` becomes the documented name. `"incipient"` stays a deprecated alias with byte-identical output and a one-line notice. This is not a schema break. No behaviour changes until `kernel-method-label` lands.
+
+- **ADR 0021: ordinality as Giannantoni defines it, and a generative step under Maximum Em-Power** ([docs/adr/0021](adr/0021-ordinality-and-the-generative-step.md)). It supersedes the cycle-coverage definition of ordinality in ADRs 0014 and 0015, and ADR 0015's emergent component. ADR 0014's leg rules stand.
+  - Each couple of components is classified as 2/2, 2, ½ or unrelated from the exponents in [10] and [22 Eq 6–8]. Maximum Ordinality is "every couple 2/2" [22 §12.1], which is strong connectivity of the component graph. Boundary nodes are habitat, not components.
+  - The generative step adds one linear pathway at a time, from a sink to a source of the condensation, choosing the candidate that maximises total empower [02 Eq 5.3]. It repeats until the graph is strongly connected.
+  - Cycle coverage survives only as `closure (proxy)`.
+  - The ADR lists each example seed's verdict before and after. `closed_loop.json` moves from "below maximum (0.800)" to "at maximum".
+
+  No behaviour changes until `mop-ordinality` lands.
+
+- **ADR 0020: the Relational Space algebra** ([docs/adr/0020](adr/0020-relational-algebra.md)). The engine will use the product table of [23 Eq 5.1.3–5.1.5] as printed, which is commutative and non-associative. Products of three or more factors are evaluated left to right and never reassociated. The evidence is that the literal table reproduces the EQS brackets of [23 Eq 7.1–7.3] to 8.9e-16, while an associative reading does not. Exponentials are De Moivre's closed form, never a power series. A root's power multiplies its angle, and the table power is a separate function: under the table the "roots of unity" are not roots of unity (erratum X10). The EQS refuses unequal angles (X11). The circle product of [02], [06b] keeps factor pairs and reduces cardinally to multiplication. No behaviour changes.
+
+- **ADR 0019: the MOP's two Fundamental Equations, as the engine solves them** ([docs/adr/0019](adr/0019-mop-fundamental-equations.md)). It records three decisions:
+  - **First Equation:** solved per couple with the solution derived from [23 Eq 5.5.6]. The printed [23 Eq 5.5.7–5.5.8] leave residuals 1.25 and −0.625 at t = 1 (erratum X1).
+  - **Second Equation:** implemented as its printed solution [23 Eq 6.1–6.3], tested against the Riccati equation `u' + u² = 0` that the solution satisfies. That oracle is labelled reconstructed.
+  - **Harmony:** reported as `transported`, `imposed` or `absent` from a measured residual, never assumed by the solver. The sources determine the three verdicts: the First Equation transports harmony, and the Second Equation and the EQS impose it.
+
+  Emergence of harmony is recorded as not reproducible from the sources. No behaviour changes.
+
+- **Every Giannantoni API function must be called by a test, and none may be a stub** (PLAN.md W1 `guard-api-called`, NFR-API-001, ADR 0018 rule 3). `make check-api-called` (`scripts/check_api_called.sh`) parses every function declared in `gia_status.h`, `idc.h`, `relational.h` and `mop.h`, plus the functions IF-API-005 adds to `engine.h`. A declaration that no test names fails, and so does a not-implemented marker in `idc.c`, `relational.c`, `mop.c` or `harmony.c`. `AGENTS.md`'s `(void)`-stub allowance never covered these headers, and now cannot. `make test-api-called` runs the check against the C blocks of `docs/requirements/icd.md` itself: it must find exactly the 27 functions declared there, and must name each one when it is left uncalled. Both run in CI.
 
 - **Reentrancy, memory and separation checks for the Giannantoni units** (PLAN.md W1 `guard-reentrancy`). Four checks, all in CI:
   - `make test-mop-threads` runs two models on two threads and requires each to match its solo run (T-REE-01).

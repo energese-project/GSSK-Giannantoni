@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Language: C99](https://img.shields.io/badge/language-C99-00599C.svg)](include/gssk.h)
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20WebAssembly-lightgrey.svg)](#building)
-[![Coverage gate](https://img.shields.io/badge/coverage%20gate-%E2%89%A585%25-brightgreen.svg)](#testing)
+[![Coverage gate](https://img.shields.io/badge/coverage%20gate-kernel%20%E2%89%A535%25%20%C2%B7%20Giannantoni%20%E2%89%A590%25-brightgreen.svg)](#testing)
 
 Two C99 engines over Howard T. Odum's Energy Systems Language: the GSSK kernel, and a second engine built to pursue Corrado Giannantoni's Incipient Differential Calculus (IDC) and Maximum Ordinality Principle (MOP).
 
@@ -107,7 +107,7 @@ make test              # regression suite (CSV diff)
 make test-giannantoni  # the Giannantoni engine
 make bench-giannantoni # incipient closed form vs RK4 and Euler
 make test-asan         # AddressSanitizer + UBSan (requires clang)
-make coverage-check    # lcov coverage gate ≥ 85%
+make coverage-check    # line-coverage gates: kernel ≥ 35% (lcov), Giannantoni units ≥ 90% (gcov)
 make test-valgrind     # Valgrind leak check (Linux)
 make fuzz-run          # 30 s LibFuzzer run (requires clang)
 ```

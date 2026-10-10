@@ -1,0 +1,149 @@
+/* idc.h — single-variable Incipient Differential Calculus.
+ *
+ * docs/requirements/icd.md IF-API-002; srs.md §2.1. Each function implements
+ * one requirement, named beside it, from the source equation it cites. The
+ * derivative of a single function given pointwise is the incipient one,
+ *
+ *     (d~/dt)^n f = (f'/f)^n f            [02 Eq 14.9.5], [23 Eq 5.5.2]
+ *
+ * and of a superposition of exponential terms it is taken termwise (srs §1,
+ * PLAN R16).
+ *
+ * Status of record: this header is the incipient calculus. The kernel's
+ * "incipient" method is not (PLAN.md §2 E2, ADR 0022).
+ */
+
+#ifndef GIA_IDC_H
+#define GIA_IDC_H
+
+#include <complex.h>
+
+#include "gia_status.h"
+
+/* FR-IDC-002. (f'/f)^n * f for f != 0 and integer n >= 0, in C. The power is
+ * taken by repeated multiplication, never cpow, so its sign and branch are
+ * exact (numerics.md §1). f == 0 is GIA_E_DOMAIN; n < 0 or out == NULL is
+ * GIA_E_ARG; a non-finite result is GIA_E_RANGE. */
+gia_status gia_idc_of(double complex f, double complex df, int n,
+                      double complex *out, const char **why);
+
+/* A caller-owned coefficient function a(t). It must be finite on [0, t_max];
+ * a non-finite value is GIA_E_DOMAIN. */
+typedef double complex (*gia_cfn)(double t, void *ctx);
+
+/* FR-IDC-006 — the second-order incipient LDE with variable coefficients,
+ *
+ *     f~'' + a1(t) f~' + a0(t) f = 0,   f(0) = f0,   f~'(0) = f1,
+ *
+ * solved as f = sum_i c_i exp(int_0^t r_i), with r_i(t) the roots of
+ * r^2 + a1 r + a0 = 0 labelled by continuity in t ([06 Eq 3.3-3.6],
+ * [09 Eq 3, 7], [10 Eq 8.1, 10.1]; numerics.md N3). The derivative is
+ * termwise (PLAN R16). Where the discriminant vanishes on the whole interval
+ * the solution is the one family c e^{int r}: solved when f1 = r(0) f0,
+ * refused (GIA_E_DOMAIN) otherwise, and [06 Eq 3.7] is not used (PLAN X12).
+ * Roots that coincide at t = 0 but not everywhere leave the constants
+ * undetermined (GIA_E_DOMAIN); roots that collide at an isolated time
+ * t* > 0 are GIA_E_CONVERGENCE, with t* written to *t_fail when t_fail is
+ * not NULL (the one output written on failure: it is the diagnosis).
+ *
+ * The solution holds a1, a0 and ctx without copying; ctx must outlive it.
+ * Free it with gia_lde2_free. */
+typedef struct gia_lde2_sol gia_lde2_sol;
+
+gia_status gia_lde2_solve(gia_cfn a1, gia_cfn a0, void *ctx,
+                          double complex f0, double complex f1, double t_max,
+                          gia_lde2_sol **sol, double *t_fail, const char **why);
+
+/* f(t), and the traditional residual f'' + a1 f' + a0 f of the same terms
+ * (either pointer may be NULL). t must lie in [0, t_max], else GIA_E_ARG.
+ * Every exponential is guarded (numerics.md N6): GIA_E_RANGE, never inf. */
+gia_status gia_lde2_eval(const gia_lde2_sol *sol, double t,
+                         double complex *f, double complex *trad_residual,
+                         const char **why);
+
+/* The terms at t: constants c[i], roots r[i](t), and E[i] = exp(int_0^t r_i).
+ * f = sum c E, f~' = sum c r E. Exposed so that a test can form the defining
+ * equation's residual itself (vv-plan.md §2, "residual first"). A one-family
+ * solution reports one term, with c[1] = 0 and r[1] = r[0], E[1] = E[0]. */
+gia_status gia_lde2_terms(const gia_lde2_sol *sol, double t,
+                          double complex c[2], double complex r[2],
+                          double complex E[2], const char **why);
+
+void gia_lde2_free(gia_lde2_sol *sol);
+
+/* FR-IDC-007 — the binary function [02 Eq 14.7.1-14.7.7], [06 Eq 3.10-3.15]:
+ *
+ *     f' + A f^(1/2) + B f = 0,    two branches sigma = 1, 2,
+ *
+ * solved per PLAN R9 / numerics.md N4: u1, u2 are the roots of
+ * u^2 + A u + B = 0 (one characteristic serves both branches; the printed
+ * "distinct exponents per branch" is erratum X7), each branch is
+ * f_s = c_s1 e^{u1^2 t} + c_s2 e^{u2^2 t} with half-derivative
+ * sum_i c_si u_i e^{u_i^2 t}, and the constants come from
+ * [[1, 1], [u1, u2]] c_s = (f_s(0), f_s^(1/2)(0)). u1 = u2 is defined by no
+ * source and is refused (GIA_E_UNSUPPORTED). */
+typedef struct { double complex u[2]; double complex c[2][2]; } gia_binary_sol;
+
+gia_status gia_binary_solve(double complex A, double complex B,
+                            const double complex f0[2], const double complex fhalf0[2],
+                            gia_binary_sol *sol, const char **why);
+
+/* f_s(t) and f_s^(1/2)(t) for both branches (fhalf may be NULL). Returns a
+ * status rather than nothing so that an overflowing exponential is
+ * GIA_E_RANGE, never inf (NFR-NUM-003). */
+gia_status gia_binary_eval(const gia_binary_sol *sol, double t,
+                           double complex f[2], double complex fhalf[2],
+                           const char **why);
+
+/* FR-IDC-008 — the Riccati equation f' + Q f + R f^2 = P by linearisation
+ * ([06 Eq 3.16-3.18], PLAN R11, numerics.md N5). f = y'/(R y), where y solves
+ *
+ *     R y'' - (R' - Q R) y' - P R^2 y = 0,   y(0) = 1,   y~'(0) = R(0) f0,
+ *
+ * as an incipient LDE (FR-IDC-006). The printed substitution of [06 Eq 3.17],
+ * y = f'/(f R), is inverted and is not used (PLAN X2). R' is supplied by the
+ * caller, never differenced. R must not vanish. The solution is a
+ * gia_lde2_sol of y; free it with gia_lde2_free. t_fail is as for
+ * gia_lde2_solve. */
+gia_status gia_riccati_solve(gia_cfn Q, gia_cfn R, gia_cfn dR, gia_cfn P, void *ctx,
+                             double complex f0, double t_max,
+                             gia_lde2_sol **sol, double *t_fail, const char **why);
+
+/* f(t) and the traditional Riccati residual f' + Q f + R f^2 - P of the same
+ * terms (either may be NULL). Zero to rounding for constant coefficients,
+ * where the incipient and traditional solutions of the LDE coincide; for
+ * variable coefficients it is reported, not assumed (FR-IDC-008). A pole of
+ * f (y = 0) or R = 0 is GIA_E_RANGE (N5). */
+gia_status gia_riccati_eval(const gia_lde2_sol *sol, double t,
+                            double complex *f, double complex *trad_residual,
+                            const char **why);
+
+/* FR-IDC-010 — the incipient Taylor projection [09 Eq 10], [10 Eq 13]
+ * (PLAN R10, numerics.md N9):
+ *
+ *     f*(t0 + dt) = f(t0) sum_{k=0}^{n} (a dt)^k / k!,   a = f'(t0)/f(t0),
+ *
+ * by Horner in a dt. f(t0) = 0 is GIA_E_DOMAIN; n < 0 is GIA_E_ARG;
+ * n > 170 (the factorial range of a double) is GIA_E_LIMIT. [09] uses n = 2. */
+gia_status gia_idc_taylor(double f0, double df0, double dt, int n,
+                          double *out, const char **why);
+
+/* FR-IDC-009 — [02 Eq 14.10.1]: F (d~^2/dt^2) F^2 + A F^2 (d~/dt) F + B F^3 = 0.
+ * Substituting F = e^{ut}, every incipient derivative of an exponential with
+ * affine exponent is exact, and the equation reduces to (4u^2 + A u + B) e^{3ut}
+ * = 0. Its solutions are the two roots of 4u^2 + A u + B = 0, not the
+ * "triplet" printed at [02 Eq 14.10.2] (PLAN X8). */
+gia_status gia_nl1410_roots(double complex A, double complex B,
+                            double complex u[2], const char **why);
+
+/* FR-IDC-013 — what the sources do not define is refused by name, with the
+ * reason (PLAN §6). `feature` is one of:
+ *   "riccati_duet"     the direct duet form [06 Eq 3.22] (PLAN X3)
+ *   "abel_net"         Abel's n-et [06 Eq 3.25-3.27]
+ *   "solution_drift"   solution drift on a network whose flow matrix is not
+ *                      constant (FR-IDC-011)
+ * Always GIA_E_UNSUPPORTED with a reason naming the source; an unknown name
+ * is GIA_E_ARG. */
+gia_status gia_idc_refuse(const char *feature, const char **why);
+
+#endif /* GIA_IDC_H */

@@ -60,3 +60,8 @@ tools/
 # Third-party sources that are not openly licensed (text extracts, OCR,
 # page renders). Kept locally beside docs/sources/cc-by/; see docs/sources/README.md.
 docs/sources/local/
+
+# Coverage builds and reports (make coverage-report, make coverage-gia)
+coverage/
+*.gcda
+*.gcno
