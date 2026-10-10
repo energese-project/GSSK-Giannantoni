@@ -50,6 +50,12 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+- **The incipient derivative of a general function, `gia_idc_of`** (PLAN.md W2 `idc-general-f`, FR-IDC-002). New units:
+  - `include/gia_status.h` carries the Giannantoni status codes and the `why` contract (IF-API-001).
+  - `include/idc.h` and `src/idc.c` hold the single-variable incipient calculus. `gia_idc_of` computes `(f'/f)^n f` [02 Eq 14.9.5] over ℂ, with integer powers by multiplication. It refuses `f = 0` as outside the domain and an overflow as out of range, and never returns a non-finite value.
+
+  The new V&V suite `make test-mop` (`tests/test_mop.c`, in CI) checks `f = 1 + t²` against `(2t/(1+t²))ⁿ(1+t²)` for n = 0…8 at 1e-12 (T-IDC-03), and the status contract (T-API-01). `idc.c` joins the coverage gate, the symbol checks, the API check and the sanitizer run.
+
 - **ADR 0022: the kernel's matrix-exponential method is named `expm`** ([docs/adr/0022](adr/0022-kernel-method-expm.md)). `"method": "incipient"` runs a Padé matrix exponential, not Giannantoni's incipient calculus (PLAN.md §2 E2). Under ADR 0011 the kernel is the classical engine. `"expm"` becomes the documented name. `"incipient"` stays a deprecated alias with byte-identical output and a one-line notice. This is not a schema break. No behaviour changes until `kernel-method-label` lands.
 
 - **ADR 0021: ordinality as Giannantoni defines it, and a generative step under Maximum Em-Power** ([docs/adr/0021](adr/0021-ordinality-and-the-generative-step.md)). It supersedes the cycle-coverage definition of ordinality in ADRs 0014 and 0015, and ADR 0015's emergent component. ADR 0014's leg rules stand.

@@ -42,7 +42,7 @@ For `φ(t)` a real polynomial of degree ≤ 8 and integer `0 ≤ n ≤ 8`, the k
 Given `f(t) ≠ 0` and `f'(t)` in ℂ and integer `n ≥ 0`, the kernel shall compute `(f'/f)ⁿ · f`. For
 `f(t) = 0` it shall refuse (`GIA_E_DOMAIN`).
 - **Source:** [02 Eq 14.9.5], [23 Eq 5.5.2]
-- **Verification:** T-IDC-03 · **Priority:** Must · **Status:** planned · **Task:** idc-general-f
+- **Verification:** T-IDC-03 · **Priority:** Must · **Status:** implemented · **Task:** idc-general-f
 
 ### FR-IDC-003 — Traditional derivative of an exponential
 For the same φ and n as FR-IDC-001, the kernel shall compute the traditional derivative as

@@ -119,10 +119,15 @@ $(TARGET_COMPARE): $(TEST_DIR)/csv_compare.c
 # Default seed graph if MODEL is not passed explicitly
 MODEL ?= examples/giannantoni/input.json
 
+# The Giannantoni library units. Defined here, ahead of every rule that uses
+# them, because a prerequisite list is expanded when its rule is read.
+GIA_UNIT_SRCS = $(SRC_DIR)/engine.c $(SRC_DIR)/validation.c \
+                $(SRC_DIR)/projection.c $(SRC_DIR)/idc.c
+GIA_OBJS = $(patsubst $(SRC_DIR)/%.c,$(LIB_DIR)/%.o,$(GIA_UNIT_SRCS))
+
 # Simulation objects. sim_main.o carries the entry point, kept out of
 # engine.o so tests can link the engine without one.
-SIM_OBJS = $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o \
-           $(LIB_DIR)/projection.o $(LIB_DIR)/sim_main.o
+SIM_OBJS = $(GIA_OBJS) $(LIB_DIR)/sim_main.o
 
 # engine.o, validation.o and sim_main.o are built by the $(LIB_DIR)/%.o
 # pattern rule above; they need no rules of their own.
@@ -187,13 +192,24 @@ bench-giannantoni: directories $(TARGET_BENCH_GIA)
 # ordinality and the generative step.
 TARGET_TEST_GIA = $(BIN_DIR)/test_giannantoni
 
-$(TARGET_TEST_GIA): $(TEST_DIR)/test_giannantoni.c $(LIB_DIR)/engine.o \
-                    $(LIB_DIR)/validation.o $(LIB_DIR)/projection.o $(TARGET_LIB)
+$(TARGET_TEST_GIA): $(TEST_DIR)/test_giannantoni.c $(GIA_OBJS) $(TARGET_LIB)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 test-giannantoni: directories $(TARGET_TEST_GIA)
 	@echo "=== Giannantoni engine tests ==="
 	@./$(TARGET_TEST_GIA)
+
+# The Giannantoni kernel's V&V suite: docs/requirements/vv-plan.md §7, every
+# test tagged with the requirements it verifies, every oracle an equation or a
+# printed number (ADR 0018).
+TARGET_TEST_MOP = $(BIN_DIR)/test_mop
+
+$(TARGET_TEST_MOP): $(TEST_DIR)/test_mop.c $(GIA_OBJS) $(TARGET_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+.PHONY: test-mop
+test-mop: directories $(TARGET_TEST_MOP)
+	@./$(TARGET_TEST_MOP)
 
 # System tests of bin/giannantoni_sim (docs/requirements/vv-plan.md §1): the
 # run report, the CSV and the exit status, checked against docs/requirements/icd.md.
@@ -212,9 +228,7 @@ test-mop-cli: directories $(TARGET_SIM)
 #                          since LeakSanitizer is not available on macOS
 #   check-symbols          no writable data, no exit/abort, no gssk.h
 #                          (T-REE-02, T-ERR-01, INS-SEP-01)
-GIA_OBJS = $(LIB_DIR)/engine.o $(LIB_DIR)/validation.o $(LIB_DIR)/projection.o
-GIA_SRCS = $(SRC_DIR)/engine.c $(SRC_DIR)/validation.c $(SRC_DIR)/projection.c \
-           $(SRC_DIR)/cJSON.c
+GIA_SRCS = $(GIA_UNIT_SRCS) $(SRC_DIR)/cJSON.c
 TARGET_TEST_THREADS = $(BIN_DIR)/test_mop_threads
 SAN_FLAGS = -std=c99 -Iinclude -g -O1 -fno-omit-frame-pointer
 
@@ -243,6 +257,11 @@ test-mop-asan: directories
 	    || { echo "test-mop-asan: test_giannantoni FAILED under ASan/LSan/UBSan"; \
 	         ASAN_OPTIONS=detect_leaks=1 ./$(BIN_DIR)/test_giannantoni_asan 2>&1 | grep -E 'ERROR|SUMMARY|runtime error|FAIL' | head -20; exit 1; }
 	@ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ./$(BIN_DIR)/test_mop_threads_asan
+	$(CC) $(SAN_FLAGS) -fsanitize=address,undefined -fno-sanitize-recover=all \
+	    $(TEST_DIR)/test_mop.c $(GIA_SRCS) -o $(BIN_DIR)/test_mop_asan $(LDFLAGS)
+	@ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ./$(BIN_DIR)/test_mop_asan > /dev/null 2>&1 \
+	    || { echo "test-mop-asan: test_mop FAILED under ASan/LSan/UBSan"; \
+	         ASAN_OPTIONS=detect_leaks=1 ./$(BIN_DIR)/test_mop_asan 2>&1 | grep -E 'ERROR|SUMMARY|runtime error|FAIL' | head -20; exit 1; }
 	@echo "test-mop-asan: no ASan, LSan or UBSan finding"
 
 .PHONY: check-symbols
@@ -784,7 +803,7 @@ coverage-gia: directories
 
 # Every Giannantoni test binary built from tests/<name>.c. A W2-W8 suite joins
 # coverage by being listed here.
-GIA_COV_TESTS = test_giannantoni test_mop_threads
+GIA_COV_TESTS = test_giannantoni test_mop_threads test_mop
 
 # The gate's own self-test: garbage, an empty report and 89% must all fail.
 .PHONY: test-coverage-gate
@@ -1050,7 +1069,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop-cli test-mop-threads check-symbols \
+           test-gnp-loop test-giannantoni test-mop test-mop-cli test-mop-threads check-symbols \
            test-guard-no-skip test-coverage-gate check-api-called \
            test-api-called check-trace check-version test-schema
 
