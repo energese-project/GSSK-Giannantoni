@@ -30,12 +30,17 @@ static char *read_file(const char *path) {
 
 static int cmd_run(int argc, char **argv) {
   if (argc < 1) {
-    fprintf(stderr, "Usage: gssk [run] <model.json> [output.csv] [--report generativity]\n");
+    fprintf(stderr, "Usage: gssk [run] <model.json> [output.csv] [--report generativity] [--full-precision]\n");
     return EXIT_FAILURE;
   }
 
   /* Parse flags */
   int report_generativity = 0;
+  /* --full-precision prints every value with %.17g, enough to round-trip a
+   * double. The default stays %.4f / %.6f because the golden files in
+   * tests/expected are written in it; a comparison of integrators needs the
+   * full value, or it measures the rounding of the printout (FR-OUT-005). */
+  int full_precision = 0;
   const char *model_path  = NULL;
   const char *output_path = NULL;
   for (int i = 0; i < argc; i++) {
@@ -43,6 +48,8 @@ static int cmd_run(int argc, char **argv) {
         strcmp(argv[i+1], "generativity") == 0) {
       report_generativity = 1;
       i++;
+    } else if (strcmp(argv[i], "--full-precision") == 0) {
+      full_precision = 1;
     } else if (!model_path) {
       model_path = argv[i];
     } else if (!output_path) {
@@ -50,7 +57,7 @@ static int cmd_run(int argc, char **argv) {
     }
   }
   if (!model_path) {
-    fprintf(stderr, "Usage: gssk [run] <model.json> [output.csv] [--report generativity]\n");
+    fprintf(stderr, "Usage: gssk [run] <model.json> [output.csv] [--report generativity] [--full-precision]\n");
     return EXIT_FAILURE;
   }
 
@@ -92,9 +99,9 @@ static int cmd_run(int argc, char **argv) {
 
   while (t <= t_end + (dt * 0.01)) {
     const double *state = GSSK_GetState(kernel);
-    fprintf(out, "%.4f", t);
+    fprintf(out, full_precision ? "%.17g" : "%.4f", t);
     for (size_t i = 0; i < node_count; i++)
-      fprintf(out, ",%.6f", state[i]);
+      fprintf(out, full_precision ? ",%.17g" : ",%.6f", state[i]);
     fprintf(out, "\n");
 
     if (GSSK_Step(kernel, dt) != GSSK_SUCCESS) {

@@ -400,6 +400,12 @@ general-purpose ODE library. The wedge is:
 - [x] `jitter` latched once per accepted step from the instance RNG.
 - [x] Shared evaluator exported (`GSSK_EvaluateNodeForcing` /
       `GSSK_EvaluateEdgeForcing`) so consumers do not reimplement the formulas.
+- [ ] The kernel's `expm` adds processing-node flows (interaction, gain,
+      exchange, switch, loop-limited) as a constant over the step, evaluated
+      at its start, so on models those flows drive it is first order and
+      equals Euler to the digit. `docs/results/engine_comparison.md` shows it
+      (FR-OUT-005). Either integrate those flows within the step, or say in
+      ADR 0022 that expm is exact only for the linear part.
 - [x] Drive a source from observed data (tabulated series) — tracked in `crux`
       as `h8c-data-driven-forcing`. `waveform: "table"`, in Schema v5 §7's
       shape (`times`, `values`, `interpolation` step|linear,

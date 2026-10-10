@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 460" width="760" height="460" role="img" aria-labelledby="t d">
+<title id="t">exchange_price_node_x2: kernel against kernel RK4 at dt/8</title>
+<desc id="d">Storages under rk4 (markers) over the kernel RK4 at dt/8 reference (line), and the largest scaled difference from that reference over time for kernel RK4, Euler and expm.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .muted { fill: #898781; }
+  .grid { stroke: #e1e0d9; stroke-width: 1; } .axis { stroke: #c3c2b7; stroke-width: 1; }
+  .ref { stroke: #0b0b0b; stroke-width: 1.5; fill: none; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .s0 { stroke: #2a78d6; } .f0 { fill: #2a78d6; }
+  .s1 { stroke: #eb6834; } .f1 { fill: #eb6834; }
+  .s2 { stroke: #1baf7a; } .f2 { fill: #1baf7a; }
+  .s3 { stroke: #eda100; } .f3 { fill: #eda100; }
+  .s4 { stroke: #e87ba4; } .f4 { fill: #e87ba4; }
+  .s5 { stroke: #008300; } .f5 { fill: #008300; }
+  .s6 { stroke: #6250d6; } .f6 { fill: #6250d6; }
+  .s7 { stroke: #e34948; } .f7 { fill: #e34948; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .grid { stroke: #2c2c2a; } .axis { stroke: #383835; } .ref { stroke: #f0efec; }
+    .s0 { stroke: #3987e5; } .f0 { fill: #3987e5; }
+    .s1 { stroke: #d95926; } .f1 { fill: #d95926; }
+    .s2 { stroke: #199e70; } .f2 { fill: #199e70; }
+    .s3 { stroke: #c98500; } .f3 { fill: #c98500; }
+    .s4 { stroke: #d55181; } .f4 { fill: #d55181; }
+    .s5 { stroke: #008300; } .f5 { fill: #008300; }
+    .s6 { stroke: #9085e9; } .f6 { fill: #9085e9; }
+    .s7 { stroke: #e66767; } .f7 { fill: #e66767; }
+  }
+</style>
+<rect class="bg" x="0" y="0" width="760" height="460" rx="8"/>
+<text class="ink" x="16.0" y="24.0" font-size="14" text-anchor="start" font-weight="700">exchange_price_node_x2</text>
+<text class="ink2" x="210.0" y="24.0" font-size="11" text-anchor="start">line: kernel RK4 at dt/8   markers: kernel rk4 (the model's own method)</text>
+<text class="ink" x="52.0" y="50.0" font-size="12" text-anchor="start" font-weight="600">buyer</text>
+<line class="grid" x1="52.0" x2="320.0" y1="166.8" y2="166.8"/>
+<text class="muted" x="46.0" y="170.8" font-size="10" text-anchor="end">925</text>
+<line class="grid" x1="52.0" x2="320.0" y1="130.5" y2="130.5"/>
+<text class="muted" x="46.0" y="134.5" font-size="10" text-anchor="end">950</text>
+<line class="grid" x1="52.0" x2="320.0" y1="94.3" y2="94.3"/>
+<text class="muted" x="46.0" y="98.3" font-size="10" text-anchor="end">975</text>
+<line class="grid" x1="52.0" x2="320.0" y1="58.0" y2="58.0"/>
+<text class="muted" x="46.0" y="62.0" font-size="10" text-anchor="end">1e+03</text>
+<line class="axis" x1="52.0" x2="320.0" y1="196.0" y2="196.0"/>
+<text class="muted" x="52.0" y="210.0" font-size="10" text-anchor="middle">0</text>
+<text class="muted" x="119.0" y="210.0" font-size="10" text-anchor="middle">0.25</text>
+<text class="muted" x="186.0" y="210.0" font-size="10" text-anchor="middle">0.5</text>
+<text class="muted" x="253.0" y="210.0" font-size="10" text-anchor="middle">0.75</text>
+<text class="muted" x="320.0" y="210.0" font-size="10" text-anchor="middle">1</text>
+<text class="muted" x="320.0" y="222.0" font-size="10" text-anchor="end">t</text>
+<polyline class="ref" points="52.0,58.0 78.8,72.4 105.6,86.7 132.4,100.9 159.2,114.9 186.0,128.7 212.8,142.5 239.6,156.0 266.4,169.5 293.2,182.8 320.0,196.0"><title>RK4 dt/8</title></polyline>
+<circle class="f0" cx="52.0" cy="58.0" r="4" stroke="none"><title>kernel rk4 t=0: 1e+03</title></circle>
+<circle class="f0" cx="78.8" cy="72.4" r="4" stroke="none"><title>kernel rk4 t=0.1: 990</title></circle>
+<circle class="f0" cx="105.6" cy="86.7" r="4" stroke="none"><title>kernel rk4 t=0.2: 980</title></circle>
+<circle class="f0" cx="132.4" cy="100.9" r="4" stroke="none"><title>kernel rk4 t=0.3: 970</title></circle>
+<circle class="f0" cx="159.2" cy="114.9" r="4" stroke="none"><title>kernel rk4 t=0.4: 961</title></circle>
+<circle class="f0" cx="186.0" cy="128.7" r="4" stroke="none"><title>kernel rk4 t=0.5: 951</title></circle>
+<circle class="f0" cx="212.8" cy="142.5" r="4" stroke="none"><title>kernel rk4 t=0.6: 942</title></circle>
+<circle class="f0" cx="239.6" cy="156.0" r="4" stroke="none"><title>kernel rk4 t=0.7: 932</title></circle>
+<circle class="f0" cx="266.4" cy="169.5" r="4" stroke="none"><title>kernel rk4 t=0.8: 923</title></circle>
+<circle class="f0" cx="293.2" cy="182.8" r="4" stroke="none"><title>kernel rk4 t=0.9: 914</title></circle>
+<circle class="f0" cx="320.0" cy="196.0" r="4" stroke="none"><title>kernel rk4 t=1: 905</title></circle>
+<text class="ink" x="326.0" y="200.0" font-size="10" text-anchor="start">RK4 dt/8</text>
+<text class="ink" x="432.0" y="50.0" font-size="12" text-anchor="start" font-weight="600">inventory</text>
+<line class="grid" x1="432.0" x2="700.0" y1="196.0" y2="196.0"/>
+<text class="muted" x="426.0" y="200.0" font-size="10" text-anchor="end">0</text>
+<line class="grid" x1="432.0" x2="700.0" y1="159.7" y2="159.7"/>
+<text class="muted" x="426.0" y="163.7" font-size="10" text-anchor="end">2.5</text>
+<line class="grid" x1="432.0" x2="700.0" y1="123.5" y2="123.5"/>
+<text class="muted" x="426.0" y="127.5" font-size="10" text-anchor="end">5</text>
+<line class="grid" x1="432.0" x2="700.0" y1="87.2" y2="87.2"/>
+<text class="muted" x="426.0" y="91.2" font-size="10" text-anchor="end">7.5</text>
+<line class="axis" x1="432.0" x2="700.0" y1="196.0" y2="196.0"/>
+<text class="muted" x="432.0" y="210.0" font-size="10" text-anchor="middle">0</text>
+<text class="muted" x="499.0" y="210.0" font-size="10" text-anchor="middle">0.25</text>
+<text class="muted" x="566.0" y="210.0" font-size="10" text-anchor="middle">0.5</text>
+<text class="muted" x="633.0" y="210.0" font-size="10" text-anchor="middle">0.75</text>
+<text class="muted" x="700.0" y="210.0" font-size="10" text-anchor="middle">1</text>
+<text class="muted" x="700.0" y="222.0" font-size="10" text-anchor="end">t</text>
+<polyline class="ref" points="432.0,196.0 458.8,181.6 485.6,167.3 512.4,153.1 539.2,139.1 566.0,125.3 592.8,111.5 619.6,98.0 646.4,84.5 673.2,71.2 700.0,58.0"><title>RK4 dt/8</title></polyline>
+<circle class="f0" cx="432.0" cy="196.0" r="4" stroke="none"><title>kernel rk4 t=0: 0</title></circle>
+<circle class="f0" cx="458.8" cy="181.6" r="4" stroke="none"><title>kernel rk4 t=0.1: 0.995</title></circle>
+<circle class="f0" cx="485.6" cy="167.3" r="4" stroke="none"><title>kernel rk4 t=0.2: 1.98</title></circle>
+<circle class="f0" cx="512.4" cy="153.1" r="4" stroke="none"><title>kernel rk4 t=0.3: 2.96</title></circle>
+<circle class="f0" cx="539.2" cy="139.1" r="4" stroke="none"><title>kernel rk4 t=0.4: 3.92</title></circle>
+<circle class="f0" cx="566.0" cy="125.3" r="4" stroke="none"><title>kernel rk4 t=0.5: 4.88</title></circle>
+<circle class="f0" cx="592.8" cy="111.5" r="4" stroke="none"><title>kernel rk4 t=0.6: 5.82</title></circle>
+<circle class="f0" cx="619.6" cy="98.0" r="4" stroke="none"><title>kernel rk4 t=0.7: 6.76</title></circle>
+<circle class="f0" cx="646.4" cy="84.5" r="4" stroke="none"><title>kernel rk4 t=0.8: 7.69</title></circle>
+<circle class="f0" cx="673.2" cy="71.2" r="4" stroke="none"><title>kernel rk4 t=0.9: 8.61</title></circle>
+<circle class="f0" cx="700.0" cy="58.0" r="4" stroke="none"><title>kernel rk4 t=1: 9.52</title></circle>
+<text class="ink" x="706.0" y="62.0" font-size="10" text-anchor="start">RK4 dt/8</text>
+<text class="ink" x="52.0" y="246.0" font-size="12" text-anchor="start" font-weight="600">Largest scaled |kernel − kernel RK4 at dt/8| over the storages  (log scale)</text>
+<line class="grid" x1="52.0" x2="668.0" y1="422.0" y2="422.0"/>
+<text class="muted" x="46.0" y="426.0" font-size="10" text-anchor="end">1e-13</text>
+<line class="grid" x1="52.0" x2="668.0" y1="391.5" y2="391.5"/>
+<text class="muted" x="46.0" y="395.5" font-size="10" text-anchor="end">1e-11</text>
+<line class="grid" x1="52.0" x2="668.0" y1="360.9" y2="360.9"/>
+<text class="muted" x="46.0" y="364.9" font-size="10" text-anchor="end">1e-9</text>
+<line class="grid" x1="52.0" x2="668.0" y1="330.4" y2="330.4"/>
+<text class="muted" x="46.0" y="334.4" font-size="10" text-anchor="end">1e-7</text>
+<line class="grid" x1="52.0" x2="668.0" y1="299.8" y2="299.8"/>
+<text class="muted" x="46.0" y="303.8" font-size="10" text-anchor="end">1e-5</text>
+<line class="grid" x1="52.0" x2="668.0" y1="269.3" y2="269.3"/>
+<text class="muted" x="46.0" y="273.3" font-size="10" text-anchor="end">1e-3</text>
+<line class="axis" x1="52.0" x2="668.0" y1="422.0" y2="422.0"/>
+<text class="muted" x="52.0" y="436.0" font-size="10" text-anchor="middle">0</text>
+<text class="muted" x="206.0" y="436.0" font-size="10" text-anchor="middle">0.25</text>
+<text class="muted" x="360.0" y="436.0" font-size="10" text-anchor="middle">0.5</text>
+<text class="muted" x="514.0" y="436.0" font-size="10" text-anchor="middle">0.75</text>
+<text class="muted" x="668.0" y="436.0" font-size="10" text-anchor="middle">1</text>
+<text class="muted" x="668.0" y="448.0" font-size="10" text-anchor="end">t</text>
+<polyline class="s0" points="52.0,422.0 113.6,392.3 175.2,387.8 236.8,385.2 298.4,383.4 360.0,381.9 421.6,380.8 483.2,379.8 544.8,379.0 606.4,378.3 668.0,377.7" stroke-width="2" fill="none" stroke-linejoin="round"><title>RK4</title></polyline>
+<polyline class="s1" points="52.0,422.0 113.6,273.6 175.2,269.0 236.8,266.4 298.4,264.6 360.0,263.2 421.6,262.0 483.2,261.1 544.8,260.2 606.4,259.5 668.0,258.9" stroke-width="2" fill="none" stroke-linejoin="round"><title>Euler</title></polyline>
+<polyline class="s2" points="52.0,422.0 113.6,273.6 175.2,269.0 236.8,266.4 298.4,264.6 360.0,263.2 421.6,262.0 483.2,261.1 544.8,260.2 606.4,259.5 668.0,258.9" stroke-width="2" fill="none" stroke-linejoin="round"><title>expm</title></polyline>
+<text class="ink2" x="674.0" y="262.9" font-size="10" text-anchor="start">Euler</text>
+<text class="ink2" x="674.0" y="274.9" font-size="10" text-anchor="start">expm</text>
+<text class="ink2" x="674.0" y="381.7" font-size="10" text-anchor="start">RK4</text>
+</svg>

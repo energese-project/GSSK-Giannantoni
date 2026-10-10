@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 460" width="760" height="460" role="img" aria-labelledby="t d">
+<title id="t">simple_model: kernel against Giannantoni exp(At)</title>
+<desc id="d">Storages under euler (markers) over the Giannantoni exp(At) reference (line), and the largest scaled difference from that reference over time for kernel RK4, Euler and expm.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .muted { fill: #898781; }
+  .grid { stroke: #e1e0d9; stroke-width: 1; } .axis { stroke: #c3c2b7; stroke-width: 1; }
+  .ref { stroke: #0b0b0b; stroke-width: 1.5; fill: none; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .s0 { stroke: #2a78d6; } .f0 { fill: #2a78d6; }
+  .s1 { stroke: #eb6834; } .f1 { fill: #eb6834; }
+  .s2 { stroke: #1baf7a; } .f2 { fill: #1baf7a; }
+  .s3 { stroke: #eda100; } .f3 { fill: #eda100; }
+  .s4 { stroke: #e87ba4; } .f4 { fill: #e87ba4; }
+  .s5 { stroke: #008300; } .f5 { fill: #008300; }
+  .s6 { stroke: #6250d6; } .f6 { fill: #6250d6; }
+  .s7 { stroke: #e34948; } .f7 { fill: #e34948; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .ink { fill: #f0efec; } .ink2 { fill: #c3c2b7; }
+    .grid { stroke: #2c2c2a; } .axis { stroke: #383835; } .ref { stroke: #f0efec; }
+    .s0 { stroke: #3987e5; } .f0 { fill: #3987e5; }
+    .s1 { stroke: #d95926; } .f1 { fill: #d95926; }
+    .s2 { stroke: #199e70; } .f2 { fill: #199e70; }
+    .s3 { stroke: #c98500; } .f3 { fill: #c98500; }
+    .s4 { stroke: #d55181; } .f4 { fill: #d55181; }
+    .s5 { stroke: #008300; } .f5 { fill: #008300; }
+    .s6 { stroke: #9085e9; } .f6 { fill: #9085e9; }
+    .s7 { stroke: #e66767; } .f7 { fill: #e66767; }
+  }
+</style>
+<rect class="bg" x="0" y="0" width="760" height="460" rx="8"/>
+<text class="ink" x="16.0" y="24.0" font-size="14" text-anchor="start" font-weight="700">simple_model</text>
+<text class="ink2" x="130.0" y="24.0" font-size="11" text-anchor="start">line: Giannantoni exp(At)   markers: kernel euler (the model's own method)</text>
+<text class="ink" x="52.0" y="50.0" font-size="12" text-anchor="start" font-weight="600">grass</text>
+<line class="grid" x1="52.0" x2="668.0" y1="175.3" y2="175.3"/>
+<text class="muted" x="46.0" y="179.3" font-size="10" text-anchor="end">25</text>
+<line class="grid" x1="52.0" x2="668.0" y1="140.8" y2="140.8"/>
+<text class="muted" x="46.0" y="144.8" font-size="10" text-anchor="end">50</text>
+<line class="grid" x1="52.0" x2="668.0" y1="106.3" y2="106.3"/>
+<text class="muted" x="46.0" y="110.3" font-size="10" text-anchor="end">75</text>
+<line class="grid" x1="52.0" x2="668.0" y1="71.8" y2="71.8"/>
+<text class="muted" x="46.0" y="75.8" font-size="10" text-anchor="end">100</text>
+<line class="axis" x1="52.0" x2="668.0" y1="196.0" y2="196.0"/>
+<text class="muted" x="52.0" y="210.0" font-size="10" text-anchor="middle">0</text>
+<text class="muted" x="206.0" y="210.0" font-size="10" text-anchor="middle">2.5</text>
+<text class="muted" x="360.0" y="210.0" font-size="10" text-anchor="middle">5</text>
+<text class="muted" x="514.0" y="210.0" font-size="10" text-anchor="middle">7.5</text>
+<text class="muted" x="668.0" y="210.0" font-size="10" text-anchor="middle">10</text>
+<text class="muted" x="668.0" y="222.0" font-size="10" text-anchor="end">t</text>
+<polyline class="ref" points="52.0,196.0 58.2,194.6 64.3,193.2 70.5,191.9 76.6,190.5 82.8,189.1 89.0,187.7 95.1,186.3 101.3,185.0 107.4,183.6 113.6,182.2 119.8,180.8 125.9,179.4 132.1,178.1 138.2,176.7 144.4,175.3 150.6,173.9 156.7,172.5 162.9,171.2 169.0,169.8 175.2,168.4 181.4,167.0 187.5,165.6 193.7,164.3 199.8,162.9 206.0,161.5 212.2,160.1 218.3,158.7 224.5,157.4 230.6,156.0 236.8,154.6 243.0,153.2 249.1,151.8 255.3,150.5 261.4,149.1 267.6,147.7 273.8,146.3 279.9,144.9 286.1,143.6 292.2,142.2 298.4,140.8 304.6,139.4 310.7,138.0 316.9,136.7 323.0,135.3 329.2,133.9 335.4,132.5 341.5,131.1 347.7,129.8 353.8,128.4 360.0,127.0 366.2,125.6 372.3,124.2 378.5,122.9 384.6,121.5 390.8,120.1 397.0,118.7 403.1,117.3 409.3,116.0 415.4,114.6 421.6,113.2 427.8,111.8 433.9,110.4 440.1,109.1 446.2,107.7 452.4,106.3 458.6,104.9 464.7,103.5 470.9,102.2 477.0,100.8 483.2,99.4 489.4,98.0 495.5,96.6 501.7,95.3 507.8,93.9 514.0,92.5 520.2,91.1 526.3,89.7 532.5,88.4 538.6,87.0 544.8,85.6 551.0,84.2 557.1,82.8 563.3,81.5 569.4,80.1 575.6,78.7 581.8,77.3 587.9,75.9 594.1,74.6 600.2,73.2 606.4,71.8 612.6,70.4 618.7,69.0 624.9,67.7 631.0,66.3 637.2,64.9 643.4,63.5 649.5,62.1 655.7,60.8 661.8,59.4 668.0,58.0"><title>exp(At)</title></polyline>
+<circle class="f1" cx="52.0" cy="196.0" r="4" stroke="none"><title>kernel euler t=0: 10</title></circle>
+<circle class="f1" cx="89.0" cy="187.7" r="4" stroke="none"><title>kernel euler t=0.6: 16</title></circle>
+<circle class="f1" cx="125.9" cy="179.4" r="4" stroke="none"><title>kernel euler t=1.2: 22</title></circle>
+<circle class="f1" cx="162.9" cy="171.2" r="4" stroke="none"><title>kernel euler t=1.8: 28</title></circle>
+<circle class="f1" cx="199.8" cy="162.9" r="4" stroke="none"><title>kernel euler t=2.4: 34</title></circle>
+<circle class="f1" cx="236.8" cy="154.6" r="4" stroke="none"><title>kernel euler t=3: 40</title></circle>
+<circle class="f1" cx="273.8" cy="146.3" r="4" stroke="none"><title>kernel euler t=3.6: 46</title></circle>
+<circle class="f1" cx="310.7" cy="138.0" r="4" stroke="none"><title>kernel euler t=4.2: 52</title></circle>
+<circle class="f1" cx="347.7" cy="129.8" r="4" stroke="none"><title>kernel euler t=4.8: 58</title></circle>
+<circle class="f1" cx="384.6" cy="121.5" r="4" stroke="none"><title>kernel euler t=5.4: 64</title></circle>
+<circle class="f1" cx="421.6" cy="113.2" r="4" stroke="none"><title>kernel euler t=6: 70</title></circle>
+<circle class="f1" cx="458.6" cy="104.9" r="4" stroke="none"><title>kernel euler t=6.6: 76</title></circle>
+<circle class="f1" cx="495.5" cy="96.6" r="4" stroke="none"><title>kernel euler t=7.2: 82</title></circle>
+<circle class="f1" cx="532.5" cy="88.4" r="4" stroke="none"><title>kernel euler t=7.8: 88</title></circle>
+<circle class="f1" cx="569.4" cy="80.1" r="4" stroke="none"><title>kernel euler t=8.4: 94</title></circle>
+<circle class="f1" cx="606.4" cy="71.8" r="4" stroke="none"><title>kernel euler t=9: 100</title></circle>
+<circle class="f1" cx="643.4" cy="63.5" r="4" stroke="none"><title>kernel euler t=9.6: 106</title></circle>
+<text class="ink" x="674.0" y="62.0" font-size="10" text-anchor="start">exp(At)</text>
+<text class="ink" x="52.0" y="246.0" font-size="12" text-anchor="start" font-weight="600">Largest scaled |kernel − Giannantoni exp(At)| over the storages  (log scale)</text>
+<line class="grid" x1="52.0" x2="668.0" y1="422.0" y2="422.0"/>
+<text class="muted" x="46.0" y="426.0" font-size="10" text-anchor="end">1e-13</text>
+<line class="grid" x1="52.0" x2="668.0" y1="254.0" y2="254.0"/>
+<text class="muted" x="46.0" y="258.0" font-size="10" text-anchor="end">1e-12</text>
+<line class="axis" x1="52.0" x2="668.0" y1="422.0" y2="422.0"/>
+<text class="muted" x="52.0" y="436.0" font-size="10" text-anchor="middle">0</text>
+<text class="muted" x="206.0" y="436.0" font-size="10" text-anchor="middle">2.5</text>
+<text class="muted" x="360.0" y="436.0" font-size="10" text-anchor="middle">5</text>
+<text class="muted" x="514.0" y="436.0" font-size="10" text-anchor="middle">7.5</text>
+<text class="muted" x="668.0" y="436.0" font-size="10" text-anchor="middle">10</text>
+<text class="muted" x="668.0" y="448.0" font-size="10" text-anchor="end">t</text>
+<polyline class="s0" points="52.0,422.0 58.2,422.0 64.3,422.0 70.5,422.0 76.6,422.0 82.8,422.0 89.0,422.0 95.1,422.0 101.3,422.0 107.4,422.0 113.6,422.0 119.8,422.0 125.9,422.0 132.1,422.0 138.2,422.0 144.4,422.0 150.6,422.0 156.7,422.0 162.9,422.0 169.0,422.0 175.2,422.0 181.4,422.0 187.5,422.0 193.7,422.0 199.8,422.0 206.0,422.0 212.2,422.0 218.3,422.0 224.5,422.0 230.6,422.0 236.8,422.0 243.0,422.0 249.1,422.0 255.3,422.0 261.4,422.0 267.6,422.0 273.8,422.0 279.9,422.0 286.1,422.0 292.2,422.0 298.4,422.0 304.6,422.0 310.7,422.0 316.9,422.0 323.0,422.0 329.2,422.0 335.4,422.0 341.5,422.0 347.7,422.0 353.8,422.0 360.0,422.0 366.2,422.0 372.3,422.0 378.5,422.0 384.6,422.0 390.8,422.0 397.0,422.0 403.1,422.0 409.3,422.0 415.4,422.0 421.6,422.0 427.8,422.0 433.9,422.0 440.1,422.0 446.2,422.0 452.4,422.0 458.6,422.0 464.7,422.0 470.9,422.0 477.0,422.0 483.2,422.0 489.4,422.0 495.5,422.0 501.7,422.0 507.8,422.0 514.0,422.0 520.2,422.0 526.3,422.0 532.5,422.0 538.6,422.0 544.8,422.0 551.0,422.0 557.1,422.0 563.3,422.0 569.4,422.0 575.6,422.0 581.8,422.0 587.9,422.0 594.1,422.0 600.2,422.0 606.4,422.0 612.6,422.0 618.7,422.0 624.9,422.0 631.0,422.0 637.2,422.0 643.4,422.0 649.5,422.0 655.7,422.0 661.8,422.0 668.0,422.0" stroke-width="2" fill="none" stroke-linejoin="round"><title>RK4</title></polyline>
+<polyline class="s1" points="52.0,422.0 58.2,422.0 64.3,422.0 70.5,422.0 76.6,422.0 82.8,422.0 89.0,422.0 95.1,422.0 101.3,422.0 107.4,422.0 113.6,422.0 119.8,422.0 125.9,422.0 132.1,422.0 138.2,422.0 144.4,422.0 150.6,422.0 156.7,422.0 162.9,422.0 169.0,422.0 175.2,422.0 181.4,422.0 187.5,422.0 193.7,422.0 199.8,422.0 206.0,422.0 212.2,422.0 218.3,422.0 224.5,422.0 230.6,422.0 236.8,422.0 243.0,422.0 249.1,422.0 255.3,422.0 261.4,422.0 267.6,422.0 273.8,422.0 279.9,422.0 286.1,422.0 292.2,422.0 298.4,422.0 304.6,422.0 310.7,422.0 316.9,422.0 323.0,422.0 329.2,422.0 335.4,422.0 341.5,422.0 347.7,422.0 353.8,422.0 360.0,422.0 366.2,422.0 372.3,422.0 378.5,422.0 384.6,422.0 390.8,422.0 397.0,422.0 403.1,422.0 409.3,422.0 415.4,422.0 421.6,422.0 427.8,422.0 433.9,422.0 440.1,422.0 446.2,422.0 452.4,422.0 458.6,422.0 464.7,422.0 470.9,422.0 477.0,422.0 483.2,422.0 489.4,422.0 495.5,422.0 501.7,422.0 507.8,422.0 514.0,422.0 520.2,422.0 526.3,422.0 532.5,422.0 538.6,422.0 544.8,422.0 551.0,422.0 557.1,422.0 563.3,422.0 569.4,422.0 575.6,422.0 581.8,422.0 587.9,422.0 594.1,422.0 600.2,422.0 606.4,422.0 612.6,422.0 618.7,422.0 624.9,422.0 631.0,422.0 637.2,422.0 643.4,422.0 649.5,422.0 655.7,422.0 661.8,422.0 668.0,422.0" stroke-width="2" fill="none" stroke-linejoin="round"><title>Euler</title></polyline>
+<polyline class="s2" points="52.0,422.0 58.2,422.0 64.3,422.0 70.5,422.0 76.6,422.0 82.8,422.0 89.0,422.0 95.1,422.0 101.3,422.0 107.4,422.0 113.6,422.0 119.8,422.0 125.9,422.0 132.1,422.0 138.2,422.0 144.4,422.0 150.6,422.0 156.7,422.0 162.9,422.0 169.0,422.0 175.2,422.0 181.4,422.0 187.5,422.0 193.7,422.0 199.8,422.0 206.0,422.0 212.2,422.0 218.3,422.0 224.5,422.0 230.6,422.0 236.8,422.0 243.0,422.0 249.1,422.0 255.3,422.0 261.4,422.0 267.6,422.0 273.8,422.0 279.9,422.0 286.1,422.0 292.2,422.0 298.4,422.0 304.6,422.0 310.7,422.0 316.9,422.0 323.0,422.0 329.2,422.0 335.4,422.0 341.5,422.0 347.7,422.0 353.8,422.0 360.0,422.0 366.2,422.0 372.3,422.0 378.5,422.0 384.6,422.0 390.8,422.0 397.0,422.0 403.1,422.0 409.3,422.0 415.4,422.0 421.6,422.0 427.8,422.0 433.9,422.0 440.1,422.0 446.2,422.0 452.4,422.0 458.6,422.0 464.7,422.0 470.9,422.0 477.0,422.0 483.2,422.0 489.4,422.0 495.5,422.0 501.7,422.0 507.8,422.0 514.0,422.0 520.2,422.0 526.3,422.0 532.5,422.0 538.6,422.0 544.8,422.0 551.0,422.0 557.1,422.0 563.3,422.0 569.4,422.0 575.6,422.0 581.8,422.0 587.9,422.0 594.1,422.0 600.2,422.0 606.4,422.0 612.6,422.0 618.7,422.0 624.9,422.0 631.0,422.0 637.2,422.0 643.4,422.0 649.5,422.0 655.7,422.0 661.8,422.0 668.0,422.0" stroke-width="2" fill="none" stroke-linejoin="round"><title>expm</title></polyline>
+<text class="ink2" x="674.0" y="426.0" font-size="10" text-anchor="start">Euler</text>
+<text class="ink2" x="674.0" y="438.0" font-size="10" text-anchor="start">RK4</text>
+<text class="ink2" x="674.0" y="450.0" font-size="10" text-anchor="start">expm</text>
+</svg>
