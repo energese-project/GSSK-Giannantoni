@@ -28,6 +28,11 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Changed
 
+- **TODO.md tidied.** Nine items finished by earlier work are now ticked, each naming what did it:
+  the relational algebra, network coupling, the projection and coverage report, Odum's fourth rule,
+  carriers, forcing, and the module/harmony-row decision. `mop_network_coupling_requirements.md`
+  and the assessment's emergy note now say they are met.
+
 - **All 88 requirements are `implemented`.** The BR-* acceptance lines were checked against `main`,
   and NFR-DET-002, NFR-POR-001, IF-API-002 and IF-API-004 were flipped. The README's status note now
   describes what the second engine implements, where it previously said it implemented none of it.
@@ -95,6 +100,26 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **The Guix toolchain pack is no longer attached to releases.** At ~450 MB it is produced on demand instead (`guix.yml`, run by hand with `pack-toolchain`). Releases still ship the Guix-built `gssk.wasm`, its hashes and the recipe.
 
 ### Added
+
+- **`bin/gia_bridge`: one GSSK-schema model through both engines** (FR-BRG-001).
+  - It steps the model with the kernel (`--method euler|rk4|expm|auto|adaptive`), solves the
+    model's projection with the Giannantoni engine on the same grid, and reports the largest
+    difference per node. `--csv` writes both trajectories and their difference.
+  - The difference is labelled `classical`: it is the kernel integrator's error against the exact
+    exponential, not incipient drift.
+  - A partly projected model is refused (exit 2).
+  - `make test-bridge` (T-BRG-01, in CI) checks the Euler, RK4 and exponential cases against
+    their closed forms.
+
+- **Three example seeds for the Giannantoni engine**, each checked by hand in `tests/mop_cli.sh` and
+  `test_mop.c`:
+  - `trophic_chain.json`: the network harmony verdict is computed.
+  - `coproduction.json`: the ordinality record shows ½ and 2 couples, and the generative step adds
+    three pathways.
+  - `harmonic_couples.json`: `--mop-out` writes `R_H = 0`.
+
+  Every seed now runs through the CLI system tests, and `docs/results/harmony_verdicts.md` lists
+  them all.
 
 - **`make check-errata`** (VAL-08, in CI): every erratum in PLAN.md §5 has a test assertion naming
   it. X6 and X9 gain theirs.
@@ -250,6 +275,10 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 - **Makefile targets for trees this fork does not carry.** `test-python`, `demo-python`, `plot-demo`, `demo-native`, `container-image-demo` (with `Containerfile.demo`) and the LaTeX targets `doco`, `whitepaper`, `article`, `conformance`, `doco-clean` all ran against `python/` or `doco/`, neither of which came across from GSSK, so every one of them failed. `make demo` stays, now native and plot-free, printing what the README already described.
 
 ### Fixed
+
+- **The harmony constructor's matrix is sized by components, not nodes** (ADRs 0014, 0021). It had one
+  row per node, including modules and habitat, under a "components N" label: `input.json` reported
+  N = 5 for its two components.
 
 - **CI now runs three suites it had been skipping**: `test-mop-emergence`, `test-kernel-method` and
   `test-coverage-gate` were in `CI_TESTS` but had no step in `deploy.yml`.

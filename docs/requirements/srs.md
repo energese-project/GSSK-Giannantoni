@@ -363,6 +363,18 @@ exponential.
 - **Source:** PLAN R15
 - **Verification:** T-KER-01 · **Priority:** Should · **Status:** implemented · **Task:** kernel-method-label
 
+### 2.9 Between the engines
+
+### FR-BRG-001 — One model through both engines
+Given a GSSK-schema model, a tool shall step it with the kernel, by a chosen method, and solve its
+projection (ADR 0011) with the Giannantoni engine, at the kernel's step times. It shall report, for
+every node both engines hold, the largest absolute and relative difference, and label that
+difference `classical`, since both trajectories are classical (PLAN E3). It shall refuse, with the
+coverage report, a model the projection carries only in part: the dropped pathways change the
+equations of the nodes they touched, so a difference would measure them, not integration error.
+- **Source:** TODO.md §10.5 (the bridge); ADR 0011; PLAN E3
+- **Verification:** T-BRG-01 · **Priority:** Could · **Status:** implemented · **Task:** engine-bridge
+
 ---
 
 ## 3. Non-functional requirements

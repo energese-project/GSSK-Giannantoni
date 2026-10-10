@@ -240,6 +240,17 @@ $(TARGET_TEST_EMERGENCE): $(TEST_DIR)/test_mop_emergence.c $(LIB_DIR)/mop.o $(LI
 test-mop-emergence: directories $(TARGET_TEST_EMERGENCE)
 	@./$(TARGET_TEST_EMERGENCE)
 
+# FR-BRG-001 (T-BRG-01): one GSSK-schema model through both engines. The one
+# binary that links both; neither engine's units include the other's header.
+TARGET_BRIDGE = $(BIN_DIR)/gia_bridge
+
+$(TARGET_BRIDGE): $(SRC_DIR)/bridge_main.c $(GIA_OBJS) $(TARGET_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+.PHONY: test-bridge
+test-bridge: directories $(TARGET_BRIDGE)
+	@sh $(TEST_DIR)/bridge_cli.sh
+
 # VAL-08 (BR-010): every erratum in PLAN.md §5 has a test assertion naming it.
 .PHONY: check-errata
 check-errata:
@@ -1113,7 +1124,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-unknown-keys test-deactivation test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
-           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-mop-threads check-symbols check-errata check-ci-matrix \
+           test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-bridge test-mop-threads check-symbols check-errata check-ci-matrix \
            test-guard-no-skip test-coverage-gate check-api-called \
            test-api-called check-trace check-version test-schema
 

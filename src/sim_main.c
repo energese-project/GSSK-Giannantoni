@@ -489,9 +489,11 @@ int main(int argc, char **argv) {
     printf("  plus conservation and emergy_excess for the run as a whole\n");
     if (show_table) gia_print_trajectories(&model, steps);
 
-    /* ---- The harmony CONSTRUCTOR: assumed, and labelled so (FR-HAR-004) ---- */
-    if (model.n_nodes >= 2) {
-        if (!gia_harmony_assume_init(&harmony, model.n_nodes,
+    /* ---- The harmony CONSTRUCTOR: assumed, and labelled so (FR-HAR-004) ----
+     * Sized by components, not nodes: a module holds nothing and habitat sits
+     * outside the system (ADRs 0014, 0021), so neither has a row. */
+    if (component_total(&model) >= 2) {
+        if (!gia_harmony_assume_init(&harmony, component_total(&model),
                               reference_couple(&model))) {
             fprintf(stderr, "cannot build harmony matrix\n");
             goto done;

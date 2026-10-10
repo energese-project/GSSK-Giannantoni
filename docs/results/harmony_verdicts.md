@@ -28,9 +28,38 @@ The verdicts come from the detector (`gia_harmony_verdict`, vv-plan.md §6). The
 | `examples/giannantoni/closed_loop.json` | second_equation | imposed |
 | `examples/giannantoni/closed_loop.json` | eqs | imposed |
 | `examples/giannantoni/closed_loop.json` | network | not evaluated |
+| `examples/giannantoni/trophic_chain.json` | first_equation | transported |
+| `examples/giannantoni/trophic_chain.json` | second_equation | imposed |
+| `examples/giannantoni/trophic_chain.json` | eqs | imposed |
+| `examples/giannantoni/trophic_chain.json` | network | absent |
+| `examples/giannantoni/coproduction.json` | first_equation | transported |
+| `examples/giannantoni/coproduction.json` | second_equation | imposed |
+| `examples/giannantoni/coproduction.json` | eqs | imposed |
+| `examples/giannantoni/coproduction.json` | network | absent |
+| `examples/giannantoni/harmonic_couples.json` | first_equation | transported |
+| `examples/giannantoni/harmonic_couples.json` | second_equation | imposed |
+| `examples/giannantoni/harmonic_couples.json` | eqs | imposed |
+| `examples/giannantoni/harmonic_couples.json` | network | absent |
 
 Why each "not evaluated" row:
 
 - **`input.json`** has two components, `store_1` and `consumer_1`, so N = 2 < 3.
 - **`closed_loop.json`'s network** has no residual: `source_1` has no `quality_input`, so every
   pathway carries zero emergy, and `e^α = 0` has no logarithm.
+
+Why each network row is `absent`:
+
+- **`trophic_chain.json`** (reference `producer → herbivore`, set in its `mop` block).
+  - Its row holds the two direct pathways `producer → herbivore` and `producer → decomposer`.
+  - Both carry positive real emergy, so their ratio is a positive real number.
+  - The one root for N = 3 is −1, so R_H = |ratio + 1| > 1.
+  - This is the only example where the network residual is computed. The run's MOP CSV shows it at
+    every step.
+- **`coproduction.json`** (reference `nutrients`, `seeds`: the first two by id). No pathway runs
+  directly between two components; every one passes through the `growth` module. The row is
+  therefore unrelated, and the residual is undefined.
+- **`harmonic_couples.json`** (reference `a`, `b`). `a` has a direct pathway to `b` but not to `c`,
+  so the row is not fully related.
+
+  Its *seeded* couples are a different matter. They make the MOP CSV's `R_H` exactly 0 (to
+  rounding): it is the `mop` block's First Equation row, not the network's, that is harmonic.

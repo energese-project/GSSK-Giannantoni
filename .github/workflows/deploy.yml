@@ -210,6 +210,11 @@ jobs:
       - name: Kernel method label
         run: make test-kernel-method
 
+      # FR-BRG-001 (T-BRG-01): one model through both engines; the differences
+      # against the Euler, RK4 and exponential closed forms.
+      - name: Bridge between the engines
+        run: make test-bridge
+
       # NFR-REE-001: two models on two threads give what each gives alone.
       - name: Giannantoni reentrancy
         run: make test-mop-threads

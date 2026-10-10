@@ -1,0 +1,23 @@
+{
+  "system_name": "Trophic chain: producer, herbivore, decomposer",
+  "nodes": [
+    { "id": "sun", "label": "Sunlight", "type": "source", "initial_value": 2.0, "quality_input": 1.0 },
+    { "id": "producer", "label": "Producers", "type": "storage", "current_level": 5.0 },
+    { "id": "herbivore", "label": "Herbivores", "type": "storage", "current_level": 1.0 },
+    { "id": "decomposer", "label": "Decomposers", "type": "storage", "current_level": 0.5 },
+    { "id": "heat", "label": "Heat sink", "type": "sink" }
+  ],
+  "edges": [
+    { "source": "sun", "target": "producer", "weight": 0.5, "label": "photosynthesis" },
+    { "source": "producer", "target": "herbivore", "weight": 0.2, "label": "grazing" },
+    { "source": "producer", "target": "decomposer", "weight": 0.1, "label": "litter" },
+    { "source": "herbivore", "target": "decomposer", "weight": 0.15, "label": "detritus" },
+    { "source": "decomposer", "target": "heat", "weight": 0.3, "label": "respiration" }
+  ],
+  "simulation_params": { "t_val": 2.0, "derivative_order": 2, "generative_mode": true },
+  "mop": {
+    "k": 1,
+    "reference": ["producer", "herbivore"],
+    "beta": "network"
+  }
+}

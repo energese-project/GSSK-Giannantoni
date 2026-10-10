@@ -427,7 +427,7 @@ implementation task; for now Padé with per-step error monitoring is the fallbac
 
 ### Phase 2 — Emergy accounting layer (emergy/transformity, additive API)
 - The `quality_input` / transformity system (Brown 2025) is already implemented
-- Full Giannantoni emergy algebra (max co-product rule vs. sum) is deferred
+- Odum's fourth rule (maximum within inflows sharing a co-production, sum across independent ones) is implemented in the Giannantoni engine and checked by VAL-03; the ordinal forms are FR-EM-005/006
 - **Complexity**: medium. One additional `double*` array, second pass over edges.
 
 ### Phase 3 — Fractional/ordinal generativity ◐ PARTIALLY IMPLEMENTED
