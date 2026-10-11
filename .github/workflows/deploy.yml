@@ -4,6 +4,10 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
+  # Only for a tag ref, and only so `tag-release` below can start the tag's
+  # own run: a tag pushed with GITHUB_TOKEN triggers no workflow (GitHub's
+  # recursion guard), but a workflow_dispatch sent with it does.
+  workflow_dispatch:
   # `branches` here filters on the PR's BASE, not its head. It listed only
   # `main`, so a PR stacked on another feature branch ran none of the jobs
   # below — no build matrix, no WASM, no quality gate. GitHub still showed the
@@ -20,8 +24,9 @@ on:
   # the next stacked `fix/` or `docs/` PR silently unverified in the same way.
   #
   # This cannot cause a deploy or a release: both are additionally gated on
-  # `github.event_name == 'push'` and a main/tag ref, so a pull_request event
-  # can never satisfy them however it is targeted.
+  # a `push` (or, for a tag ref only, the `workflow_dispatch` tag-release
+  # sends) and a main/tag ref, so a pull_request event can never satisfy them
+  # however it is targeted.
   pull_request:
     branches:
       - main
@@ -543,7 +548,9 @@ jobs:
   # produce it on demand (workflow_dispatch, pack-toolchain).
   # ────────────────────────────────────────────────────────────
   guix:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/guix.yml
 
   release:
@@ -551,11 +558,13 @@ jobs:
     # `guix` is skipped on main and required on tags; an `if` that names no
     # status function would skip this job whenever a need was skipped.
     if: >-
-      !cancelled() && github.event_name == 'push' &&
+      !cancelled() &&
       needs.build-native.result == 'success' && needs.quality.result == 'success' &&
       needs.wasm.result == 'success' &&
-      ((github.ref == 'refs/heads/main' && needs.guix.result == 'skipped') ||
-       (startsWith(github.ref, 'refs/tags/v') && needs.guix.result == 'success'))
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+        needs.guix.result == 'skipped') ||
+       ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+        startsWith(github.ref, 'refs/tags/v') && needs.guix.result == 'success'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -700,3 +709,53 @@ jobs:
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # A release is a merged version bump (scripts/release.sh, through a PR).
+  # When one lands on main and every job above is green, tag it here and start
+  # the tag's own run, which builds with Guix and publishes the versioned
+  # GitHub Release. Nobody has to push the tag by hand.
+  #
+  # Tags only when THIS push changed GSK_VERSION_STRING: a main whose version
+  # merely has no tag (5.3.0, before tags existed) is not a release. A failed
+  # run retries correctly with "Re-run jobs", which keeps the push's `before`.
+  tag-release:
+    needs: [ release ]
+    if: >-
+      !cancelled() && needs.release.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the tag
+      actions: write    # dispatch the tag's run
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag a version bump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          ver() { sed -n 's/^#define GSK_VERSION_STRING "\(.*\)"$/\1/p'; }
+          new=$(ver < include/gssk.h)
+          old=$(git show "$BEFORE:include/gssk.h" 2>/dev/null | ver || true)
+          tag="v$new"
+          if [ "$new" = "$old" ]; then
+            echo "Version unchanged ($new): not a release."; exit 0
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "$tag already exists: nothing to do."; exit 0
+          fi
+          # The same gate as the build, and the CHANGELOG heading release.sh
+          # writes: a hand-edited header without the rest is not a release.
+          python3 scripts/check_version_sync.py
+          grep -q "^## \[$new\] — " docs/CHANGELOG.md || {
+            echo "::error::docs/CHANGELOG.md has no '## [$new] — <date>' heading; cut releases with scripts/release.sh"; exit 1; }
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" "$GITHUB_SHA" -m "Release $tag"
+          git push origin "$tag"
+          gh workflow run deploy.yml --ref "$tag"
+          echo "Tagged $GITHUB_SHA as $tag ($old -> $new) and started its release run." >> "$GITHUB_STEP_SUMMARY"
