@@ -6,6 +6,12 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Added
+
+---
+
+## [6.0.0] — 2026-10-11
+
 ### Changed — breaking for Giannantoni-engine models
 
 - **Module laws leave pathways** ([ADR 0012](adr/0012-where-a-law-lives.md) decision 5). A pathway is now `linear`, `reversible` or `constant`, Odum §III, and nothing else. `interaction`, `limit`, `ratio`, `subtract`, `gain`, `threshold` and `exchange` on a pathway — and the seed labels `generative_production` and `ordinal_feedback`, which meant `interaction` — are load errors that name the module to write instead; the loader never rewrites them, because a gate the author did not draw would vote on ordinality. A module type (`interaction`, `gain`, `switch`, `loop_limited`, `exchange`) without its `module` block is refused too: it used to load as a stock wearing the name.
