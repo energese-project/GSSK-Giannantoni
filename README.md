@@ -164,11 +164,12 @@ Installs the pre-compiled WASM binaries and TypeScript definitions.
 ## Releasing
 
 ```bash
-./scripts/release.sh 3.6.0
-git push origin main --tags
+git switch -c chore/release-6.1.0 origin/main
+./scripts/release.sh 6.1.0
+git push -u origin chore/release-6.1.0     # then open a PR to main
 ```
 
-The script bumps `GSK_VERSION_*` in `include/gssk.h`, updates `docs/CHANGELOG.md`, commits and tags. The GitHub Action builds WASM, updates the `dist` branch, and creates a GitHub Release.
+The script bumps the version in `include/gssk.h`, `package.json` and `CITATION.cff`, and turns `[Unreleased]` in `docs/CHANGELOG.md` into a dated heading. Then it commits. It does not tag. When the PR merges and CI is green, the `tag-release` job tags the merge commit `v6.1.0` and starts that tag's run. That run builds the WASM with Guix, publishes `dist-v6.1.0`, and creates the versioned GitHub Release. A push to `main` that does not change the version is never tagged. If `tag-release` fails, use **Re-run jobs** on the same workflow run: a fresh push would not count as a version change.
 
 ## Citation
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# scripts/release.sh — Bump version, update header, tag release.
+# scripts/release.sh — Bump the version and date the CHANGELOG, as one commit
+# for a release PR. CI tags the merge (deploy.yml, `tag-release`).
 #
 # Usage: ./scripts/release.sh <major.minor.patch>
 # Example: ./scripts/release.sh 3.6.0
@@ -118,10 +119,11 @@ git add "$HEADER" "$PACKAGE" "$CITATION"
 git commit -m "chore: release $TAG"
 echo "Committed: chore: release $TAG"
 
-# ── 6. Tag ────────────────────────────────────────────────────────────────
-git tag -a "$TAG" -m "Release $TAG"
-echo "Tagged: $TAG"
-
+# ── 6. No tag here ────────────────────────────────────────────────────────
+# The release lands through a PR, so this commit is not the one to tag: the
+# merge commit is. CI's `tag-release` job (deploy.yml) tags it once main is
+# green and starts the tag's release run. A tag made here and pushed would
+# point at the branch commit, and the version would be pinned to a tree
+# main never had.
 echo ""
-echo "Done. Run the following to publish:"
-echo "  git push origin main --tags"
+echo "Done. Push this branch and open a PR to main; CI tags $TAG on merge."

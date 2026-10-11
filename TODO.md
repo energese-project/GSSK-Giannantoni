@@ -348,7 +348,7 @@ general-purpose ODE library. The wedge is:
 - [x] `make bench` — runs full benchmark table; `make bench-check` — regression gate.
 
 ### 6.5 Release & Versioning
-- [x] `scripts/release.sh` — bumps `GSK_VERSION_MAJOR/MINOR/PATCH` in `include/gssk.h`, updates CHANGELOG, commits and tags.
+- [x] `scripts/release.sh` — bumps `GSK_VERSION_MAJOR/MINOR/PATCH` in `include/gssk.h`, updates CHANGELOG, commits. CI's `tag-release` job tags the merged release PR (v6.0.0 onward).
 - [x] `docs/CHANGELOG.md` — all phases documented; Unreleased section scaffolded.
 
 ### 6.6 Security & Robustness
