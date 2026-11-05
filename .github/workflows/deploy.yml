@@ -150,6 +150,11 @@ jobs:
       - name: Deactivation round-trip tests
         run: make test-deactivation
 
+      # K-4. The motif scan is cached between steps and re-run only when the
+      # structure changes; these change it mid-run, which a stale cache misses.
+      - name: Motif scan cache tests
+        run: make test-motif-scan-cache
+
       # GIP-0001 G7. The enum and GSSK_GetNodeTypeString read the same field,
       # so they cannot disagree by accident — what this catches is the
       # primitive set changing under one and not the other, an ordinal being

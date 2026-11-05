@@ -212,6 +212,8 @@ typedef struct {
 #define GSSK_MOTIF_MIN_COUNT        3  /* occurrences/step to count toward stability */
 #define GSSK_MOTIF_MIN_STEPS       10  /* consecutive stable steps → candidate */
 #define GSSK_MOTIF_SCAN_NODE_LIMIT 64  /* skip scan when node_count exceeds this */
+/* The scan keeps adjacency as one uint64_t row per node (K-4). */
+typedef char gssk_motif_limit_fits_row[(GSSK_MOTIF_SCAN_NODE_LIMIT <= 64) ? 1 : -1];
 
 typedef struct {
   char    canon[128];     /* canonical pattern string */
@@ -336,6 +338,20 @@ struct GSSK_Instance {
   size_t          motif_count;
   double          generativity_index;
 
+  /* K-4: the motif scan's inputs as of its last full pass. The scan reads only
+   * the network's structure (which nodes are active, their types, and the
+   * active edges between them), never the state, so while those are unchanged
+   * every step would enumerate the same pairs and triples and record the same
+   * occurrence counts. scan_motifs_internal compares these and re-enumerates
+   * only when they differ. Fixed-size, so a struct copy of an instance stays
+   * valid and there is nothing to free. */
+  bool          motif_scan_valid;
+  size_t        motif_scan_n;
+  size_t        motif_scan_motif_count;   /* motif_count after that pass */
+  bool          motif_scan_active[GSSK_MOTIF_SCAN_NODE_LIMIT];
+  GSSK_NodeType motif_scan_type[GSSK_MOTIF_SCAN_NODE_LIMIT];
+  uint64_t      motif_scan_adj[GSSK_MOTIF_SCAN_NODE_LIMIT]; /* row a: bit b = active edge a→b */
+
   /* Stochastic entry points — instance-owned PRNG so two instances cannot
    * perturb each other's draws, and so a run is reproducible from its seed. */
   uint64_t rng_seed;   /* seed as last set; recorded in snapshots */
@@ -352,6 +368,8 @@ static const char *logic_type_str(GSSK_LogicType lt);        /* forward decl (Ph
 static void append_mutation(GSSK_Instance *inst, GSSK_MutationOp op,
                              const char *target_id, const char *payload); /* Phase 4, used in Phase 9 */
 static void scan_motifs_internal(GSSK_Instance *inst);                    /* Phase 9 */
+static void enumerate_motifs_internal(GSSK_Instance *inst, const uint64_t *rows);
+static void update_motif_stability_internal(GSSK_Instance *inst);
 static void safe_str_copy(char *dst, const char *src, size_t cap);        /* bounded, always NUL-terminates */
 
 /* The nine ESL primitives, and the only strings parse_node_type can actually
@@ -5087,14 +5105,44 @@ static void scan_motifs_internal(GSSK_Instance *inst) {
   size_t n = inst->node_count;
   if (n == 0 || n > GSSK_MOTIF_SCAN_NODE_LIMIT) return;
 
-  /* Build flat adjacency matrix adj[a*n+b] = true if active edge a→b */
-  bool adj[GSSK_MOTIF_SCAN_NODE_LIMIT * GSSK_MOTIF_SCAN_NODE_LIMIT];
-  memset(adj, 0, n * n * sizeof(bool));
+  /* The scan's inputs: adjacency over active edges, one bit row per node. */
+  uint64_t rows[GSSK_MOTIF_SCAN_NODE_LIMIT];
+  memset(rows, 0, n * sizeof(rows[0]));
   for (size_t ei = 0; ei < inst->edge_count; ei++) {
     GSSK_EdgeInternal *e = &inst->edges[ei];
     if (!e->active || e->origin_idx < 0 || e->target_idx < 0) continue;
-    adj[(size_t)e->origin_idx * n + (size_t)e->target_idx] = true;
+    rows[(size_t)e->origin_idx] |= (uint64_t)1 << (size_t)e->target_idx;
   }
+
+  /* K-4: with the same inputs, the enumeration below would record exactly
+   * the occurrence counts it recorded last time, which are still in the
+   * table. Skip it, and go straight to the per-step stability update. */
+  bool unchanged = inst->motif_scan_valid && inst->motif_scan_n == n &&
+                   inst->motif_scan_motif_count == inst->motif_count &&
+                   memcmp(inst->motif_scan_adj, rows, n * sizeof(rows[0])) == 0;
+  for (size_t i = 0; unchanged && i < n; i++) {
+    unchanged = inst->motif_scan_active[i] == inst->nodes[i].active &&
+                inst->motif_scan_type[i] == inst->nodes[i].type;
+  }
+  if (!unchanged) {
+    enumerate_motifs_internal(inst, rows);
+    inst->motif_scan_valid = true;
+    inst->motif_scan_n = n;
+    inst->motif_scan_motif_count = inst->motif_count;
+    memcpy(inst->motif_scan_adj, rows, n * sizeof(rows[0]));
+    for (size_t i = 0; i < n; i++) {
+      inst->motif_scan_active[i] = inst->nodes[i].active;
+      inst->motif_scan_type[i] = inst->nodes[i].type;
+    }
+  }
+  update_motif_stability_internal(inst);
+}
+
+/* Counts every 2-node and 3-node motif in the active network into the motif
+ * table, from scratch. `rows[a]` has bit b set for an active edge a→b. */
+static void enumerate_motifs_internal(GSSK_Instance *inst, const uint64_t *rows) {
+  size_t n = inst->node_count;
+#define ADJ(a, b) (((rows[(a)] >> (b)) & 1u) != 0)
 
   /* Reset occurrence counts from last step */
   for (size_t mi = 0; mi < inst->motif_count; mi++)
@@ -5105,7 +5153,7 @@ static void scan_motifs_internal(GSSK_Instance *inst) {
     if (!inst->nodes[a].active) continue;
     for (size_t b = a + 1; b < n; b++) {
       if (!inst->nodes[b].active) continue;
-      bool ab = adj[a * n + b], ba = adj[b * n + a];
+      bool ab = ADJ(a, b), ba = ADJ(b, a);
       if (!ab && !ba) continue;
       const char *ta = node_type_str(inst->nodes[a].type);
       const char *tb = node_type_str(inst->nodes[b].type);
@@ -5138,9 +5186,9 @@ static void scan_motifs_internal(GSSK_Instance *inst) {
       if (!inst->nodes[b].active) continue;
       for (size_t c = b + 1; c < n; c++) {
         if (!inst->nodes[c].active) continue;
-        bool eab = adj[a*n+b], eba = adj[b*n+a];
-        bool eac = adj[a*n+c], eca = adj[c*n+a];
-        bool ebc = adj[b*n+c], ecb = adj[c*n+b];
+        bool eab = ADJ(a, b), eba = ADJ(b, a);
+        bool eac = ADJ(a, c), eca = ADJ(c, a);
+        bool ebc = ADJ(b, c), ecb = ADJ(c, b);
         int edge_cnt = (eab?1:0)+(eba?1:0)+(eac?1:0)+(eca?1:0)+(ebc?1:0)+(ecb?1:0);
         if (edge_cnt < 2) continue;
         const char *types[3] = {
@@ -5163,7 +5211,12 @@ static void scan_motifs_internal(GSSK_Instance *inst) {
     }
   }
 
-  /* ---- Update stability counters and generativity index ---- */
+#undef ADJ
+}
+
+/* Per step: a motif seen at least GSSK_MOTIF_MIN_COUNT times extends its run
+ * of stable steps, and after GSSK_MOTIF_MIN_STEPS becomes a candidate. */
+static void update_motif_stability_internal(GSSK_Instance *inst) {
   size_t new_candidates = 0;
   double total_complexity = 0.0;
   for (size_t mi = 0; mi < inst->motif_count; mi++) {
