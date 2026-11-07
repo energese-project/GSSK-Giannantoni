@@ -2306,10 +2306,15 @@ bool gia_emergy_at(const gia_model *m, double t, double *em, double *tr) {
     int     i, pass, n;
     bool    ok = false;
 
-    if (!m || m->n_nodes <= 0) return false;
+    if (!m) return false;
+    /* Read n once and check it here, after nothing else can run: read after
+     * the call below, GCC 15 cannot rule out that the call changed
+     * m->n_nodes, takes n as possibly negative, and fails the memcpy bounds
+     * further down under -Werror=stringop-overflow. */
+    n = m->n_nodes;
+    if (n <= 0) return false;
     /* NFR-LIM-001: refuse, never truncate. */
     if (gia_emergy_check_limits(m, NULL) != GIA_OK) return false;
-    n = m->n_nodes;
 
     q       = (double *)calloc((size_t)n, sizeof(double));
     em_in   = (double *)calloc((size_t)n, sizeof(double));
