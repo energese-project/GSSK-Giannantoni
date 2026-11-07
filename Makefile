@@ -781,6 +781,12 @@ $(TARGET_DUMP_SER): $(TEST_DIR)/dump_serialized.c $(TARGET_LIB)
 check-version:
 	@python3 scripts/check_version_sync.py
 
+# The automatic release on a merge to main (deploy.yml, tag-release): the next
+# version, the bump level from PR labels, and the release commit.
+.PHONY: test-release-scripts
+test-release-scripts:
+	@bash tests/release_scripts.sh
+
 test-schema: directories $(TARGET_DUMP_SER)
 	@rm -rf $(SER_DIR) && mkdir -p $(SER_DIR)
 	@./$(TARGET_DUMP_SER) $(SER_DIR) $(MODELS) $(wildcard tests/schema_fixtures/*.json)
@@ -1177,7 +1183,7 @@ CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-delivered-work test-price-dynamics test-net-energy \
            test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-bridge test-sim-report test-engine-comparison test-mop-threads check-symbols check-errata check-ci-matrix \
            test-guard-no-skip test-coverage-gate check-api-called \
-           test-api-called check-trace check-version test-schema
+           test-api-called check-trace check-version test-release-scripts test-schema
 
 # Full native build + CI's suites under real GCC with -Werror.
 test-linux: container-image-linux
