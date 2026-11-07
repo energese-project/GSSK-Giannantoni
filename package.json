@@ -1,6 +1,6 @@
 {
   "name": "gssk",
-  "version": "6.0.0",
+  "version": "6.0.1",
   "description": "General Systems Simulation Kernel (GSSK) - A C99 numerical engine for systems simulation.",
   "type": "module",
   "main": "dist/gssk.js",
