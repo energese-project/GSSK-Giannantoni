@@ -12,6 +12,19 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 - **The Giannantoni engine builds under GCC 15 again.** GitHub's `ubuntu-latest` runner moved to Ubuntu 26.04, whose GCC 15 fails `src/engine.c` under `-Werror`: in `gia_emergy_at`, `memcpy(em, em_in, (size_t)n * sizeof(double))` "specified bound … exceeds maximum object size" (`-Wstringop-overflow`). `n` was read from `m->n_nodes` after the call to `gia_emergy_check_limits`, while the `n_nodes <= 0` guard ran before it, so GCC could not rule out a negative `n` turned into a huge `size_t`. `n` is now read once and checked before the call. Behaviour is unchanged (an empty model is still refused before the limits check); CI on `main` and on every open PR was red from this alone.
 
+- **The motif scan no longer re-enumerates an unchanged network every step.** `scan_motifs_internal` (Phase 9, runtime pattern discovery) ran after every `GSSK_Step` and `GSSK_StepAdaptive` and enumerated every node pair and triple, O(n³), building each triple's canonical form with `snprintf` over six permutations and finding it in the motif table by `strcmp`. Below the scan's 64-node limit it was nearly all of a step: an 18-node Euler chain spent about 18 µs per step natively and 46 µs in `gssk.wasm` under Node, where the integration itself takes under half a microsecond. This is gssk-studio's kernel request K-4, which measured per-step cost growing with the square of the node count; it was cubic in the scan, and a model just over 64 nodes ran faster than one just under.
+
+  The scan's inputs are the structure alone — which nodes are active, their types, and the active edges between them — never the state, so while they are unchanged every enumeration records the same occurrence counts. The kernel now keeps those inputs from the last full scan (adjacency as one 64-bit row per node, and each node's active flag and type) and re-enumerates only when they differ, as after `GSSK_AddNode`, `GSSK_AddEdge`, `GSSK_DeactivateEdge` or `GSSK_DeactivateNode`. Stability counters, candidates and the generativity index are still updated every step.
+
+  Results are unchanged: every model in `examples/`, run for 300 steps on the old and new kernels, gives bit-identical states, motif tables and generativity indices. Per step, Euler, linear chain:
+
+  | nodes | native before | native after | `gssk.wasm` (Node) before | after |
+  |---:|---:|---:|---:|---:|
+  | 1 | 0.63 µs | 0.08 µs | 1.69 µs | 0.18 µs |
+  | 18 | 18.54 µs | 0.45 µs | 45.73 µs | 0.45 µs |
+  | 50 | 100.08 µs | 0.73 µs | 198.02 µs | 1.13 µs |
+
+  `make test-motif-scan-cache` (new, in CI) changes the structure mid-run and checks the counts follow, against hand-derived occurrence, stability, candidate and generativity values; it passes on the old kernel and fails six checks when the cache ignores its inputs.
 ---
 
 ## [6.0.0] — 2026-10-11

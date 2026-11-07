@@ -721,6 +721,19 @@ test-deactivation: all $(TARGET_TEST_DEACT)
 	@echo "Running deactivation round-trip tests..."
 	@./$(TARGET_TEST_DEACT)
 
+# K-4: the motif scan is cached between steps and re-run when the structure
+# (active nodes, their types, active edges) changes. The tests change the
+# structure mid-run, which a stale cache would miss.
+TARGET_TEST_MOTIF_CACHE = $(BIN_DIR)/test_motif_scan_cache
+
+$(TARGET_TEST_MOTIF_CACHE): $(TEST_DIR)/test_motif_scan_cache.c $(TARGET_LIB)
+	$(CC) $(CFLAGS) $< $(TARGET_LIB) -o $@ $(LDFLAGS)
+
+.PHONY: test-motif-scan-cache
+test-motif-scan-cache: all $(TARGET_TEST_MOTIF_CACHE)
+	@echo "Running motif scan cache tests..."
+	@./$(TARGET_TEST_MOTIF_CACHE)
+
 # Carrier accessors — the flat getters that keep GSSK_Carrier's struct layout
 # from crossing the WASM boundary. Also asserts the flat path and
 # GSSK_GetCarrier cannot drift apart.
@@ -1159,7 +1172,7 @@ container-image: container-image-linux
 # you add its step to deploy.yml.
 CI_TESTS = test test-advanced test-node-types test-limit-logic test-forcing \
            test-reversible test-interaction-nary test-stage-times \
-           test-unknown-keys test-deactivation test-node-type-enum \
+           test-unknown-keys test-deactivation test-motif-scan-cache test-node-type-enum \
            test-carrier-api test-edge-flows test-price-node test-ratio \
            test-delivered-work test-price-dynamics test-net-energy \
            test-gnp-loop test-giannantoni test-mop test-mop-emergence test-mop-cli test-kernel-method test-bridge test-sim-report test-engine-comparison test-mop-threads check-symbols check-errata check-ci-matrix \
