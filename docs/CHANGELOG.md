@@ -8,6 +8,10 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+---
+
+## [6.0.1] — 2026-11-07
+
 ### Fixed
 
 - **The Giannantoni engine builds under GCC 15 again.** GitHub's `ubuntu-latest` runner moved to Ubuntu 26.04, whose GCC 15 fails `src/engine.c` under `-Werror`: in `gia_emergy_at`, `memcpy(em, em_in, (size_t)n * sizeof(double))` "specified bound … exceeds maximum object size" (`-Wstringop-overflow`). `n` was read from `m->n_nodes` after the call to `gia_emergy_check_limits`, while the `n_nodes <= 0` guard ran before it, so GCC could not rule out a negative `n` turned into a huge `size_t`. `n` is now read once and checked before the call. Behaviour is unchanged (an empty model is still refused before the limits check); CI on `main` and on every open PR was red from this alone.
