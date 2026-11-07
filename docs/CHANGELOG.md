@@ -8,6 +8,10 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 ### Added
 
+### Changed
+
+- **Every merge to `main` is now a release.** `tag-release` used to tag only a merge that changed the version (a release PR cut with `scripts/release.sh`), and left every other merge on `main` under the last version, so `dist` could change under an unchanged version string (v6.0.0's `dist` picked up the K-4 and GCC 15 fixes that way). Now any other merge is bumped too: patch by default, or minor, major or no release from the merged PR's `release:minor`, `release:major` or `release:skip` label (or a `Release: <level>` line in the commit message of a push with no PR). The bump runs `scripts/release.sh` through `scripts/auto_release.sh`, so the version files and the dated heading are a hand-cut release's, and a PR with no CHANGELOG entry contributes its title. The commit and the tag are pushed atomically by `github-actions[bot]`. Hand-cut release PRs still work and are tagged as they are. `make test-release-scripts` (in CI) covers the version arithmetic, the label rules and the release commit; the workflow step itself was run against a scratch repository for a plain merge, `release:minor`, `release:skip` and a release PR.
+
 ---
 
 ## [6.0.1] — 2026-11-07

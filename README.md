@@ -163,13 +163,28 @@ Installs the pre-compiled WASM binaries and TypeScript definitions.
 
 ## Releasing
 
+**Every merge to `main` is a release.** When CI on `main` is green, the `tag-release` job bumps the version, commits it, tags it and starts the tag's run. That run builds the WASM with Guix, publishes `dist-vX.Y.Z` and creates the versioned GitHub Release.
+
+| On the PR | Release |
+| --- | --- |
+| nothing | patch: 6.0.1 → 6.0.2 |
+| label `release:minor` | minor: 6.0.1 → 6.1.0 |
+| label `release:major` | major: 6.0.1 → 7.0.0 |
+| label `release:skip` | none (a typo, a CI tweak) |
+
+A push to `main` with no PR takes a `Release: minor` (or `major`, `patch`, `skip`) line in its commit message instead. `release:skip` together with a bump label fails the job, rather than guessing which one was meant.
+
+The bump is `scripts/auto_release.sh`, which runs `scripts/release.sh`. So a release made this way has the same version in `include/gssk.h`, `package.json` and `CITATION.cff`, and the same dated `## [X.Y.Z] — <date>` CHANGELOG heading, as one cut by hand. If the PR added no CHANGELOG entry, its title and number become one. The release commit and its tag are pushed together, atomically, by `github-actions[bot]`; that push starts no workflow of its own.
+
+To choose the version yourself (or write the release notes first), cut a release PR by hand. A merge that already changes the version is tagged as it is:
+
 ```bash
 git switch -c chore/release-6.1.0 origin/main
 ./scripts/release.sh 6.1.0
 git push -u origin chore/release-6.1.0     # then open a PR to main
 ```
 
-The script bumps the version in `include/gssk.h`, `package.json` and `CITATION.cff`, and turns `[Unreleased]` in `docs/CHANGELOG.md` into a dated heading. Then it commits. It does not tag. When the PR merges and CI is green, the `tag-release` job tags the merge commit `v6.1.0` and starts that tag's run. That run builds the WASM with Guix, publishes `dist-v6.1.0`, and creates the versioned GitHub Release. A push to `main` that does not change the version is never tagged. If `tag-release` fails, use **Re-run jobs** on the same workflow run: a fresh push would not count as a version change.
+If `tag-release` fails, use **Re-run jobs** on the same workflow run. If `main` has moved on by then, the newer run releases both merges.
 
 ## Citation
 

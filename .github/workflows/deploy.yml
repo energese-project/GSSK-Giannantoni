@@ -295,6 +295,10 @@ jobs:
       - name: Version sync — package.json vs include/gssk.h
         run: make check-version
 
+      # The scripts tag-release uses to cut a release on every merge to main.
+      - name: Release scripts (next version, bump level, release commit)
+        run: make test-release-scripts
+
       # The version check asserts the "files" list names the schema. This
       # asserts npm actually puts it in the tarball, which is the property
       # downstream consumers depend on.
@@ -730,14 +734,26 @@ jobs:
       github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # push the tag
-      actions: write    # dispatch the tag's run
+      contents: write        # push the release commit and the tag
+      actions: write         # dispatch the tag's run
+      pull-requests: read    # read the merged PR's labels
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Tag a version bump
+      # Every merge to main is a release. A merge that already changed the
+      # version (a release PR cut with scripts/release.sh) is tagged as it is.
+      # Any other merge is bumped here: patch by default, or as the merged
+      # PR's label says (release:minor, release:major, release:skip), or, for
+      # a push with no PR, a "Release: <level>" line in its commit message.
+      # The bump is scripts/auto_release.sh, i.e. scripts/release.sh, so the
+      # version files and the dated CHANGELOG heading are the same as a
+      # hand-cut release's. The commit and its tag go up in one atomic push:
+      # main never carries a bumped version without its tag. The push uses
+      # GITHUB_TOKEN, so it starts no workflow (no loop); the tag's own run,
+      # dispatched below, builds and tests the release before publishing it.
+      - name: Release the merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BEFORE: ${{ github.event.before }}
@@ -746,10 +762,37 @@ jobs:
           ver() { sed -n 's/^#define GSK_VERSION_STRING "\(.*\)"$/\1/p'; }
           new=$(ver < include/gssk.h)
           old=$(git show "$BEFORE:include/gssk.h" 2>/dev/null | ver || true)
-          tag="v$new"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          release_sha=$GITHUB_SHA
+          bumped=0
+
           if [ "$new" = "$old" ]; then
-            echo "Version unchanged ($new): not a release."; exit 0
+            git fetch -q origin main
+            if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+              echo "main has moved past $GITHUB_SHA; the newer push's run releases this too."
+              exit 0
+            fi
+            pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[0] // empty')
+            labels=()
+            if [ -n "$pr" ]; then
+              mapfile -t labels < <(jq -r '.labels[].name' <<< "$pr")
+              note=$(jq -r '"\(.title) (#\(.number))"' <<< "$pr")
+            else
+              note=$(git log -1 --format=%s "$GITHUB_SHA")
+            fi
+            level=$(git log -1 --format=%B "$GITHUB_SHA" | scripts/release_level.sh "${labels[@]}")
+            if [ "$level" = skip ]; then
+              echo "Marked release:skip; not a release." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            old=$new
+            new=$(scripts/auto_release.sh "$level" "$note")
+            release_sha=$(git rev-parse HEAD)
+            bumped=1
           fi
+
+          tag="v$new"
           if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
             echo "$tag already exists: nothing to do."; exit 0
           fi
@@ -758,9 +801,11 @@ jobs:
           python3 scripts/check_version_sync.py
           grep -q "^## \[$new\] — " docs/CHANGELOG.md || {
             echo "::error::docs/CHANGELOG.md has no '## [$new] — <date>' heading; cut releases with scripts/release.sh"; exit 1; }
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" "$GITHUB_SHA" -m "Release $tag"
-          git push origin "$tag"
+          git tag -a "$tag" "$release_sha" -m "Release $tag"
+          if [ "$bumped" -eq 1 ]; then
+            git push --atomic origin HEAD:refs/heads/main "refs/tags/$tag"
+          else
+            git push origin "$tag"
+          fi
           gh workflow run deploy.yml --ref "$tag"
-          echo "Tagged $GITHUB_SHA as $tag ($old -> $new) and started its release run." >> "$GITHUB_STEP_SUMMARY"
+          echo "Released $tag ($old -> $new${level:+, $level bump}) at $release_sha and started its release run." >> "$GITHUB_STEP_SUMMARY"
