@@ -12,6 +12,10 @@ All notable changes to GSSK are documented here. The format follows [Keep a Chan
 
 - **Every merge to `main` is now a release.** `tag-release` used to tag only a merge that changed the version (a release PR cut with `scripts/release.sh`), and left every other merge on `main` under the last version, so `dist` could change under an unchanged version string (v6.0.0's `dist` picked up the K-4 and GCC 15 fixes that way). Now any other merge is bumped too: patch by default, or minor, major or no release from the merged PR's `release:minor`, `release:major` or `release:skip` label (or a `Release: <level>` line in the commit message of a push with no PR). The bump runs `scripts/release.sh` through `scripts/auto_release.sh`, so the version files and the dated heading are a hand-cut release's, and a PR with no CHANGELOG entry contributes its title. The commit and the tag are pushed atomically by `github-actions[bot]`. Hand-cut release PRs still work and are tagged as they are. `make test-release-scripts` (in CI) covers the version arithmetic, the label rules and the release commit; the workflow step itself was run against a scratch repository for a plain merge, `release:minor`, `release:skip` and a release PR.
 
+---
+
+## [6.0.1] — 2026-11-07
+
 ### Fixed
 
 - **The Giannantoni engine builds under GCC 15 again.** GitHub's `ubuntu-latest` runner moved to Ubuntu 26.04, whose GCC 15 fails `src/engine.c` under `-Werror`: in `gia_emergy_at`, `memcpy(em, em_in, (size_t)n * sizeof(double))` "specified bound … exceeds maximum object size" (`-Wstringop-overflow`). `n` was read from `m->n_nodes` after the call to `gia_emergy_check_limits`, while the `n_nodes <= 0` guard ran before it, so GCC could not rule out a negative `n` turned into a huge `size_t`. `n` is now read once and checked before the call. Behaviour is unchanged (an empty model is still refused before the limits check); CI on `main` and on every open PR was red from this alone.
